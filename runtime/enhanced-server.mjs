@@ -419,11 +419,11 @@ async function handle(msg){
   if(msg.method==='resources/read'&&((config.rc10Candidate&&[INSPECTION_URI,LEGACY_BAR_URI,BAR_URI,'ui://ygpt/approval/interactive-v11-2c.html','ui://ygpt/approval/interactive-v11-2b.html','ui://ygpt/approval/interactive-v11-2.html','ui://ygpt/approval/interactive-v11-1.html','ui://ygpt/approval/interactive-v11.html','ui://ygpt/approval/inspection-v1.html'].includes(msg.params?.uri))||(!config.rc9Candidate&&uiEnabled()&&([BAR_URI].includes(msg.params?.uri)||(barEnabled()&&msg.params?.uri===LEGACY_BAR_URI)))))return emit({jsonrpc:'2.0',id,result:{contents:[barResource(msg.params.uri)]}});
   if(msg.method!=='tools/call')throw Error('Unsupported method; no legacy in-chat resources');
   const requestedName=canonicalToolName(msg.params?.name),rawArgs=msg.params?.arguments??{};
+  const nativeCall=config.rc10Candidate&&(nativeExtension?.tools().some(t=>t.name===requestedName)||requestedName==='y_desktop_fixture');
   // The 1.0.1 YGPT plugin advertised y_local_* names. Keep them callable,
   // including ones omitted from the condensed new alias catalog.
-  const name=typeof requestedName==='string'&&requestedName.startsWith('y_local_')?requestedName.slice('y_local_'.length):typeof requestedName==='string'&&requestedName.startsWith('y_task_')?'job_'+requestedName.slice(7):typeof requestedName==='string'&&additions.some(t=>t.name===requestedName.slice(2))?requestedName.slice(2):requestedName;
+  const name=nativeCall?requestedName:typeof requestedName==='string'&&requestedName.startsWith('y_local_')?requestedName.slice('y_local_'.length):typeof requestedName==='string'&&requestedName.startsWith('y_task_')?'job_'+requestedName.slice(7):typeof requestedName==='string'&&additions.some(t=>t.name===requestedName.slice(2))?requestedName.slice(2):requestedName;
   const {contextToken,...args}=rawArgs;
-  const nativeCall=config.rc10Candidate&&(nativeExtension?.tools().some(t=>t.name===requestedName)||requestedName==='y_desktop_fixture');
   // Legacy display alias works only in chat-strip mode. The isolated local
   // consent panel keeps its previous rejection semantics and has no UI bridge.
   if(name==='y_review_approval'&&!config.rc10Candidate&&(config.rc9Candidate||!barEnabled()))return response(id,'Legacy in-chat card unavailable in RC9',true);
