@@ -37,11 +37,20 @@ public static class HostCore {
  public static string OwnerId(string data){return HashText(WindowsIdentity.GetCurrent().User.Value+"|"+Full(data).ToLowerInvariant()).Substring(0,24);}
  public static string PipeName(string data){return "YGPT-"+OwnerId(data);}
  public static Dictionary<string,object> Control(string data,string action){var s=Secrets(data);using(var pipe=new NamedPipeClientStream(".",PipeName(data),PipeDirection.InOut)){pipe.Connect(2500);var w=new StreamWriter(pipe,new UTF8Encoding(false),1024,true){AutoFlush=true};w.WriteLine(Json.Serialize(new{key=S(s,"localKey"),action=action}));using(var r=new StreamReader(pipe,Encoding.UTF8,false,4096,true)){var task=r.ReadLineAsync();if(!task.Wait(15000))throw new Exception("Local control timed out; no operation was replayed");return Json.Deserialize<Dictionary<string,object>>(task.Result);}}}
+ // Task Scheduler may store the same owner as a short account name rather than
+ // the SID supplied at creation. Resolve it back to a SID before comparison.
+ public static bool SameUserPrincipal(string recorded,SecurityIdentifier expected){
+  if(String.IsNullOrWhiteSpace(recorded))return false;
+  if(String.Equals(recorded,expected.Value,StringComparison.OrdinalIgnoreCase))return true;
+  try{return String.Equals(((SecurityIdentifier)new NTAccount(recorded).Translate(typeof(SecurityIdentifier))).Value,expected.Value,StringComparison.OrdinalIgnoreCase);}catch{return false;}
+ }
  public static string TaskName(string data){return "YGPT-Local-"+OwnerId(data).Substring(0,12)+"-Watchdog";}
  public static void RegisterTask(string install,string data,bool enabled){
   dynamic service=Activator.CreateInstance(Type.GetTypeFromProgID("Schedule.Service"));service.Connect();dynamic root=service.GetFolder("\\");string taskName=TaskName(data),exe=Path.Combine(Full(install),"YGPTWatchdog.exe");
-  dynamic prior=null;try{prior=root.GetTask(taskName);}catch(COMException e){if(e.ErrorCode!=unchecked((int)0x80070002))throw;}
-  if(prior!=null){dynamic actions=prior.Definition.Actions;bool owned=(int)actions.Count==1&&(int)actions.Item(1).Type==0&&String.Equals(Convert.ToString(actions.Item(1).Path),exe,StringComparison.OrdinalIgnoreCase)&&String.Equals(Convert.ToString(actions.Item(1).Arguments),"--data-dir "+Q(Full(data)),StringComparison.OrdinalIgnoreCase)&&String.Equals(Convert.ToString(prior.Definition.Principal.UserId),WindowsIdentity.GetCurrent().User.Value,StringComparison.OrdinalIgnoreCase);if(!owned)throw new InvalidOperationException("The existing startup task belongs to another configuration; it was preserved");}
+  // Task Scheduler COM's 0x80070002 (task not found) may be projected by .NET
+   // as FileNotFoundException, not only COMException. First-run absence is expected.
+   dynamic prior=null;try{prior=root.GetTask(taskName);}catch(Exception e){if(e.HResult!=unchecked((int)0x80070002))throw;}
+  if(prior!=null){dynamic actions=prior.Definition.Actions;bool owned=(int)actions.Count==1&&(int)actions.Item(1).Type==0&&String.Equals(Convert.ToString(actions.Item(1).Path),exe,StringComparison.OrdinalIgnoreCase)&&String.Equals(Convert.ToString(actions.Item(1).Arguments),"--data-dir "+Q(Full(data)),StringComparison.OrdinalIgnoreCase)&&SameUserPrincipal(Convert.ToString(prior.Definition.Principal.UserId),WindowsIdentity.GetCurrent().User);if(!owned)throw new InvalidOperationException("The existing startup task belongs to another configuration; it was preserved");}
   if(!enabled){if(prior!=null)root.DeleteTask(taskName,0);return;}
   dynamic task=service.NewTask(0);task.RegistrationInfo.Description="YGPT Local private connection; no setup window required";task.RegistrationInfo.Author="YGPT Local";task.Principal.UserId=WindowsIdentity.GetCurrent().User.Value;task.Principal.LogonType=3;task.Principal.RunLevel=0;
   task.Settings.Enabled=true;task.Settings.Hidden=true;task.Settings.StartWhenAvailable=true;task.Settings.DisallowStartIfOnBatteries=false;task.Settings.StopIfGoingOnBatteries=false;task.Settings.ExecutionTimeLimit="PT0S";task.Settings.MultipleInstances=2;task.Settings.RestartCount=3;task.Settings.RestartInterval="PT1M";
@@ -53,6 +62,27 @@ public static class HostCore {
  public static void Start(string install,string data){CheckPath(data);foreach(string file in new[]{"paused","maintenance-request"}){string p=Path.Combine(data,file);CheckPath(p);if(File.Exists(p))File.Delete(p);}Process.Start(new ProcessStartInfo(Path.Combine(install,"YGPTWatchdog.exe"),"--data-dir "+Q(data)){UseShellExecute=false,CreateNoWindow=true,WindowStyle=ProcessWindowStyle.Hidden,WorkingDirectory=install});}
  static bool Stopped(string data,DateTime after){try{var h=Read(Path.Combine(data,"watchdog-health.json"));return S(h,"ownerId")==OwnerId(data)&&B(h,"stopped")&&DateTime.Parse(S(h,"at")).ToUniversalTime()>=after&&!ProcessAlive(Convert.ToInt32(h["pid"]),Convert.ToInt64(h["birth"]));}catch{return false;}}
  static bool NoOwnedWorkers(Dictionary<string,object> health){string root=S(health,"installRoot");if(root=="")return false;using(var query=new ManagementObjectSearcher("SELECT ExecutablePath FROM Win32_Process")){foreach(ManagementObject p in query.Get()){string exe=Convert.ToString(p["ExecutablePath"]);if(exe!=""&&Within(exe,root)&&!new[]{"YGPTLocal.exe","YGPTWatchdog.exe","tunnel-client.exe"}.Contains(Path.GetFileName(exe),StringComparer.OrdinalIgnoreCase))return false;}}return true;}
+ // A partially installed profile may not have produced watchdog-health.json yet.
+ // Never invent a successful health record or stop an unrelated Tunnel.
+ public static void PrepareOwnedRepair(string install,string data){
+  string marker=Path.Combine(install,".ygpt-install.json");
+  if(!File.Exists(marker))return;
+  string health=Path.Combine(data,"watchdog-health.json");
+  if(File.Exists(health)){Pause(data);return;}
+  // Fail closed unless process inventory proves this installation is idle.
+  try{
+   using(var query=new ManagementObjectSearcher("SELECT ProcessId,ExecutablePath,CommandLine FROM Win32_Process"))
+   foreach(ManagementObject row in query.Get()){
+    string exe=Convert.ToString(row["ExecutablePath"]),cmd=Convert.ToString(row["CommandLine"]);
+    if((exe!=""&&(String.Equals(Full(exe),Full(install),StringComparison.OrdinalIgnoreCase)||Within(exe,install)))||
+       (cmd!=""&&cmd.IndexOf("--data-dir",StringComparison.OrdinalIgnoreCase)>=0&&cmd.IndexOf(Full(data),StringComparison.OrdinalIgnoreCase)>=0))
+     throw new InvalidOperationException("An installed YGPT Local process may still be active, but its Watchdog status is missing. Wait for startup or close only this installation safely, then retry. No application files were replaced.");
+   }
+  }catch(InvalidOperationException){throw;}
+   catch(Exception ex){throw new InvalidOperationException("Watchdog status is missing and Windows process inventory could not confirm an idle installation. No files were replaced. Retry or use a clean isolated installation profile.",ex);}
+  // Missing state + no owned processes is an incomplete/dormant installation.
+  // Continue in Repair mode; never fabricate a health file or a remote handshake.
+ }
  public static void Pause(string data){if(File.Exists(Path.Combine(data,"paused"))&&Stopped(data,DateTime.MinValue))return;string barrier=Path.Combine(data,"maintenance-request");SaveText(barrier,"Reject new calls while the owner checks idle state");try{bool safe=false;try{safe=B(Control(data,"drain"),"safeToStop");}catch{var h=Read(Path.Combine(data,"watchdog-health.json"));safe=S(h,"ownerId")==OwnerId(data)&&NoOwnedWorkers(h);}if(!safe)throw new Exception("Finish active work and pending approvals before maintenance");DateTime requested=DateTime.UtcNow;SaveText(Path.Combine(data,"paused"),"owner maintenance");DateTime deadline=DateTime.UtcNow.AddSeconds(25);while(DateTime.UtcNow<deadline){if(Stopped(data,requested))return;try{var h=Read(Path.Combine(data,"watchdog-health.json"));if(S(h,"ownerId")==OwnerId(data)&&!ProcessAlive(Convert.ToInt32(h["pid"]),Convert.ToInt64(h["birth"]))&&NoOwnedWorkers(h)){h["stopped"]=true;h["phase"]="stopped";h["at"]=DateTime.UtcNow.ToString("o");Save(Path.Combine(data,"watchdog-health.json"),h);return;}}catch{}System.Threading.Thread.Sleep(200);}throw new Exception("Connection has not stopped safely; application files were not replaced");}catch{if(!File.Exists(Path.Combine(data,"paused"))&&File.Exists(barrier))File.Delete(barrier);throw;}}
  public static bool ProofValid(string data,string generation){try{var s=Secrets(data);var e=Read(Path.Combine(data,"first-use-proof.json"));if(S(s,"verificationKey").Length<32)return false;string payload=S(e,"payload"),mac;using(var h=new HMACSHA256(Encoding.UTF8.GetBytes(S(s,"verificationKey"))))mac=Hex(h.ComputeHash(Encoding.UTF8.GetBytes(payload)));if(S(e,"mac")!=mac)return false;var p=Json.Deserialize<Dictionary<string,object>>(payload);return S(p,"generation")==generation&&B(p,"readSucceeded")&&new[]{"official-secure-tunnel","authenticated-oauth"}.Contains(S(p,"transport"));}catch{return false;}}
  public static bool ProcessAlive(int pid,long birth){try{using(var p=Process.GetProcessById(pid))return !p.HasExited&&p.StartTime.ToUniversalTime().Ticks==birth;}catch{return false;}}

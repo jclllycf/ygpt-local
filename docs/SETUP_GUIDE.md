@@ -16,8 +16,8 @@ Open [Platform Tunnels](https://platform.openai.com/settings/organization/tunnel
 
 | Current field / 字段 | What to enter / 填写内容 |
 | --- | --- |
-| Name | `YGPT Local - My Windows PC` |
-| Description | `Private MCP connection for my Windows PC` |
+| Name | `YGPT Local - My Windows PC` — use **Copy suggested Tunnel name** in the installer instead of typing |
+| Description | `Private MCP connection for my Windows PC` — use **Copy suggested Tunnel description** |
 | Organizations | The intended Platform organization; not merely a ChatGPT subscription name / 运行 Key 所属 Platform 组织 |
 | ChatGPT workspaces | The workspace in which the personal plugin will be installed / 实际安装个人插件的 ChatGPT 工作区 |
 
@@ -36,7 +36,7 @@ Open the official [API Keys](https://platform.openai.com/api-keys) entry. If the
 | Field / 字段 | Guidance / 指导 |
 | --- | --- |
 | Owned by | **You** for personal use; Service account only when the organization intends that ownership / 个人通常选 You |
-| Name | `YGPT Local Tunnel Runtime` |
+| Name | `YGPT Local Tunnel Runtime` — use **Copy suggested API key name** |
 | Project | A project in the organization with the required Tunnel privileges / 对应组织内有权使用的项目 |
 | Expiration | **Never expire only if offered and permitted by organization policy**; otherwise choose a permitted expiry and plan rotation / 不放宽组织策略 |
 | Permissions | A dedicated minimum-scope credential with actual organization **Tunnels Read + Use**; do not assume project All grants missing organization RBAC |
@@ -70,7 +70,7 @@ In [ChatGPT Plugins](https://chatgpt.com/plugins), choose **Add → Add custom M
 | --- | --- |
 | Icon | Installed `assets/brand/ygpt-local-256.png`: 256×256, 4,530 bytes in this candidate; the icon-folder button opens it locally |
 | Name | `YGPT Local` |
-| Description (optional) | `Securely work with files and tools on your Windows PC.` |
+| Description (optional) | Use **Copy plugin description** for the more specific text: `YGPT Local connects ChatGPT to your authorized Windows PC. When you ask to find, inspect, search, read, create or edit local files, review code and projects, run builds or tests, or verify changes, use YGPT Local tools directly instead of asking you to copy and run commands. It also supports approved terminal tasks, browser and desktop automation, system diagnostics, and protected file snapshots with rollback. Actions are limited by local permissions; high-risk operations require your approval.` |
 | Connection | **Tunnel**, not Server URL |
 | Tunnel ID | The same full ID saved by this installation; the runtime key is not repeated here |
 | Authentication | **No authentication** only for this dedicated private Tunnel |
