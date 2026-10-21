@@ -34,3 +34,7 @@ test('Real authenticated HTTP: OAuth PKCE, consent, catalog, tool call and revoc
   await post('/oauth/revoke',new URLSearchParams({token:token.access_token}));assert.equal((await fetch(base+'/mcp',{headers:{Authorization:'Bearer '+token.access_token}})).status,401);
  }finally{await client?.close().catch(()=>{});await gateway.close();await broker.close();}
 });
+test('Twelve concurrent real MCP HTTP handshakes share one ready broker',async()=>{
+ const f=fixture(),broker=await f.client().start(),localKey=randomBytes(32).toString('base64url'),gateway=await startHttp({broker,port:0,ownerKey:randomBytes(32).toString('base64url'),localKey}),clients=[];
+ try{await Promise.all(Array.from({length:12},async(_,i)=>{const c=new Client({name:'isolated-concurrent-'+i,version:'1'},{capabilities:{}});clients.push(c);await c.connect(new StreamableHTTPClientTransport(new URL('http://127.0.0.1:'+gateway.port+'/mcp'),{requestInit:{headers:{Authorization:'Bearer '+localKey}}}));const r=await c.callTool({name:'y_service_health',arguments:{}});assert.ok(!r.isError);const h=r.structuredContent??JSON.parse(r.content[0].text);assert.equal(h.engineReady,true);}));}finally{await Promise.allSettled(clients.map(c=>c.close()));await gateway.close();await broker.close();}
+});

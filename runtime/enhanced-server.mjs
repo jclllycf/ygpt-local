@@ -429,7 +429,7 @@ async function handle(msg){
   if(name==='y_review_approval'&&!config.rc10Candidate&&(config.rc9Candidate||!barEnabled()))return response(id,'Legacy in-chat card unavailable in RC9',true);
   if(hidden.has(name))return response(id,'Legacy card/config endpoint removed; use the local Windows panel',true);
   // Legacy names are routed through the YGPT-branded validated schema without advertising duplicates.
-  const descriptor=tools().find(t=>t.name===requestedName)??tools().find(t=>t.name==='y_local_'+name);
+  const descriptor=tools().find(t=>t.name===requestedName)??tools().find(t=>t.name==='y_local_'+name)??tools().find(t=>t.name===publicName(name));
   if(!descriptor||!ajv.validate(descriptor.inputSchema,rawArgs))throw Error('Invalid tool arguments: '+(ajv.errors?.[0]?.message??requestedName));
   const resumed=await resumeNativeConsent(msg,name,args,host,ledger,execute);
   if(resumed)return emit({jsonrpc:'2.0',id,result:resumed});

@@ -1,0 +1,25 @@
+{
+  "product": "YGPT Local",
+  "version": "1.0.0-rc.1",
+  "deployed": true,
+  "ready": true,
+  "tunnelIdentityRetained": true,
+  "otherTunnelsPreserved": true,
+  "persistentFilesMigrated": 13401,
+  "persistentFileHashesVerified": true,
+  "sqliteIntegrity": [
+    "ok",
+    "ok"
+  ],
+  "originalStateRetained": true,
+  "existingPersonalPluginRenamed": true,
+  "pluginVersion": "1.0.3",
+  "realChatGPTRead": {
+    "passed": true,
+    "expectedVersion": "1.0.0-rc.1",
+    "expectedContent": "value=100",
+    "source": "actual logged-in ChatGPT UI against the existing production plugin",
+    "completeAcceptance": false
+  },
+  "at": "2026-10-21T06:51:20.433Z"
+}

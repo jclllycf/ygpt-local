@@ -12,6 +12,7 @@ using System.Runtime.InteropServices;
 using System.Web.Script.Serialization;
 using System.Windows.Automation;
 using System.Windows.Forms;
+class FixtureForm:Form {protected override bool ShowWithoutActivation {get{return true;}}}
 class YDesktop {
   static JavaScriptSerializer json=new JavaScriptSerializer{MaxJsonLength=1048576};
   delegate bool EnumProc(IntPtr h,IntPtr l);
@@ -77,7 +78,7 @@ class YDesktop {
     throw new Exception("BAD_ACTION");
   }
   static void Fixture(string id) {
-    Application.EnableVisualStyles();var form=new Form{Text="YGPT Engine Fixture "+id,Width=560,Height=220,StartPosition=FormStartPosition.CenterScreen};
+    Application.EnableVisualStyles();var form=new FixtureForm{Text="YGPT Engine Fixture "+id,Width=560,Height=220,StartPosition=FormStartPosition.CenterScreen};
     var input=new TextBox{Name="FixtureInput",AccessibleName="YGPT Fixture Input",Left=24,Top=28,Width=480};
     var button=new Button{Name="ApplyButton",AccessibleName="Apply",Text="Apply",Left=24,Top=74,Width=100};
     var result=new TextBox{Name="ResultLabel",AccessibleName="YGPT Fixture Result",Text="Ready",ReadOnly=true,Left=24,Top=120,Width=480};

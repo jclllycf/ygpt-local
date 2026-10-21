@@ -7,12 +7,12 @@
 ## 不用命令行的安装路径
 
 1. 发布后，从本仓库 Releases 下载 `YGPTLocal-Setup-*.exe` 并核对 SHA-256。候选安装器未签名，不代表有经过验证的发行者证书。
-2. 双击安装器，选择一个空的应用目录，以及允许本地工具操作的工作目录。完整安装包包含 Node、Python 与 cloudflared，不要求你安装开发环境。
+2. 双击安装器，选择一个空的应用目录，以及允许本地工具操作的工作目录。完整安装包包含 Node、Python、cloudflared 和 OpenAI 官方 tunnel-client，不要求你安装开发环境。
 3. 选择连接方式并填写相应凭据。已有 Cloudflare Tunnel 填 connector token 和稳定 HTTPS 地址；新建 Tunnel 填具有对应账户 Tunnel Edit、域名区域 DNS Edit 权限的 API Token。不要混用这两种 token。
 4. 检查本机服务、目录、远端连接和认证各自的状态。本机安装成功不等于 ChatGPT 已连接。已有 Tunnel 需要原有路由指向向导显示的本机端口；仅 connector token 无权修改 DNS/远端配置。
 5. 点击 Connect ChatGPT。在官方页面选择 Plugins → + → Add custom MCP server，名称填写 YGPT Local，输入带 `/mcp` 的 HTTPS 地址，选择 OAuth；在连接确认页面使用 Windows 向导提供的 owner pairing key。创建并安装个人插件，在新聊天选择 `@YGPT Local`，让它列出已授权测试目录，并观察真实工具结果。
 
-这是一套产品的安装流程，不需要另外申请公共 OpenAI 插件目录，也不用部署额外 SaaS。Cloudflare 路径不要求 OpenAI API key。Secure MCP Tunnel 是另一个可选连接路径，需要账户支持、独立 tunnel_id、具有 Tunnels Read + Use 权限的运行时凭据，当前还需在向导选择官方客户端。
+这是一套产品的安装流程，不需要另外申请公共 OpenAI 插件目录，也不用部署额外 SaaS。Cloudflare 路径不要求 OpenAI API key。Secure MCP Tunnel 是另一个可选连接路径，需要账户支持、独立 tunnel_id、具有 Tunnels Read + Use 权限的运行时凭据，安装器已内置官方客户端，无需手工安装。
 
 **不要把 API Token、Tunnel token、配对密钥、审批 token 或私有日志粘贴到聊天与 GitHub Issue。**
 
@@ -26,7 +26,7 @@
 
 默认应用目录为 `%LOCALAPPDATA%\Programs\YGPTLocal`，数据为 `%LOCALAPPDATA%\YGPTLocal`。凭据使用 Windows 当前用户 DPAPI 加密。托盘可暂停服务，开始菜单可再次打开设置。卸载默认保留数据与快照。
 
-当前候选只安装至空目录，不自动覆盖旧安装；自动原位升级及完整旧状态迁移尚未发布。旧版继续运行，不能让两个代理使用同一 Tunnel 或状态目录。终端环境经过清理，不承诺使用日常桌面应用的登录 profile。
+新安装使用空目录；修复／升级可选择已有 YGPT 安装和数据目录，先确认没有运行中任务或审批，保留旧程序目录、身份、安全策略及文件快照。完整 YUKI 旧状态迁移仍未发布。旧版继续运行，不能让两个代理使用同一 Tunnel 或状态目录。终端环境经过清理，不承诺使用日常桌面应用的登录 profile。
 
 ## 常见问题和验收
 

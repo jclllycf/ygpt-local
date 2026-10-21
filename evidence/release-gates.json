@@ -1,13 +1,37 @@
 {
-  "freshInstaller":{"status":"pending","evidence":null},
-  "remoteTunnel":{"status":"pending","evidence":null},
-  "chatgptPlugin":{"status":"pending","evidence":null},
-  "fileRestore":{"status":"local_passed_host_pending","evidence":"tests/core.test.mjs"},
-  "approvalDeny":{"status":"local_partial_host_pending","evidence":"tests/core.test.mjs"},
-  "securityReview":{"status":"in_progress","evidence":"evidence/public-source-audit.json"},
-  "cleanPublicHistory":{"status":"pending","evidence":null},
-  "publicRepository":null,
-  "publicRelease":null,
-  "cleanWindowsVm":{"status":"not_run","evidence":null},
-  "policy":"Pending local or host evidence is never promoted to a passing public release gate. No existing production connection is modified."
+  "freshInstaller": {
+    "status": "pending",
+    "evidence": null
+  },
+  "remoteTunnel": {
+    "status": "passed",
+    "evidence": "evidence/local-deployment.json"
+  },
+  "chatgptPlugin": {
+    "status": "read_passed_full_host_suite_pending",
+    "evidence": "evidence/local-deployment.json"
+  },
+  "fileRestore": {
+    "status": "local_passed_host_pending",
+    "evidence": "tests/core.test.mjs"
+  },
+  "approvalDeny": {
+    "status": "local_partial_host_pending",
+    "evidence": "tests/core.test.mjs"
+  },
+  "securityReview": {
+    "status": "in_progress",
+    "evidence": "evidence/public-source-audit.json"
+  },
+  "cleanPublicHistory": {
+    "status": "pending",
+    "evidence": null
+  },
+  "publicRepository": null,
+  "publicRelease": null,
+  "cleanWindowsVm": {
+    "status": "not_run",
+    "evidence": null
+  },
+  "policy": "Production cutover is owner-authorized. Public release still requires all specified gates, including clean Windows VM and full real-host acceptance."
 }

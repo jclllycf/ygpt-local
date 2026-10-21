@@ -11,7 +11,7 @@ One project contains the local MCP service, native Windows setup, connection gui
 ## Quick start
 
 1. When available, download `YGPTLocal-Setup-1.0.0-rc.1-win-x64.exe` from this repository's Releases and compare its SHA-256. Candidate installers are unsigned; do not assume a verified publisher signature.
-2. Run the native setup wizard. Choose an empty application folder and the working folder you authorize. Node.js, embedded Python and cloudflared are bundled; no command-line setup is required.
+2. Run the native setup wizard. Choose an empty application folder and the working folder you authorize. Node.js, embedded Python, cloudflared and the official OpenAI tunnel-client are bundled; no command-line setup is required.
 3. Choose an existing Cloudflare Tunnel, create a **new dedicated** tunnel with an authorized Cloudflare API token, or use an eligible Secure MCP Tunnel. Configure only the credentials required by that mode.
 4. Install, start the local service, then verify local health, the tool catalog, the remote endpoint and authentication separately. Local-only setup is deliberately reported as incomplete for ChatGPT.
 5. Click **Connect ChatGPT**. In ChatGPT Plugins, use **+ → Add custom MCP server**, name it **YGPT Local**, enter the HTTPS endpoint ending in `/mcp` or select the dedicated Secure MCP Tunnel. For HTTPS choose OAuth and approve the connection with the owner pairing key shown by the Windows app. Install the personal plugin, then select `@YGPT Local` in a new chat and ask: “List the files in my authorized working folder.” Confirm the actual tool call and returned files.
@@ -24,7 +24,7 @@ One project contains the local MCP service, native Windows setup, connection gui
 | --- | --- | --- |
 | Existing Cloudflare Tunnel | Connector token + stable HTTPS hostname | Starts the bundled connector. The existing tunnel must route that hostname to the chosen local port. A connector token cannot create or change DNS. |
 | New Cloudflare Tunnel | API token, account ID, zone ID, unused hostname | Uses official REST APIs to create a dedicated named tunnel, ingress and CNAME. Explicit confirmation is required; existing DNS records are never overwritten. |
-| Secure MCP Tunnel | Dedicated tunnel ID, runtime key with Tunnels Read + Use, official client | Optional account/workspace capability; private outbound connection, no public Cloudflare URL. The official client must currently be selected separately in setup. |
+| Secure MCP Tunnel (recommended for eligible accounts) | Dedicated tunnel ID and OpenAI API runtime key with Tunnels Read + Use | Uses the bundled official client for a private outbound connection, with no public Cloudflare URL. Setup never submits model-generation API requests. |
 
 A Cloudflare API token, connector token, MCP owner credential and OpenAI tunnel runtime key have different purposes. A Cloudflare connection does **not** need an OpenAI API key or a model API subscription. Secure MCP Tunnel has its own Platform permissions and runtime credentials; availability is not universal.
 
@@ -52,7 +52,7 @@ Terminal snapshots are bounded to selected existing files. They cannot undo arbi
 
 Default application: `%LOCALAPPDATA%\Programs\YGPTLocal`. Data and encrypted credentials: `%LOCALAPPDATA%\YGPTLocal`. The optional sign-in startup entry and Start menu shortcut belong only to this product. The tray can open setup or pause the service.
 
-This candidate installs into an empty folder and refuses to overwrite an existing installation. Automatic in-place upgrading, complete legacy-state migration and cleanup of retained user data are not yet released. Uninstall removes known application files and retains settings, credentials and snapshots by default. See [migration](docs/MIGRATION.md). Do not run two agents against the same tunnel or state directory.
+For repair/update, run the full installer against the same YGPT Local application and data folders. It refuses maintenance while owned jobs, processes or approvals remain active, preserves the previous program folder, and retains owner identity, security policy and file snapshots. Updates are explicit owner actions; no unattended download is enabled. Complete legacy-state migration is not yet released. Uninstall removes known application files and retains settings, credentials and snapshots by default. See [migration](docs/MIGRATION.md). Do not run two agents against the same tunnel or state directory.
 
 ## Build from source
 
