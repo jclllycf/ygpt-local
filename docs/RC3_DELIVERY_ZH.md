@@ -11,6 +11,7 @@
 - 首次随机文件读取回执与清理门槛；默认开启且可取消，下载 Setup 额外授权，文件身份/哈希/引用与链接检查，保留维护与快照数据。
 - 解决干净 Windows Restricted 策略启动障碍：改用限功能 NativeWindows.exe，不改系统执行策略。修复后未再启动 VM 测试。
 - 安装器、便携包、SHA256SUMS、README 与故障排查更新。
+- 最新 Windows 首装任务错误处理记录已加入仓库，见 [修复记录](RC3_SCHEDULER_INSTALL_FIX_20261021.md)。
 
 ## 交付入口
 
@@ -19,7 +20,7 @@
 - dist/SHA256SUMS.txt
 - assets/brand/ygpt-local.ico 与 ygpt-local-256.png
 - docs/SETUP_GUIDE.md、docs/VALIDATION.md、docs/RC3_CLEANUP_INVENTORY_ZH.md
-- 私有仓库 https://github.com/jclllycf/ygpt-local ，分支 release/1.0.0-rc.3
+- 私有仓库 https://github.com/jclllycf/ygpt-local ，分支 release/1.0.0-rc.3，接续指引见 [RC3_HANDOFF.md](RC3_HANDOFF.md)。
 
 双击 Setup 即可开始；现有生产 Tunnel 正在使用，独立安装不可重复占用其身份。凭据只填本机向导。官方步骤暂缓，未替用户创建 Tunnel / Key / 插件。源码保留公开发布门槛，尚未创建公开 Release。
 
@@ -33,7 +34,4 @@
 
 ## 最终打包记录
 
-源码提交：149f5dac036b37ebe1bab0871385039eadc16275。包内清单 5824 个文件。
-
-- YGPTLocal-Setup-1.0.0-rc.3-win-x64.exe：91039744 bytes；SHA-256 2031f884bc3e11afb54af85792496e1adeff680d434ee468a8158cbffc7fea25
-- ygpt-local-portable-1.0.0-rc.3-win-x64.zip：90854532 bytes；SHA-256 ad1e18f2e720677b43b11db9df9a3018671614b4f15bc9b6da1e090114cdc0dc
+最终安装器与便携包的 SHA-256 以随包的 `dist/SHA256SUMS.txt` 为准；私有 GitHub 候选草稿及 `evidence/rc3-package.json` 记录构建提交和文件大小。较早候选的哈希不能用于核对最新文件。
