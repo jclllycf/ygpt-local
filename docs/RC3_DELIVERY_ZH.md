@@ -30,3 +30,10 @@
 此前高级 local-only 模式 15 秒采样：Watchdog 私有内存 22.7 MiB，四进程合计 193.0 MiB，32 逻辑处理器整机 CPU 约 0.062%。不是 Secure Tunnel 实机资源结论。清理夹具累计删除两个文件 16 字节，不是生产空间回收记录。
 
 待用户验证：最终包安装/修复、真实 ChatGPT 首次读取与审批、登录自启/断网恢复、清理后维护和文件恢复、Win10/Win11/DPI。安装器未做代码签名。
+
+## 最终打包记录
+
+源码提交：149f5dac036b37ebe1bab0871385039eadc16275。包内清单 5824 个文件。
+
+- YGPTLocal-Setup-1.0.0-rc.3-win-x64.exe：91039744 bytes；SHA-256 2031f884bc3e11afb54af85792496e1adeff680d434ee468a8158cbffc7fea25
+- ygpt-local-portable-1.0.0-rc.3-win-x64.zip：90854532 bytes；SHA-256 ad1e18f2e720677b43b11db9df9a3018671614b4f15bc9b6da1e090114cdc0dc
