@@ -1,5 +1,24 @@
 # YGPT Local 本机上线与安装包交付
 
+## 当前更新：1.0.0-rc.2（2026-10-21）
+
+本机已部署审批改名兼容修复，保留原 Tunnel 身份和持久状态。安装器已同步更新，无需在这台电脑重复安装。
+
+- 修复旧对话缓存的 `ui://yuki/approval/...` 资源加载失败，以及旧 `yukiBar` 元数据与 App 工具名的兼容。
+- 新目录只公布 `y_` 工具；旧入口仅作为兼容协议标识保留。授权范围、令牌、过期与防重放要求未放宽。
+- 已通过官方设置的 Refresh tools 更新现有插件目录；新 ChatGPT 对话实测 `y_ping`、`y_approval_center` 正常，版本为 rc.2，面板不再出现 YUKI 名称。
+- 已在旧 ChatGPT 对话恢复审批卡片，并自动化点击一个无破坏性测试请求的 Always allow in this chat。账本记录 allow_chat / succeeded，界面 Completed；随后通过真实工具撤销该测试上下文（closed=true）。这是经用户授权的自动化 UI 测试，不是物理真人身份认证。
+- 7 项相关集成测试通过；部署与安装包的 5,793 个文件逐一哈希一致。它们不等于此前全部 Windows UIA 或干净 VM 的验收。
+- 旧消息已经保存的宿主标题可能仍为 YUKI；不改写用户历史聊天。过期请求保持禁用，不因修复恢复执行。
+
+当前安装器：`dist/YGPTLocal-Setup-1.0.0-rc.2-win-x64.exe`。
+
+SHA-256：`3cc1a754c69d9d90ecee28648f7df37212fbdd8bd6ed5ca64fc3998163654df9`。
+
+原 rc.1 部署和验收记录如下，属于历史基线。
+
+## 历史基线：rc.1
+
 2026-10-21，本机已由旧产品切换为 YGPT Local。
 
 - 生产核心：YGPT Local 1.0.0-rc.1；插件包：1.0.3。

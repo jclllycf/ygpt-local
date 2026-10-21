@@ -22,7 +22,7 @@ import {profileSummary} from './permission-profiles.mjs';
 import {BackupManager} from './backup-manager.mjs';
 import {jobSnapshotTargets as planTerminalSnapshots} from './terminal-snapshots.mjs';
 import {createNativeExtension} from './native-extension.mjs';
-import {barTools,barEnabled,uiEnabled,barResource,BAR_URI,LEGACY_BAR_URI,INSPECTION_URI,approvalCenterTool,approvalCenterResult,chatApprovalResult,handleBar,previewTool,previewResult} from './inline-approval.mjs';
+import {barTools,barEnabled,uiEnabled,barResource,approvalResourceUris,BAR_URI,LEGACY_BAR_URI,INSPECTION_URI,approvalCenterTool,approvalCenterResult,chatApprovalResult,handleBar,previewTool,previewResult} from './inline-approval.mjs';
 import {describeEnglish,reviewScope} from './chat-review.mjs';
 import {stable,digest} from './durable.mjs';
 import {AsyncLocalStorage} from 'node:async_hooks';
@@ -171,7 +171,7 @@ async function withFileLocks(paths,run){
   await Promise.all(previous);
   try{return await run();}finally{release();for(const key of keys)if(fileLocks.get(key)===hold)fileLocks.delete(key);}
 }
-const emit=o=>{if(o.result&&wireContext.getStore()?.version===CURRENT_PROTOCOL)o={...o,result:{resultType:'complete',...o.result}};process.stdout.write(JSON.stringify(o)+'\n');};
+const emit=o=>{if(o.result?._meta?.yBar&&wireContext.getStore()?.legacyApproval)o.result._meta.yBar={...o.result._meta.yBar,legacyBridge:true};if(o.result?._meta?.yBar)o={...o,result:{...o.result,_meta:{...o.result._meta,yukiBar:o.result._meta.yBar}}};if(o.result&&wireContext.getStore()?.version===CURRENT_PROTOCOL)o={...o,result:{resultType:'complete',...o.result}};process.stdout.write(JSON.stringify(o)+'\n');};
 const failure=(id,message)=>emit({jsonrpc:'2.0',id,error:{code:-32001,message}});
 const response=(id,value,isError=false)=>emit({jsonrpc:'2.0',id,result:{content:[{type:'text',text:typeof value==='string'?value:JSON.stringify(value)}],isError}});
 // Brand key local-file/terminal tools for ChatGPT discovery while retaining
@@ -415,8 +415,8 @@ async function handle(msg){
   else if(!init)throw Error('Initialize required');
   if(msg.method==='ping')return emit({jsonrpc:'2.0',id,result:{}});
   if(msg.method==='tools/list')return emit({jsonrpc:'2.0',id,result:{tools:tools()}});
-  if(['resources/list','resources/templates/list'].includes(msg.method))return emit({jsonrpc:'2.0',id,result:msg.method==='resources/list'?{resources:(config.rc10Candidate?[INSPECTION_URI,LEGACY_BAR_URI,BAR_URI,'ui://ygpt/approval/interactive-v11-2c.html','ui://ygpt/approval/interactive-v11-2b.html','ui://ygpt/approval/interactive-v11-2.html','ui://ygpt/approval/interactive-v11-1.html','ui://ygpt/approval/interactive-v11.html','ui://ygpt/approval/inspection-v1.html']:!config.rc9Candidate&&uiEnabled()?(barEnabled()?[BAR_URI,LEGACY_BAR_URI]:[BAR_URI]):[]).map(uri=>({uri,name:'YGPT compact approval strip',mimeType:'text/html;profile=mcp-app'}))}:{resourceTemplates:[]}});
-  if(msg.method==='resources/read'&&((config.rc10Candidate&&[INSPECTION_URI,LEGACY_BAR_URI,BAR_URI,'ui://ygpt/approval/interactive-v11-2c.html','ui://ygpt/approval/interactive-v11-2b.html','ui://ygpt/approval/interactive-v11-2.html','ui://ygpt/approval/interactive-v11-1.html','ui://ygpt/approval/interactive-v11.html','ui://ygpt/approval/inspection-v1.html'].includes(msg.params?.uri))||(!config.rc9Candidate&&uiEnabled()&&([BAR_URI].includes(msg.params?.uri)||(barEnabled()&&msg.params?.uri===LEGACY_BAR_URI)))))return emit({jsonrpc:'2.0',id,result:{contents:[barResource(msg.params.uri)]}});
+  if(['resources/list','resources/templates/list'].includes(msg.method))return emit({jsonrpc:'2.0',id,result:msg.method==='resources/list'?{resources:approvalResourceUris().map(uri=>({uri,name:'YGPT compact approval strip',mimeType:'text/html;profile=mcp-app'}))}:{resourceTemplates:[]}});
+  if(msg.method==='resources/read'&&approvalResourceUris().includes(msg.params?.uri))return emit({jsonrpc:'2.0',id,result:{contents:[barResource(msg.params.uri)]}});
   if(msg.method!=='tools/call')throw Error('Unsupported method; no legacy in-chat resources');
   const requestedName=canonicalToolName(msg.params?.name),rawArgs=msg.params?.arguments??{};
   const nativeCall=config.rc10Candidate&&(nativeExtension?.tools().some(t=>t.name===requestedName)||requestedName==='y_desktop_fixture');
@@ -528,5 +528,5 @@ runChild();
 if(eagerStartup)ensureEngine(startupInit).catch(e=>{process.stderr.write('YGPT startup self-test failed: '+scrub(e.message)+'\n');child?.kill();});
 const input=readline.createInterface({input:process.stdin});
 input.on('line',line=>{let msg;try{if(Buffer.byteLength(line)>131072)throw Error('Request too large');msg=JSON.parse(line);}catch{failure(null,'Malformed/oversized JSON-RPC');return;}
-  wireContext.run({version:msg.params?._meta?.['io.modelcontextprotocol/protocolVersion']},()=>handle(msg).catch(e=>failure(msg.id??null,e.message)));});
+  wireContext.run({version:msg.params?._meta?.['io.modelcontextprotocol/protocolVersion'],legacyApproval:typeof msg.params?.name==='string'&&msg.params.name.startsWith('yuki_')},()=>handle(msg).catch(e=>failure(msg.id??null,e.message)));});
 input.once('close',shutdown);

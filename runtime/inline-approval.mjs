@@ -7,7 +7,14 @@ export const BAR_URI='ui://ygpt/approval/strip-v3.html';
 // Serve the NEW strip at this legacy address rather than the retired large card.
 export const LEGACY_BAR_URI='ui://ygpt/approval/card-v1.html';
 // RC10 read-only MCP App surface. Never returns a decision capability until host attestation is proven.
-export const INSPECTION_URI=config.chatAppConsent?'ui://ygpt/approval/compact-v11-3.html':'ui://ygpt/approval/inspection-v1.html';
+export const INSPECTION_URI=config.chatAppConsent?'ui://ygpt/approval/compact-v1-rc2.html':'ui://ygpt/approval/inspection-v1.html';
+// Resource addresses are protocol identifiers, not display branding. Old chats
+// retain these exact addresses and must still receive the current component.
+const knownResources=[BAR_URI,LEGACY_BAR_URI,INSPECTION_URI,...['compact-v11-3','interactive-v11-2c','interactive-v11-2b','interactive-v11-2','interactive-v11-1','interactive-v11','inspection-v1'].map(n=>'ui://ygpt/approval/'+n+'.html')];
+export function approvalResourceUris(){
+ const modern=config.rc10Candidate?knownResources:!config.rc9Candidate&&uiEnabled()?(barEnabled()?[BAR_URI,LEGACY_BAR_URI]:[BAR_URI]):[];
+ return [...new Set(modern.flatMap(uri=>[uri,uri.replace('ui://ygpt/','ui://yuki/')]))];
+}
 export const approvalCenterTool={
  name:'y_approval_center',
  title:'Approval center',

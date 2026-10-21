@@ -1,0 +1,37 @@
+{
+  "product": "YGPT Local",
+  "version": "1.0.0-rc.2",
+  "date": "2026-10-21",
+  "deployed": true,
+  "tunnelIdentityRetained": true,
+  "otherTunnelsPreserved": true,
+  "relatedIntegrationTests": {"passed": 7, "failed": 0},
+  "distribution": {
+    "filesVerified": 5793,
+    "productionMatchesPackagedFiles": true,
+    "installerSha256": "3cc1a754c69d9d90ecee28648f7df37212fbdd8bd6ed5ca64fc3998163654df9",
+    "portableSha256": "badb0a878df6c75fa3c0b0c83ab4772ad1580c60fe10c0bf89946ceaa5234cf8"
+  },
+  "realChatGPT": {
+    "oldResourceRestored": true,
+    "historicalExpiredRequestRemainsDisabled": true,
+    "automatedBrowserClick": {
+      "decision": "chat",
+      "action": "Print a fixed fixture string with Node; no deletion or file changes",
+      "ledgerEvent": "allow_chat",
+      "ledgerOutcome": "succeeded",
+      "visibleState": "Completed",
+      "notificationDeliveryReported": "sent",
+      "automaticModelResumptionVerified": false,
+      "testContextRevoked": true,
+      "physicalHumanIdentityAttested": false
+    },
+    "officialRefreshToolsInvoked": true,
+    "freshChatVersion": "1.0.0-rc.2",
+    "freshChatTools": ["y_ping", "y_approval_center"],
+    "freshChatPanelLoaded": true,
+    "freshChatOldBrandVisible": false,
+    "completeHostAcceptance": false
+  },
+  "publicReleaseCreated": false
+}
