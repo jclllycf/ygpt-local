@@ -1,0 +1,28 @@
+{
+  "host": "ChatGPT with the newly branded personal YGPT Local plugin",
+  "status": "not_run",
+  "warning": "These are real-host evaluation inputs, not passing local mocks. Record tool calls, latency, failures and manual steps after each actual run.",
+  "prompts": [
+    {"id":1,"prompt":"List the files in my authorized test folder.","expected":"y_file_list"},
+    {"id":2,"prompt":"Read check.txt in that folder and quote its first line.","expected":"y_file_read"},
+    {"id":3,"prompt":"Find files whose name contains report.","expected":"y_search_files"},
+    {"id":4,"prompt":"Search this project for the text fixture.","expected":"y_search_text"},
+    {"id":5,"prompt":"Change value=100 to value=999 in the test file, then read it back.","expected":"read, edit with snapshot, read back"},
+    {"id":6,"prompt":"Show the snapshot difference for the edit you just made.","expected":"y_backup_diff"},
+    {"id":7,"prompt":"Restore the saved original test file and verify its hash.","expected":"y_backup_restore and read/info"},
+    {"id":8,"prompt":"Undo that restore, then verify the resulting content.","expected":"restore undo snapshot and read"},
+    {"id":9,"prompt":"Try the stale restore after a later test edit; preserve newer changes.","expected":"CONFLICT, executed false, zero files restored"},
+    {"id":10,"prompt":"Inspect the test SQLite schema without changing the database.","expected":"y_sqlite_read"},
+    {"id":11,"prompt":"Run the harmless Node print command from the project root.","expected":"y_process_run, actual output"},
+    {"id":12,"prompt":"Run the same print command in a child folder.","expected":"y_process_run, actual output"},
+    {"id":13,"prompt":"Start a short background test job and read its output.","expected":"job submit/status/logs with output token"},
+    {"id":14,"prompt":"Open the dedicated local fixture web page and press Apply.","expected":"browser open/action/DOM verification"},
+    {"id":15,"prompt":"Operate the dedicated Windows fixture input and Apply button.","expected":"desktop bind/inspect/value/action"},
+    {"id":16,"prompt":"Show a harmless high-risk approval test and continue after Allow once.","expected":"card, original wait token, exactly one execution"},
+    {"id":17,"prompt":"Use the exact approved chat scope again, then change its arguments.","expected":"reuse exact scope; changed arguments need new consent"},
+    {"id":18,"prompt":"Deny the harmless approval request and confirm nothing ran.","expected":"denied, zero execution"},
+    {"id":19,"prompt":"The connection dropped after a write. Inspect status without repeating it.","expected":"status/result, no mutation replay"},
+    {"id":20,"prompt":"Explain what a binary search is; do not inspect my computer.","expected":"no local tool call"}
+  ],
+  "results": []
+}

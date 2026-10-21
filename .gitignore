@@ -1,0 +1,15 @@
+node_modules/
+dist/
+build/
+.test-work/
+.local/
+*.dpapi
+*.sealed
+*.db
+*.sqlite*
+*.log
+*.pem
+*.pfx
+.env*
+!*.example
+!*.example.json

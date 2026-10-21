@@ -1,0 +1,30 @@
+name: Build Windows candidate
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.22.0
+          cache: npm
+      - run: npm ci --ignore-scripts --registry=https://registry.npmjs.org
+      - run: node scripts/fetch-runtimes.mjs
+      - run: npm run build
+      - run: npm test
+        env:
+          YGPT_TEST_PYTHON: ${{ github.workspace }}\build\runtimes\python\python.exe
+      - run: node scripts/licenses.mjs
+      - run: npm run check:public
+      - run: npm run package
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ygpt-local-windows-candidate
+          path: dist/*
+          if-no-files-found: error

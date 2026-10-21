@@ -1,0 +1,9 @@
+{
+  "passed": true,
+  "source": "actual Windows WPF window and native UIA, not an HTML mock",
+  "brandVisible": true,
+  "consentGateVerified": true,
+  "screenshot": "docs/images/setup-welcome.png",
+  "installationPerformed": false,
+  "at": "2026-10-21T05:10:07.851Z"
+}

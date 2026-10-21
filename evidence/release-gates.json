@@ -1,0 +1,13 @@
+{
+  "freshInstaller":{"status":"pending","evidence":null},
+  "remoteTunnel":{"status":"pending","evidence":null},
+  "chatgptPlugin":{"status":"pending","evidence":null},
+  "fileRestore":{"status":"local_passed_host_pending","evidence":"tests/core.test.mjs"},
+  "approvalDeny":{"status":"local_partial_host_pending","evidence":"tests/core.test.mjs"},
+  "securityReview":{"status":"in_progress","evidence":"evidence/public-source-audit.json"},
+  "cleanPublicHistory":{"status":"pending","evidence":null},
+  "publicRepository":null,
+  "publicRelease":null,
+  "cleanWindowsVm":{"status":"not_run","evidence":null},
+  "policy":"Pending local or host evidence is never promoted to a passing public release gate. No existing production connection is modified."
+}

@@ -1,0 +1,24 @@
+{
+  "node": {
+    "version": "24.22.0",
+    "url": "https://nodejs.org/dist/v24.22.0/node-v24.22.0-win-x64.zip",
+    "sha256": "f9683a19877e12a9b167305c8db71040d812876359de21f0d2e97c3f321f80c3"
+  },
+  "python": {
+    "version": "3.14.8",
+    "url": "https://www.python.org/ftp/python/3.14.8/python-3.14.8-embed-amd64.zip",
+    "sha256": "a93abe456ab01bd96d7a085b3cdb6566b3063f4241360d114142fbdb07f0a310"
+  },
+  "tunnelClient": {
+    "version": "v0.0.16",
+    "url": "https://github.com/openai/tunnel-client/releases/download/v0.0.16/tunnel-client-v0.0.16-windows-amd64.zip",
+    "sha256": "edef7241b0c647fcb30f1a80ff376b6b25c51927960f257a3f01e21b17c2aba6",
+    "licensesSha256": "9399ced2b36f82fa18e5fe1e6df5712015680c48b8de51a4bd983e9a58de6b4c",
+    "sbomSha256": "4a4852a97ee25d7f72b6ffc54378e57b72b4047959c1d9eede6606efece10bd5"
+  },
+  "cloudflared": {
+    "version": "2026.10.2",
+    "url": "https://github.com/cloudflare/cloudflared/releases/download/2026.10.2/cloudflared-windows-amd64.exe",
+    "sha256": "12c7c887f8aaab779aef1dfa9b60673530a5adb88ecc55dd6df8f56e0b70f199"
+  }
+}

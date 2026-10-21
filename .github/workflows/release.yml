@@ -1,0 +1,35 @@
+name: Publish verified Windows release
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing reviewed release tag
+        required: true
+permissions:
+  contents: write
+jobs:
+  release:
+    runs-on: windows-latest
+    environment: release
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.22.0
+      - run: node scripts/check-release-gates.mjs
+      - run: npm ci --ignore-scripts --registry=https://registry.npmjs.org
+      - run: node scripts/fetch-runtimes.mjs
+      - run: npm run build
+      - run: npm test
+        env:
+          YGPT_TEST_PYTHON: ${{ github.workspace }}\build\runtimes\python\python.exe
+      - run: npm run check:public
+      - run: npm run package
+      - name: Publish assets
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.tag }}
+        run: gh release create "$env:RELEASE_TAG" dist/* --verify-tag --generate-notes --title "YGPT Local $env:RELEASE_TAG"

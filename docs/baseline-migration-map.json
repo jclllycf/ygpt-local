@@ -1,0 +1,441 @@
+{
+  "baseline": "2.1.0-rc.11.4",
+  "target": "1.0.0-rc.1",
+  "isolatedState": true,
+  "productionModified": false,
+  "policy": "New names and independent state; no encrypted existing state or active tunnel is rewritten. Legacy aliases are resolved by the compatibility adapter.",
+  "replacements": [
+    [
+      "YUKI Local PC",
+      "YGPT Local"
+    ],
+    [
+      "YUKI Files & Terminal",
+      "YGPT Files & Terminal"
+    ],
+    [
+      "YUKI Local",
+      "YGPT Local"
+    ],
+    [
+      "YUKI",
+      "YGPT"
+    ],
+    [
+      "Yuki",
+      "Y"
+    ],
+    [
+      "yuki_",
+      "y_"
+    ],
+    [
+      "yukiBar",
+      "yBar"
+    ],
+    [
+      "yukiGuard",
+      "yGuard"
+    ],
+    [
+      "yukiPrewriteBackup",
+      "yPrewriteBackup"
+    ],
+    [
+      "yuki/",
+      "ygpt/"
+    ],
+    [
+      "yuki-local-pc",
+      "ygpt-local"
+    ],
+    [
+      "yuki-local",
+      "ygpt-local"
+    ],
+    [
+      "yuki-native",
+      "ygpt-native"
+    ],
+    [
+      "yuki-terminal",
+      "ygpt-terminal"
+    ],
+    [
+      "yuki-desktop",
+      "ygpt-desktop"
+    ],
+    [
+      "yuki.config",
+      "ygpt.config"
+    ],
+    [
+      "yuki_jobs.py",
+      "jobs.py"
+    ],
+    [
+      "yuki_jobs",
+      "jobs"
+    ],
+    [
+      "yuki",
+      "ygpt"
+    ]
+  ],
+  "files": [
+    {
+      "source": "runtime/access-policy.mjs",
+      "target": "runtime/access-policy.mjs",
+      "beforeSha256": "5ac21578be1cda8a8e8ffbd0878523073e76e8d2cc45cf554a282418d46ac647",
+      "afterSha256": "3414a4b9224c10f22fd404fc32017436a55dea25b20f512dd2ba32a1fe946b72"
+    },
+    {
+      "source": "runtime/approval-bar.html",
+      "target": "runtime/approval-bar.html",
+      "beforeSha256": "572ec34f4301786dd2d6ea78faaf0453cd4e7bf026a208ab854a803c177748c5",
+      "afterSha256": "aeedd74f3fcb7d8ca729ca2610e430d08c777c6cc1634aba7cf0d533a83f01e0"
+    },
+    {
+      "source": "runtime/approval-panel.ps1",
+      "target": "runtime/approval-panel.ps1",
+      "beforeSha256": "35e04e5ed581d41bd52e6ba5cb7a4d0aa63f8492177641f513c303b46bf66c02",
+      "afterSha256": "b368d7639c28f07b819f18535d3f9425627b13f9f83b250086150a618cce0eb8"
+    },
+    {
+      "source": "runtime/approval-view.xaml",
+      "target": "runtime/approval-view.xaml",
+      "beforeSha256": "9914199163275cf999e1aba12476113c993adcf776f66e036bdb8bd6c6e0b812",
+      "afterSha256": "3657ddc5e2929de7b45e28a58a466926be8ab7e15aa2b995e74795a15346e544"
+    },
+    {
+      "source": "runtime/approvals.mjs",
+      "target": "runtime/approvals.mjs",
+      "beforeSha256": "a790ef444f4521e487ee1de6583dd290d6b55659206c285b495af6bdfc472f96",
+      "afterSha256": "38515b31ba40c2275eb2b63ed8187522b74704b579374c58d10f43b8462c0aca"
+    },
+    {
+      "source": "runtime/backup-manager.mjs",
+      "target": "runtime/backup-manager.mjs",
+      "beforeSha256": "f22b1c5187a79d3fec8a5cef715937bf919bae99f62aa1e100ee37b4cc8105f9",
+      "afterSha256": "cd4fe1b888b4fcf46aec98e06f2ed865af4c96b1b1b598106fe35089a50fabaa"
+    },
+    {
+      "source": "runtime/bootstrap.mjs",
+      "target": "runtime/bootstrap.mjs",
+      "beforeSha256": "d4ca90f2237be2459d637cecce54f6fc04238326ae4f290b3df6e2a8c9530ff8",
+      "afterSha256": "bcf9f0ac8dcb33defcc3ba07c5406ed254511db7aaf24a83576496ed33a4a2f9"
+    },
+    {
+      "source": "runtime/chat-review.mjs",
+      "target": "runtime/chat-review.mjs",
+      "beforeSha256": "7772f4910d66c9db6063b8d4a4ed2604660048880674d1431fa845f8b6be2a2f",
+      "afterSha256": "d4dff9946aac3301edc056564820680029d2442ad1ae4a6564757bc497707770"
+    },
+    {
+      "source": "runtime/chat-scope.mjs",
+      "target": "runtime/chat-scope.mjs",
+      "beforeSha256": "e804f47ef4dae78b95396fc43bd4d0eea84f6351153712d35458eff48c3388a3",
+      "afterSha256": "e804f47ef4dae78b95396fc43bd4d0eea84f6351153712d35458eff48c3388a3"
+    },
+    {
+      "source": "runtime/config.mjs",
+      "target": "runtime/config.mjs",
+      "beforeSha256": "1bc24b6e1352395455c6d192000e5e22a3dfb434fb1ed63e49e8cca5e1fbc012",
+      "afterSha256": "399b38f884d1de9070a41c693c6bc89dd25573267342afa008bcab52745ce49c"
+    },
+    {
+      "source": "runtime/disk-inspect.ps1",
+      "target": "runtime/disk-inspect.ps1",
+      "beforeSha256": "69f6863235e226d743f9d54e1fe4ecf3053984838c97b1edcfb778adcb501110",
+      "afterSha256": "69f6863235e226d743f9d54e1fe4ecf3053984838c97b1edcfb778adcb501110"
+    },
+    {
+      "source": "runtime/download-worker.mjs",
+      "target": "runtime/download-worker.mjs",
+      "beforeSha256": "f71f08bb80c34217647570c24f530310d4b231bee20588870530541b34e3edad",
+      "afterSha256": "d45922f7f6ac98ed5371896f1bfcfd88f1251452b29b7239dacb12db09a0cf49"
+    },
+    {
+      "source": "runtime/durable.mjs",
+      "target": "runtime/durable.mjs",
+      "beforeSha256": "c853efc4bce564b2a64c19ff950db4a01681a2e4d673be26802dec4e55c749bd",
+      "afterSha256": "c853efc4bce564b2a64c19ff950db4a01681a2e4d673be26802dec4e55c749bd"
+    },
+    {
+      "source": "runtime/engine-entry.mjs",
+      "target": "runtime/engine-entry.mjs",
+      "beforeSha256": "e937af3659860f7103579cac9df8972d8305010765dac3186f3a6bbf7e9ca10e",
+      "afterSha256": "293a30d6cab6045da8a12bcde4e5a4d52ac10e55ad00ca484046a883d121e551"
+    },
+    {
+      "source": "runtime/enhanced-server.mjs",
+      "target": "runtime/enhanced-server.mjs",
+      "beforeSha256": "75a9c9ed257b9d00222cae2a40f1f17ac6b2def8d9c529990f8efd2558eb2df0",
+      "afterSha256": "e23db6ee0a33e9a771293a3450717010dc0b6605438af1fd62e04bd020bb4ffb"
+    },
+    {
+      "source": "runtime/host-consent.mjs",
+      "target": "runtime/host-consent.mjs",
+      "beforeSha256": "5faf24a6387d380f0314689282bea4990030a29b2a589e4569bb72e77b916e48",
+      "afterSha256": "948c5168bc8573aa5457805540b26abd9768135041416bbc01c933c9a21e9872"
+    },
+    {
+      "source": "runtime/inline-approval.mjs",
+      "target": "runtime/inline-approval.mjs",
+      "beforeSha256": "2b50c254063cc90477578e556f53e46dca6a8f69d6fdb812580e79183bebf085",
+      "afterSha256": "cc927dc19115b4e58dc70bfb4dd94df5dcee8dea118b43a0efafb05ef318807c"
+    },
+    {
+      "source": "runtime/native-extension.mjs",
+      "target": "runtime/native-extension.mjs",
+      "beforeSha256": "5478031a7d698e62f886875c4531e482c594ee89e15d6c5c13a1cae846c131f3",
+      "afterSha256": "223b73e5dac8998987ee4bbdb039a6bfcc18a118f4eb79cb035b16ceb2c6edc7"
+    },
+    {
+      "source": "runtime/operation-description.mjs",
+      "target": "runtime/operation-description.mjs",
+      "beforeSha256": "cfdfad830259a5c92d02ed719c4e01cf7988dc6a8e5016cf0ab171f6587bf5a7",
+      "afterSha256": "363cd8d2517a3a84e96a74473c61167a8e54a33d65653e250ed7bb298535ad1c"
+    },
+    {
+      "source": "runtime/owner-state.mjs",
+      "target": "runtime/owner-state.mjs",
+      "beforeSha256": "575f8adb0e88435ab87bcf4fe735c545fd6abd10a8b7f8500f82062943f8b618",
+      "afterSha256": "575f8adb0e88435ab87bcf4fe735c545fd6abd10a8b7f8500f82062943f8b618"
+    },
+    {
+      "source": "runtime/permission-profiles.mjs",
+      "target": "runtime/permission-profiles.mjs",
+      "beforeSha256": "02f8c3074de24c46ede4bedae3f5fe8ad5c500632bc37abcf96c7e469ada8523",
+      "afterSha256": "31671c29397807a9053f0f758940fac51f30afcdaa5f12ef97168ca9ada1e78b"
+    },
+    {
+      "source": "runtime/read-only-command.ps1",
+      "target": "runtime/read-only-command.ps1",
+      "beforeSha256": "bb9fcaa69db4b99ca84bf2ea2177308abdd53f1a8b7b4ca5dba2da6a67627990",
+      "afterSha256": "bb9fcaa69db4b99ca84bf2ea2177308abdd53f1a8b7b4ca5dba2da6a67627990"
+    },
+    {
+      "source": "runtime/read-only-policy.mjs",
+      "target": "runtime/read-only-policy.mjs",
+      "beforeSha256": "95d7871c50468f9b9aa913e01c231ad71e1726cb3fa6dbb496fc6fd452dd5cc4",
+      "afterSha256": "9f7389478cf9db8f0344431ad49e9ad5a8cab2dcd575e459f878930ab4ceaa35"
+    },
+    {
+      "source": "runtime/safe-actions.mjs",
+      "target": "runtime/safe-actions.mjs",
+      "beforeSha256": "2ecdf918789cce007b85cd109d64f15ec0a6730399aa288315cf241375290947",
+      "afterSha256": "2ecdf918789cce007b85cd109d64f15ec0a6730399aa288315cf241375290947"
+    },
+    {
+      "source": "runtime/secure-state.mjs",
+      "target": "runtime/secure-state.mjs",
+      "beforeSha256": "b7d540e7a6078f1151ad9858aeb8e255e2bb49ced5d939b26dffee2ba08cf6fb",
+      "afterSha256": "400a0573e60b415e0b3c522c1a12fb1597ebc692e55f6d91aca7d4206797d455"
+    },
+    {
+      "source": "runtime/secure-state.ps1",
+      "target": "runtime/secure-state.ps1",
+      "beforeSha256": "7967d23692536ef15d780dafb7a439ce18c60c8ca95399d48a18a36d53046199",
+      "afterSha256": "361548077c8dbce99b44cc4abe8548730a541ab48a407ba11b0fa32bdb9f05c3"
+    },
+    {
+      "source": "runtime/secure_store.py",
+      "target": "runtime/secure_store.py",
+      "beforeSha256": "87d6e80ada1cdfea75d266c6057008c98f8af727e29d92a828093e2a08d534a7",
+      "afterSha256": "87d6e80ada1cdfea75d266c6057008c98f8af727e29d92a828093e2a08d534a7"
+    },
+    {
+      "source": "runtime/sqlite-read.mjs",
+      "target": "runtime/sqlite-read.mjs",
+      "beforeSha256": "c633371c39a041f84273ee91ae81e77ca99ec2b0fa4f8c9b7a0d78be4d842352",
+      "afterSha256": "c633371c39a041f84273ee91ae81e77ca99ec2b0fa4f8c9b7a0d78be4d842352"
+    },
+    {
+      "source": "runtime/terminal-snapshots.mjs",
+      "target": "runtime/terminal-snapshots.mjs",
+      "beforeSha256": "efa8cdbb15eaf16d1636dbd5bc04d36f09f33a8677d5a1da486d281a252707e6",
+      "afterSha256": "efa8cdbb15eaf16d1636dbd5bc04d36f09f33a8677d5a1da486d281a252707e6"
+    },
+    {
+      "source": "runtime/ui-third-party-notices.txt",
+      "target": "runtime/ui-third-party-notices.txt",
+      "beforeSha256": "25f252419a0205489dc0698d466620a3fb2ba0d445b94ceeea39d036f8a1c671",
+      "afterSha256": "25f252419a0205489dc0698d466620a3fb2ba0d445b94ceeea39d036f8a1c671"
+    },
+    {
+      "source": "runtime/yuki_jobs.py",
+      "target": "runtime/y_jobs.py",
+      "beforeSha256": "50c6734ed3ec8e7c606a7d91bea01d2517aa5896ca27a681b2eda7c80c20a30c",
+      "afterSha256": "cf097594193f6d719905809a6f073f36947ddb7b43df9140760e33c34521302d"
+    },
+    {
+      "source": "engine/src/bounded-download.mjs",
+      "target": "engine/src/bounded-download.mjs",
+      "beforeSha256": "611eb1b3cf7c7ddb818bf63648777dfcbb1469b296b3b2e5f4091533b7a34c04",
+      "afterSha256": "173e79161311b8c53ee77a0593b32d674276c5f6ea446809bc272e629b4ba253"
+    },
+    {
+      "source": "engine/src/browser-engine.mjs",
+      "target": "engine/src/browser-engine.mjs",
+      "beforeSha256": "f05c0f402496b5ae49e24e1fe6869c2b6aaf929dbc74e606b27d4c401029c00d",
+      "afterSha256": "4bd6eaf71a8d3f86eafc2721bb826b33396781b19ba9a59109c08fdfd5e12ebc"
+    },
+    {
+      "source": "engine/src/dc-adapter.mjs",
+      "target": "engine/src/dc-adapter.mjs",
+      "beforeSha256": "8ad8e82affa2e6c5f0304c47e91d504d7b231e5ef04a59dcc61f7f1abe53773d",
+      "afterSha256": "ef38445c3a59ccda90862d3d530d44efe1893d678824902cac7cc581a8f2d981"
+    },
+    {
+      "source": "engine/src/dc-entry.mjs",
+      "target": "engine/src/dc-entry.mjs",
+      "beforeSha256": "4df330ec8638789b489796e2bee367521be1a47e2d54898f300835d70d298670",
+      "afterSha256": "032863bc7cf6b408057ac93f120a5aab9fac1e7926a5556e136d622add756212"
+    },
+    {
+      "source": "engine/src/desktop-engine.mjs",
+      "target": "engine/src/desktop-engine.mjs",
+      "beforeSha256": "a2f84e153fc78f7cfd0f2b472161cf960f8ca0bdc01295b13345a1af0cab5ef4",
+      "afterSha256": "ba1c99cbb2d11d0afbf49986cd84636251a098877b8e48710741b6bc9d0bf722"
+    },
+    {
+      "source": "engine/src/durable-jobs.mjs",
+      "target": "engine/src/durable-jobs.mjs",
+      "beforeSha256": "b34a2fbea38a3bd4886a4842b5195aa2926ea2d41dc99e40807aba2dce906ceb",
+      "afterSha256": "4a8238dc938dc6523166955e18591984ffd27f822bf3e8934c74b4d4f250fa26"
+    },
+    {
+      "source": "engine/src/engine.mjs",
+      "target": "engine/src/engine.mjs",
+      "beforeSha256": "ffdd43869010c24a655639454d64b0d164906e494fbae31069f13e335d05bfa6",
+      "afterSha256": "d4a63f8467bbced232e7a045d44a963f570dff81a534c5f08e74d94e63f3270d"
+    },
+    {
+      "source": "engine/src/environment.mjs",
+      "target": "engine/src/environment.mjs",
+      "beforeSha256": "839c1d8611730aac378eac1cbe1882eb837c8260129936cdfc0009434167015b",
+      "afterSha256": "839c1d8611730aac378eac1cbe1882eb837c8260129936cdfc0009434167015b"
+    },
+    {
+      "source": "engine/src/file-engine.mjs",
+      "target": "engine/src/file-engine.mjs",
+      "beforeSha256": "9d9cdd4dcf27bbfc34d717a11c1d00e8d55252ccf1b6084d7035f526c262faa1",
+      "afterSha256": "24b4dd6897ee7f1bdffda901c28d5ef75cf0ef1482365ecd95864fae19f24115"
+    },
+    {
+      "source": "engine/src/ledger.mjs",
+      "target": "engine/src/ledger.mjs",
+      "beforeSha256": "1b7d4a558bc3f11ec9ceb85dcfa7f5a8702c250a759d1a91e9c8ee3c8f2de331",
+      "afterSha256": "1b7d4a558bc3f11ec9ceb85dcfa7f5a8702c250a759d1a91e9c8ee3c8f2de331"
+    },
+    {
+      "source": "engine/src/mcp-server.mjs",
+      "target": "engine/src/mcp-server.mjs",
+      "beforeSha256": "6c2a54b9cba315567863fe76ff766b8b04f0db22c8dfe629b0f118ccc6dfd006",
+      "afterSha256": "706a123b27e13b790f37f10e13f0b056e229f5705aab884198821685e0f6ceec"
+    },
+    {
+      "source": "engine/src/rc9-integration.mjs",
+      "target": "engine/src/rc9-integration.mjs",
+      "beforeSha256": "dda2e489b6dd90fb004bf5738b8fdd60703c3db7224b0e24754f0ce3d26fa8d7",
+      "afterSha256": "6a4365a841286b975e8d3fe242d67416687c9766fa6445b85cbd7eda24335a62"
+    },
+    {
+      "source": "engine/src/registry.mjs",
+      "target": "engine/src/registry.mjs",
+      "beforeSha256": "0a3265f3e97e8c7f596b3ba1a4a8ddbe9cd6e411bb8b64d5b6208ac65f9e84aa",
+      "afterSha256": "b8f6b5ced58348db898b657998fd0db20811853c66353ceb3e4ff9b59f776422"
+    },
+    {
+      "source": "engine/src/search-engine.mjs",
+      "target": "engine/src/search-engine.mjs",
+      "beforeSha256": "43f26ca484c7582a44de2898294f29c4a195812906b7621f93f5ecb363cc82d8",
+      "afterSha256": "ddcd34623711f6ee20428f6411fa22e3c9eed4a519efbe365d68d693b2de06c4"
+    },
+    {
+      "source": "engine/src/snapshot-adapter.mjs",
+      "target": "engine/src/snapshot-adapter.mjs",
+      "beforeSha256": "95b25437fe11ddd69b28642b5d7d9d96c43111e34766f64f349abd0d80bab750",
+      "afterSha256": "e59af9d5250b283ca6d9a1a96fa9f04958e290b3678db13793611199ff183a17"
+    },
+    {
+      "source": "engine/src/state-protection.mjs",
+      "target": "engine/src/state-protection.mjs",
+      "beforeSha256": "1df80cffd08f8ea9cbe556a5b3edddea962646ded600a08f1e0f0ea639f90239",
+      "afterSha256": "1df80cffd08f8ea9cbe556a5b3edddea962646ded600a08f1e0f0ea639f90239"
+    },
+    {
+      "source": "engine/src/system-engine.mjs",
+      "target": "engine/src/system-engine.mjs",
+      "beforeSha256": "558ce05316650dad93c79b083983e363f99f3900575b1831d70b6b189d2ef161",
+      "afterSha256": "8668b3ae199e3ab996b7d0ce5c930ce2fab98af18e9c2879fe5ca524452cd6e9"
+    },
+    {
+      "source": "engine/src/terminal-engine.mjs",
+      "target": "engine/src/terminal-engine.mjs",
+      "beforeSha256": "80ea733ae00c122bb7a39a1b660d8e2c0851b36f2bca1215692ff1f06d2cdf94",
+      "afterSha256": "330c071fa5563ddc8b0c2feb0cc218b47c49e02d3c2b9c39ea56545b776cfebd"
+    },
+    {
+      "source": "engine/src/workers/secure-state.ps1",
+      "target": "engine/src/workers/secure-state.ps1",
+      "beforeSha256": "bbb3d890c77a76093750a2744195749561f8455dc525497d57d4b041b4a32e98",
+      "afterSha256": "bbb3d890c77a76093750a2744195749561f8455dc525497d57d4b041b4a32e98"
+    },
+    {
+      "source": "engine/src/workers/secure_store.py",
+      "target": "engine/src/workers/secure_store.py",
+      "beforeSha256": "87d6e80ada1cdfea75d266c6057008c98f8af727e29d92a828093e2a08d534a7",
+      "afterSha256": "87d6e80ada1cdfea75d266c6057008c98f8af727e29d92a828093e2a08d534a7"
+    },
+    {
+      "source": "engine/src/workers/yuki_jobs.py",
+      "target": "engine/src/workers/y_jobs.py",
+      "beforeSha256": "50c6734ed3ec8e7c606a7d91bea01d2517aa5896ca27a681b2eda7c80c20a30c",
+      "afterSha256": "cf097594193f6d719905809a6f073f36947ddb7b43df9140760e33c34521302d"
+    },
+    {
+      "source": "engine/vendor/desktop-commander/atomic-write.js",
+      "target": "engine/vendor/desktop-commander/atomic-write.js",
+      "beforeSha256": "9dc39b2cf79839fc210d2c6a77c18435cd9beb13b2d5f6bc65086a540c9dd4ad",
+      "afterSha256": "9dc39b2cf79839fc210d2c6a77c18435cd9beb13b2d5f6bc65086a540c9dd4ad"
+    },
+    {
+      "source": "engine/vendor/desktop-commander/LICENSE",
+      "target": "engine/vendor/desktop-commander/LICENSE",
+      "beforeSha256": "e77cff545e0506903bf6a4bf29169fa40911eb76d70d239267df10c5c59370dd",
+      "afterSha256": "e77cff545e0506903bf6a4bf29169fa40911eb76d70d239267df10c5c59370dd"
+    },
+    {
+      "source": "engine/vendor/desktop-commander/logger.js",
+      "target": "engine/vendor/desktop-commander/logger.js",
+      "beforeSha256": "9626b8227d6555278bbe792ceda1c61c1b0720321e5bd7367ba321cc08be5700",
+      "afterSha256": "58cc3ed664770ddbf34408dcb963dc1dac3a7122a08fbcd63e46229f11c011d3"
+    },
+    {
+      "source": "engine/vendor/desktop-commander/process-tree.js",
+      "target": "engine/vendor/desktop-commander/process-tree.js",
+      "beforeSha256": "ede6be5982d553ed986367942c8faa74496947f03a03ea739245dbc2d9f46f77",
+      "afterSha256": "ede6be5982d553ed986367942c8faa74496947f03a03ea739245dbc2d9f46f77"
+    },
+    {
+      "source": "engine/vendor/desktop-commander/rename.js",
+      "target": "engine/vendor/desktop-commander/rename.js",
+      "beforeSha256": "ded9d18cb26958f8f86e3a38aa6de423e1ca2b8a45b8871f97a259cb5bd7c802",
+      "afterSha256": "ded9d18cb26958f8f86e3a38aa6de423e1ca2b8a45b8871f97a259cb5bd7c802"
+    },
+    {
+      "source": "engine/vendor/source-hashes.json",
+      "target": "engine/vendor/source-hashes.json",
+      "beforeSha256": "7686130879ef71437b8ec75576082b312b3b11c4cd8f5ae62e2fb8902b9f4686",
+      "afterSha256": "e073c35286b534cf9136649856e3cb513080d1e5b10f943108e9017311b91474"
+    },
+    {
+      "source": "engine/windows/YukiDesktop.cs",
+      "target": "engine/windows/YDesktop.cs",
+      "beforeSha256": "be7f0224672b3e62f0b421e3d5019f6870db33ceae5bc9bf49702ca5b40a2931",
+      "afterSha256": "edc4b62601274c760da35d75b82e08f68b08c1aadb81366cb216c17100de60e4"
+    }
+  ]
+}

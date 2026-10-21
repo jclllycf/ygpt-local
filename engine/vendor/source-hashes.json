@@ -1,0 +1,22 @@
+[
+  {
+    "Path": "D:\\AI\\Projects\\YGPT-Local-PC-Upgrade\\native-engine-phase1\\vendor\\desktop-commander\\atomic-write.js",
+    "Hash": "9DC39B2CF79839FC210D2C6A77C18435CD9BEB13B2D5F6BC65086A540C9DD4AD"
+  },
+  {
+    "Path": "D:\\AI\\Projects\\YGPT-Local-PC-Upgrade\\native-engine-phase1\\vendor\\desktop-commander\\process-tree.js",
+    "Hash": "EDE6BE5982D553ED986367942C8FAA74496947F03A03EA739245DBC2D9F46F77"
+  },
+  {
+    "Path": "D:\\AI\\Projects\\YGPT-Local-PC-Upgrade\\native-engine-phase1\\vendor\\desktop-commander\\rename.js",
+    "Hash": "DED9D18CB26958F8F86E3A38AA6DE423E1CA2B8A45B8871F97A259CB5BD7C802"
+  },
+  {
+    "Path": "D:\\AI\\Projects\\YGPT-Local-PC-Upgrade\\native-engine-phase1\\src\\workers\\secure_store.py",
+    "Hash": "87D6E80ADA1CDFEA75D266C6057008C98F8AF727E29D92A828093E2A08D534A7"
+  },
+  {
+    "Path": "D:\\AI\\Projects\\YGPT-Local-PC-Upgrade\\native-engine-phase1\\src\\workers\\y_jobs.py",
+    "Hash": "50C6734ED3EC8E7C606A7D91BEA01D2517AA5896CA27A681B2EDA7C80C20A30C"
+  }
+]

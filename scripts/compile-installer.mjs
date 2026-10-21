@@ -1,0 +1,7 @@
+// Developer iteration only: the final package command must rebuild the full payload.
+import fs from 'node:fs';
+import path from 'node:path';
+import {execFileSync} from 'node:child_process';
+const p=JSON.parse(fs.readFileSync('build/latest-package.json')),framework=path.join(process.env.SystemRoot,'Microsoft.NET/Framework64/v4.0.30319'),refs=['System.Xaml.dll','System.Drawing.dll','System.Windows.Forms.dll','System.Web.Extensions.dll','System.Security.dll','System.IO.Compression.dll','System.IO.Compression.FileSystem.dll',...['WindowsBase.dll','PresentationCore.dll','PresentationFramework.dll'].map(n=>path.join(framework,'WPF',n))];
+execFileSync(path.join(framework,'csc.exe'),['/nologo','/platform:x64','/target:winexe','/out:'+path.resolve('build/Setup-iteration.exe'),'/resource:'+p.zip+',YGPT.Payload',...refs.map(n=>'/reference:'+n),path.resolve('setup/YGPTLocal.cs')],{stdio:'inherit',windowsHide:true});
+console.log('Iteration installer compiled. Not a final release artifact.');

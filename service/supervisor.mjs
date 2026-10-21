@@ -1,0 +1,20 @@
+import fs from 'node:fs';
+import path from 'node:path';
+import {fileURLToPath} from 'node:url';
+import {spawn} from 'node:child_process';
+import {BrokerClient} from './rpc.mjs';
+import {startHttp} from './http-server.mjs';
+import {tunnelHealth} from './tunnel-health.mjs';
+import {loadSecrets,encryptedState} from './secrets.mjs';
+const install=fileURLToPath(new URL('..',import.meta.url)),data=process.argv[2];
+if(!data||!path.isAbsolute(data))throw Error('Start YGPT Local from its setup application');
+const config=path.join(data,'ygpt.config.json'),cfg=JSON.parse(fs.readFileSync(config)),connection=JSON.parse(fs.readFileSync(path.join(data,'connection.json'))),secrets=loadSecrets(data,install);
+const broker=await new BrokerClient({entry:path.join(install,'runtime/bootstrap.mjs'),config,cwd:cfg.projectRoots[0]}).start();
+const gateway=await startHttp({broker,port:cfg.port,publicOrigin:connection.mode==='secure-tunnel'?undefined:connection.publicOrigin,ownerKey:secrets.ownerKey,localKey:secrets.localKey,tunnelKey:connection.mode==='secure-tunnel'?secrets.tunnelKey:undefined,oauthState:connection.mode.startsWith('cloudflare')?encryptedState(data,install,'oauth-state.dpapi'):undefined,connectionStatus:()=>tunnelHealth(data,connection.mode),onHostCall:()=>{fs.writeFileSync(path.join(data,'host-evidence.json'),JSON.stringify({source:'authenticated-remote-mcp-client',at:new Date().toISOString(),notProofOfChatGPTIdentity:true}));}});
+let tunnel;
+if(connection.mode.startsWith('cloudflare'))tunnel=spawn(path.join(install,'runtimes/cloudflared.exe'),['tunnel','--no-autoupdate','run'],{windowsHide:true,env:{...process.env,TUNNEL_TOKEN:secrets.tunnelToken},stdio:'ignore'});
+if(connection.mode==='secure-tunnel')tunnel=spawn(path.join(install,'runtimes/tunnel-client.exe'),['run','--control-plane.tunnel-id',connection.tunnelId,'--control-plane.api-key','env:YGPT_TUNNEL_RUNTIME_KEY','--mcp.server-url','http://127.0.0.1:'+cfg.port+'/mcp','--mcp.extra-headers','Authorization: env:YGPT_MCP_AUTH_HEADER','--health.listen-addr','127.0.0.1:0','--health.url-file',path.join(data,'tunnel-health.url')],{windowsHide:true,env:{...process.env,YGPT_TUNNEL_RUNTIME_KEY:secrets.runtimeKey,YGPT_MCP_AUTH_HEADER:'Bearer '+secrets.tunnelKey},stdio:'ignore'});
+let closing=false;async function stop(){if(closing)return;closing=true;clearInterval(watch);tunnel?.kill();await gateway.close();await broker.close();fs.writeFileSync(path.join(data,'service-health.json'),JSON.stringify({product:'YGPT Local',version:'1.0.0-rc.1',pid:process.pid,localReady:false,stopped:true,at:new Date().toISOString()}));process.exit(0);}
+const watch=setInterval(()=>{if(fs.existsSync(path.join(data,'paused'))||broker.exited||tunnel&&tunnel.exitCode!==null)void stop();},2000);
+process.on('SIGTERM',stop);process.on('SIGINT',stop);
+fs.writeFileSync(path.join(data,'service-health.json'),JSON.stringify({product:'YGPT Local',version:'1.0.0-rc.1',pid:process.pid,brokerPid:broker.child.pid,port:cfg.port,localReady:true,tunnelProcessStarted:!!tunnel,tunnelConnected:false,pluginLinked:false,at:new Date().toISOString()}));
