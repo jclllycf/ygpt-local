@@ -7,7 +7,7 @@ This candidate replaces the setup shell with an English-only eight-page Windows 
 ## Current status
 
 - Source, setup guide, scheduler first-install fix, issue notes, brand assets and test sources belong in this branch.
-- Latest installer binaries will be attached to a **draft owner-test release**, not stored in Git history. Draft release links require access to the private repository.
+- Latest installer binaries are attached to the **draft `v1.0.0-rc.3-owner-test` release**, not stored in Git history. Open the repository's [Releases page](https://github.com/jclllycf/ygpt-local/releases) and select Drafts. Access requires this private repository's account permissions.
 - Production remains RC2. The RC3 Secure Tunnel / ChatGPT first-use flow has not been cut over or claimed verified.
 - The seven local handoff task files are intentionally excluded by `.gitignore`; this handoff and the public repository documentation preserve the continuing project context.
 - Do not commit local `dist/api key.txt`, `dist/tunnel.txt`, user credentials, `.local`, build caches, or runtime state.
