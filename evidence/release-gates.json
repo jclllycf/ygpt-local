@@ -1,37 +1,64 @@
 {
+  "version": "1.0.0-rc.3",
+  "candidateCommit": null,
+  "artifacts": [],
   "freshInstaller": {
-    "status": "pending",
-    "evidence": null
+    "status": "not_verified_final_rc3",
+    "evidence": "docs/VALIDATION.md"
   },
   "remoteTunnel": {
-    "status": "passed",
-    "evidence": "evidence/local-deployment.json"
+    "status": "not_verified_final_rc3",
+    "evidence": "docs/VALIDATION.md"
   },
   "chatgptPlugin": {
-    "status": "read_passed_full_host_suite_pending",
-    "evidence": "evidence/local-deployment.json"
+    "status": "not_verified_final_rc3",
+    "evidence": "docs/VALIDATION.md"
   },
   "fileRestore": {
-    "status": "local_passed_host_pending",
-    "evidence": "tests/core.test.mjs"
+    "status": "not_verified_final_rc3",
+    "evidence": "docs/VALIDATION.md"
   },
   "approvalDeny": {
-    "status": "local_partial_host_pending",
-    "evidence": "tests/core.test.mjs"
+    "status": "not_verified_final_rc3",
+    "evidence": "docs/VALIDATION.md"
   },
   "securityReview": {
-    "status": "in_progress",
-    "evidence": "evidence/public-source-audit.json"
+    "status": "not_verified_final_rc3",
+    "evidence": "docs/VALIDATION.md"
   },
   "cleanPublicHistory": {
-    "status": "pending",
-    "evidence": null
+    "status": "not_verified_final_rc3",
+    "evidence": "docs/VALIDATION.md"
+  },
+  "guiExit": {
+    "status": "not_verified_final_rc3",
+    "evidence": "docs/VALIDATION.md"
+  },
+  "logonRecovery": {
+    "status": "not_verified_final_rc3",
+    "evidence": "docs/VALIDATION.md"
+  },
+  "networkRecovery": {
+    "status": "not_verified_final_rc3",
+    "evidence": "docs/VALIDATION.md"
+  },
+  "hostCleanupBeforeAfter": {
+    "status": "not_verified_final_rc3",
+    "evidence": "docs/VALIDATION.md"
+  },
+  "maintenanceAfterCleanup": {
+    "status": "not_verified_final_rc3",
+    "evidence": "docs/VALIDATION.md"
+  },
+  "visualAccessibility": {
+    "status": "not_verified_final_rc3",
+    "evidence": "docs/VALIDATION.md"
+  },
+  "cleanWindowsVm": {
+    "status": "not_verified_final_rc3",
+    "evidence": "docs/VALIDATION.md"
   },
   "publicRepository": null,
   "publicRelease": null,
-  "cleanWindowsVm": {
-    "status": "not_run",
-    "evidence": null
-  },
-  "policy": "Production cutover is owner-authorized. Public release still requires all specified gates, including clean Windows VM and full real-host acceptance."
+  "policy": "Owner will perform final acceptance. No further automated behavioral tests were run after that instruction. Historical RC2 or earlier RC3 fixtures do not satisfy final RC3 acceptance. Public publication is gated; existing production Tunnel is preserved."
 }

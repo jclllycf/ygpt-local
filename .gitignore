@@ -1,8 +1,10 @@
 node_modules/
 dist/
 build/
+runtime/NativeWindows.exe
 .test-work/
 .local/
+docs/NEXT_RELEASE_RC3_20261021/
 *.dpapi
 *.sealed
 *.db

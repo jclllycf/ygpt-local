@@ -5,8 +5,12 @@ on:
       tag:
         description: Existing reviewed release tag
         required: true
+      candidate_run_id:
+        description: Build run containing the exact tested candidate assets
+        required: true
 permissions:
   contents: write
+  actions: read
 jobs:
   release:
     runs-on: windows-latest
@@ -18,15 +22,19 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 24.22.0
-      - run: node scripts/check-release-gates.mjs
-      - run: npm ci --ignore-scripts --registry=https://registry.npmjs.org
-      - run: node scripts/fetch-runtimes.mjs
-      - run: npm run build
-      - run: npm test
+      - name: Download exact accepted candidate (do not rebuild reviewed binaries)
+        shell: pwsh
         env:
-          YGPT_TEST_PYTHON: ${{ github.workspace }}\build\runtimes\python\python.exe
-      - run: npm run check:public
-      - run: npm run package
+          GH_TOKEN: ${{ github.token }}
+          CANDIDATE_RUN_ID: ${{ inputs.candidate_run_id }}
+        run: |
+          if ($env:CANDIDATE_RUN_ID -notmatch '^\d+$') { throw 'Numeric candidate run required' }
+          $run = gh api "repos/$env:GITHUB_REPOSITORY/actions/runs/$env:CANDIDATE_RUN_ID" | ConvertFrom-Json
+          $gates = Get-Content evidence/release-gates.json -Raw | ConvertFrom-Json
+          if ($run.head_sha -ne $gates.candidateCommit -or $run.conclusion -ne 'success' -or $run.path -ne '.github/workflows/build.yml') { throw 'Candidate provenance mismatch' }
+          gh run download $env:CANDIDATE_RUN_ID --repo $env:GITHUB_REPOSITORY --name ygpt-local-windows-candidate --dir dist
+          if ($LASTEXITCODE -ne 0) { throw 'Candidate download failed' }
+      - run: node scripts/check-release-gates.mjs
       - name: Publish assets
         shell: pwsh
         env:

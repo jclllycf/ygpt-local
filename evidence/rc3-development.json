@@ -1,0 +1,153 @@
+{
+  "version": "1.0.0-rc.3",
+  "finalAcceptance": "owner_will_test",
+  "finalPackageBehaviorTested": false,
+  "realChatGPT": false,
+  "productionCutover": false,
+  "localRegression": {
+    "passed": 12,
+    "total": 12,
+    "scope": "Development source before final task ownership guard"
+  },
+  "nativeHelperChecks": {
+    "passed": 2,
+    "total": 2,
+    "scope": "Development source before final task ownership guard"
+  },
+  "earlierPackagedLifecycle": {
+    "installerSha256": "daaa3193667e1715fc7fc7e47ccc4ef0fc60fb318f51efc153a454728a101dcc",
+    "at": "2026-10-21T11:12:10.1004940Z",
+    "assertions": [
+      "First-run consent blocks installation",
+      "Login task enabled by default",
+      "Local installation does not fabricate remote first-use evidence",
+      "Cleanup waits for real first use",
+      "Credentials encrypted",
+      "GUI exits",
+      "Broker and Engine stay ready without GUI",
+      "GUI exit preserves the owner PID",
+      "Actual local MCP ping and marker read passed (not ChatGPT)",
+      "Duplicate Watchdog exits without a second owner",
+      "Duplicate launch retains the original owner",
+      "Login action points to standalone Watchdog",
+      "Task action and manual start share one owner",
+      "Fault target belongs to this disposable installation",
+      "Watchdog recovers its own crashed transport",
+      "Recovery increments reconnect counter",
+      "Actual local MCP ping and marker read passed (not ChatGPT)",
+      "Explicitly owned test download removed after GUI exit (fixture, not automatic host acceptance)",
+      "Credentials unchanged by lifecycle tests",
+      "User working file retained",
+      "Installed Settings reconfigures without a downloaded payload or credential rewrite",
+      "Actual local MCP ping and marker read passed (not ChatGPT)",
+      "Authenticated idle drain stops only the owned Watchdog",
+      "Already stopped maintenance is idempotent",
+      "Removed only the disposable logon registration"
+    ],
+    "resourceSample": {
+      "mode": "local-only advanced HTTP gateway (not the unverified Secure Tunnel chain)",
+      "seconds": 15,
+      "cpuPercentOfOneCore": 1.9791666666666665,
+      "cpuPercentOfMachine": 0.06184895833333333,
+      "processes": [
+        {
+          "name": "YGPTWatchdog",
+          "workingSetBytes": 7737344,
+          "privateBytes": 23805952,
+          "cpuSecondsOver15s": 0.0625
+        },
+        {
+          "name": "node",
+          "workingSetBytes": 2961408,
+          "privateBytes": 39587840,
+          "cpuSecondsOver15s": 0.015625
+        },
+        {
+          "name": "node",
+          "workingSetBytes": 50782208,
+          "privateBytes": 115879936,
+          "cpuSecondsOver15s": 0.15625
+        },
+        {
+          "name": "node",
+          "workingSetBytes": 0,
+          "privateBytes": 23134208,
+          "cpuSecondsOver15s": 0.0625
+        }
+      ]
+    },
+    "scope": "Earlier bilingual installer; local-only, not final RC3"
+  },
+  "cleanupFixture": {
+    "scope": "Earlier native fixture, no ChatGPT first-use claim",
+    "state": "partially-skipped",
+    "generation": "4421e8e854814656a7f836b32fbad1ed",
+    "attempt": 3,
+    "deleted": 0,
+    "bytesReclaimed": 0,
+    "totalDeleted": 2,
+    "totalBytesReclaimed": 16,
+    "skipped": 7,
+    "files": [
+      {
+        "entry": 1,
+        "kind": "install-cache",
+        "outcome": "ALREADY_ABSENT"
+      },
+      {
+        "entry": 2,
+        "kind": "install-cache",
+        "outcome": "HASH_CHANGED"
+      },
+      {
+        "entry": 3,
+        "kind": "install-cache",
+        "outcome": "ALREADY_ABSENT"
+      },
+      {
+        "entry": 4,
+        "kind": "install-cache",
+        "outcome": "IDENTITY_CHANGED"
+      },
+      {
+        "entry": 5,
+        "kind": "setup-download",
+        "outcome": "NO_FILE_OWNERSHIP"
+      },
+      {
+        "entry": 6,
+        "kind": "install-cache",
+        "outcome": "REQUIRED_REFERENCE"
+      },
+      {
+        "entry": 7,
+        "kind": "install-cache",
+        "outcome": "VALIDATION_FAILED"
+      },
+      {
+        "entry": 8,
+        "kind": "install-cache",
+        "outcome": "FOREIGN_GENERATION"
+      },
+      {
+        "entry": 9,
+        "kind": "staging",
+        "outcome": "ALREADY_ABSENT"
+      },
+      {
+        "entry": 10,
+        "kind": "install-cache",
+        "outcome": "SYSTEM_ROOT"
+      }
+    ],
+    "at": "2026-10-21T11:27:29.4588130Z",
+    "uninstallInvoked": false
+  },
+  "sandbox": {
+    "status": "earlier_candidate_startup_failed_script_policy",
+    "fix": "Default startup helpers replaced with typed native executable; not retested",
+    "vmStopped": true
+  },
+  "officialSetup": "deferred_by_owner",
+  "englishOnly": true
+}

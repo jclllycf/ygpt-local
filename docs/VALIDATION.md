@@ -1,26 +1,26 @@
-# Validation status
+# RC3 validation and owner handoff
 
-This is a development release candidate, not an accepted public release. The owner authorized a production rename and cutover on 2026-10-21. The existing OpenAI Tunnel identity and other tunnels were retained.
+The owner requested English-only UI, then asked to perform the remaining tests personally. Automated behavioral testing was stopped. The final RC3 package is compiled and supplied for owner acceptance; no final package, official Secure Tunnel, or ChatGPT acceptance is claimed. The existing RC2 production connection was preserved.
 
-| Check | Evidence and limit |
+| Evidence | Actual scope and limit |
 | --- | --- |
-| Renamed catalog; SQLite; snapshots, restore and conflict | Real Windows broker tests passed; 92 public + 2 App-only tools |
-| HTTP authentication | Real HTTP/SDK integration passed: OAuth PKCE, owner consent, discovery, revocation, Host rejection and maintenance drain |
-| OAuth restart and refresh | Windows DPAPI persistence passed; rotating refresh and replay-family revocation passed |
-| Browser, desktop and jobs | Actual isolated Edge DOM/click/screenshot, native Windows UIA fixture and persistent job output passed locally |
-| Approval semantics | Local fixtures passed once/exact reuse, deny, bounded chat grant and context revocation; not proof of a human-host click |
-| App CSP | Inline bundle ran under its real policy in Edge; not ChatGPT host rendering |
-| Native installer | Actual packaged GUI fresh install and same-folder repair passed on the development PC; user file and owner identity retained |
-| Uninstall | Actual installed GUI uninstall passed after fixing trailing-backslash argument quoting; user file, encrypted credentials and state retained |
-| Bundled runtimes | Node 24.22.0, CPython 3.14.8, cloudflared 2026.10.2, official OpenAI tunnel-client 0.0.16; publisher hashes and notices retained |
-| Clean Windows VM without developer tools | Not verified. Windows Sandbox CLI could not start; fallback produced no test receipt. No OS feature/security settings were changed |
-| GitHub CI | Windows CI run 3 passed after correcting the embedded-Python source-build import path |
-| Source and dependencies | Source scan passed; 106 npm license declarations reviewed; npm production audit reported zero known vulnerabilities against the official registry. Final archive/history checks remain |
-| Dedicated OpenAI Tunnel | Existing owner-authorized OpenAI Tunnel identity retained during cutover; production ready. A separate direct API/SDK ingress probe returned 404 and is not counted as host validation |
-| Real new-brand ChatGPT plugin | Existing plugin renamed and updated to 1.0.3. An actual ChatGPT chat returned production 1.0.0-rc.1 and the fixture file content value=100; other host scenarios remain pending |
-| Twenty golden host prompts | All pending; no synthetic accuracy is reported |
-| Repository / Release | A single private preparation repository exists. No public Release or download acceptance has been claimed |
+| Local compound regression | 12/12 passed during development before the final startup-task ownership guard; not ChatGPT |
+| Native Windows checks | 2/2 passed separately for parse-only command classification and state ACL/link boundaries, before the final guard |
+| Earlier packaged installer | 25 native lifecycle assertions passed on the development PC, advanced local-only mode, installer SHA daaa3193667e1715fc7fc7e47ccc4ef0fc60fb318f51efc153a454728a101dcc; earlier bilingual UI, not the final package |
+| Cleanup fixture | Exact manifest, changed/open/replaced/foreign/reference/link safety and idempotent receipts exercised. Two owned fixture files, 16 bytes total reclaimed. Not real ChatGPT-triggered cleanup |
+| Clean Windows Sandbox | Started and installed an earlier candidate; startup failed because PowerShell script execution was restricted. Replaced default startup scripts with a typed native Windows helper. The final fix was not retested in Sandbox at the owner's request; VM stopped |
+| English-only final UI | Language switch and alternate UI strings removed; final native GUI and DPI/accessibility acceptance left to owner |
+| Standalone Watchdog | Implemented. Earlier local-mode GUI-exit, single-owner and owned-child recovery checks passed. Actual Windows sign-in and network loss were not verified |
+| Official Tunnel / ChatGPT | Owner deferred dedicated website steps. No new Tunnel, key, personal plugin or human risk confirmation created. RC2 evidence is historical and cannot satisfy RC3 gates |
+| Final package | Built with bundled runtimes, original icon and native helper; SHA-256 listed alongside download. Unsigned |
+| Public Release | Not published. Private development branch is the delivery target until owner acceptance |
 
-Local seven-test suite is a small set of compound integration tests, not six separate human-host approvals. Check version and SHA in the accompanying evidence before matching results to a particular installer. Subsequent binary changes require another installer test.
+See [RC3 development evidence](../evidence/rc3-development.json) and [release gates](../evidence/release-gates.json). A local marker read is not proof of a real ChatGPT user or physical human click. Unknown-result mutations must not be replayed.
 
-Remaining work includes clean Windows VM verification, final uninstallation/upgrade checks, optional legacy snapshot import, real Tunnel credentials and reconnection, actual ChatGPT tool selection and App approvals, remaining credential failure scenarios and final public release checks. Never infer these from a green local health response.
+## Prior resource measurement
+
+A 15-second sample of an earlier advanced local-only chain measured 23,805,952 private bytes for the Watchdog (22.7 MiB), 202,407,936 private bytes for four processes (193.0 MiB), and 0.062% machine CPU across 32 logical processors. Some working sets were paged out. These are development observations, not a final Secure Tunnel resource budget.
+
+## Owner acceptance still outstanding
+
+Final English-only install/repair, official Secure Tunnel plus first ChatGPT marker read, authentic approval decisions, login/reconnect, cleanup then maintenance/read/restore, clean Windows 10/11 and DPI/accessibility. These were not rerun after the owner took over testing.

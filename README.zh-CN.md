@@ -1,37 +1,57 @@
+<img src="assets/brand/ygpt-local.svg" width="72" alt="YGPT Local 原创 Y 连接图标">
+
 # YGPT Local
 
-让 ChatGPT 通过真实工具读取、搜索和修改你自己的 Windows 文件，支持写前快照、恢复冲突保护及高风险操作审批。
+从 ChatGPT 使用你自己的 Windows 文件和工具，保留写前快照、恢复冲突保护和高风险审批。
 
-**当前为开发候选版，尚未确认公开 Release。安装包下载地址将在发布验收完成后提供；不会用占位链接冒充已发布。**
+**1.0.0-rc.3 已打包，界面仅英文，剩余测试由用户自行完成。** 仓库目前私有，尚无通过全部验收的公开下载。见 [逐字段教程](docs/SETUP_GUIDE.md)、[验收状态](docs/VALIDATION.md)、[安全边界](docs/SECURITY.md)。
 
-## 不用命令行的安装路径
+## 图形安装流程
 
-1. 发布后，从本仓库 Releases 下载 `YGPTLocal-Setup-*.exe` 并核对 SHA-256。候选安装器未签名，不代表有经过验证的发行者证书。
-2. 双击安装器，选择一个空的应用目录，以及允许本地工具操作的工作目录。完整安装包包含 Node、Python、cloudflared 和 OpenAI 官方 tunnel-client，不要求你安装开发环境。
-3. 选择连接方式并填写相应凭据。已有 Cloudflare Tunnel 填 connector token 和稳定 HTTPS 地址；新建 Tunnel 填具有对应账户 Tunnel Edit、域名区域 DNS Edit 权限的 API Token。不要混用这两种 token。
-4. 检查本机服务、目录、远端连接和认证各自的状态。本机安装成功不等于 ChatGPT 已连接。已有 Tunnel 需要原有路由指向向导显示的本机端口；仅 connector token 无权修改 DNS/远端配置。
-5. 点击 Connect ChatGPT。在官方页面选择 Plugins → + → Add custom MCP server，名称填写 YGPT Local，输入带 `/mcp` 的 HTTPS 地址，选择 OAuth；在连接确认页面使用 Windows 向导提供的 owner pairing key。创建并安装个人插件，在新聊天选择 `@YGPT Local`，让它列出已授权测试目录，并观察真实工具结果。
+1. 获取 `YGPTLocal-Setup-1.0.0-rc.3-win-x64.exe`，核对 `SHA256SUMS.txt`。候选包未签名，不代表有可信发行者证书。
+2. 双击八步向导，选择程序目录和授权工作目录。内置 Node、Python 和官方 Tunnel Client，普通安装不要求开发环境或管理员权限。
+3. 保留默认 **OpenAI Secure MCP Tunnel**。在自己有资格的 Platform 组织中创建专用 Tunnel，并关联实际使用的 ChatGPT 工作区。不要抢用其他实例已连接的 Tunnel。
+4. 在本机填写完整 Tunnel ID 和专用运行时 API Key。Key 使用遮罩输入和当前用户 DPAPI 加密，用于认证 Tunnel Client；安装器不调用 GPT 生成模型，也不代为创建 Key。
+5. 核对本地引擎、Tunnel、凭据和真实调用的分别状态。私人 Tunnel 可能等首次远端握手才创建 Broker；不能据此反复重启。
+6. ChatGPT **Plugins → Add → Add custom MCP server** 选择 **Tunnel**，填写 ID。仅专用私人 Tunnel 推荐 **No authentication**，表示不额外进行应用层 OAuth；不取消 Tunnel 运行凭据及本机保护。公网 HTTPS/Cloudflare 继续用 OAuth。官方风险确认由你本人阅读、勾选，再创建和安装个人插件。
+7. 新聊天选择 `@YGPT Local`，复制向导首次任务，列出专用验证目录并只读读取随机标记，核对准确回读。
+8. 完成后关闭向导。连接由独立后台链维持；清理等待认证的真实首次读取与 Setup 退出。
 
-这是一套产品的安装流程，不需要另外申请公共 OpenAI 插件目录，也不用部署额外 SaaS。Cloudflare 路径不要求 OpenAI API key。Secure MCP Tunnel 是另一个可选连接路径，需要账户支持、独立 tunnel_id、具有 Tunnels Read + Use 权限的运行时凭据，安装器已内置官方客户端，无需手工安装。
+这是同一套产品，不要求提交公共插件目录。官网各字段、组织权限和到期设置见 [安装教程](docs/SETUP_GUIDE.md)。程序不能代用户取得账户资格。**不要将 Key、配对密钥、审批 token、profile 和私有日志发到聊天或 GitHub。**
 
-**不要把 API Token、Tunnel token、配对密钥、审批 token 或私有日志粘贴到聊天与 GitHub Issue。**
+## 必要后台组件
 
-## 使用与安全
+```text
+Windows 用户登录
+  → 唯一的静默 YGPTWatchdog.exe
+    → 官方 tunnel-client
+      → Node Broker / Engine 及必要 worker
 
-普通开发与 typed 读取按所有者规则自动执行。批量删除、系统/安全/磁盘及凭据修改仍需审批。卡片支持 Allow once、Always allow in this chat、Deny；会话授权只复用已经审阅的精确范围。
+YGPTLocal.exe：设置、修复、卸载，按需打开
+```
 
-建议直接说：“读取这个本机文件”“修改指定文本，然后回读”“检查 SQLite 数据库，只读”“查看快照差异并恢复”。模型是否选择工具最终取决于宿主，不能保证每条消息都调用。必要时明确选择 `@YGPT Local`。
+Secure Tunnel 默认走 stdio，不增加 HTTP Supervisor；高级 Cloudflare/本地模式保留必要 HTTP gateway。自启是当前用户、最低权限、忽略重复启动的独立计划任务。数据目录和 Tunnel 身份互斥，并检查旧 profile 启动的客户端，不为新实例结束旧连接。
 
-每次受保护文件编辑保留写前快照。恢复前检测是否出现后续修改；冲突返回 `CONFLICT / executed:false / filesRestored:0`，保留新内容。恢复操作也会产生可撤销快照。批量编辑不是原子事务。任意脚本的外部副作用、未覆盖文件及数据库不能仅靠快照完整回退。
+自有进程退出后指数退避，网络重连交给官方客户端。Key 无效、到期或权限不足时保留配置，停止无意义重试并提示处理。不会创建新 Tunnel/Key，也不重放结果不明的写入、删除和命令。真实重新登录与断网验收单独报告。
 
-默认应用目录为 `%LOCALAPPDATA%\Programs\YGPTLocal`，数据为 `%LOCALAPPDATA%\YGPTLocal`。凭据使用 Windows 当前用户 DPAPI 加密。托盘可暂停服务，开始菜单可再次打开设置。卸载默认保留数据与快照。
+## 安装后清理和管理
 
-新安装使用空目录；修复／升级可选择已有 YGPT 安装和数据目录，先确认没有运行中任务或审批，保留旧程序目录、身份、安全策略及文件快照。完整 YUKI 旧状态迁移仍未发布。旧版继续运行，不能让两个代理使用同一 Tunnel 或状态目录。终端环境经过清理，不承诺使用日常桌面应用的登录 profile。
+自动清理默认开启，可取消，安装前说明范围。仅处理本次 Generation 签名所有权清单，重新核对文件 ID、大小、SHA-256、祖先路径、链接、占用以及运行、自启、维护引用。不扫空 Downloads/Temp，不调用卸载器。
 
-## 常见问题和验收
+用户下载的 Setup 还需单独勾选对**这个具体文件**的授权，同名和下载目录不构成所有权。未知、修改过、被替换、共享、使用中或仍有引用的文件保留并记录原因。收据仅含类别、数量、字节和结果。
 
-见 [故障排查](docs/TROUBLESHOOTING.md)、[文件迁移](docs/MIGRATION.md)、[安全边界](docs/SECURITY.md)、[当前验收状态](docs/VALIDATION.md)。本地协议测试不等于 ChatGPT 实机验收，未执行的项目保持待验，不会标绿。
+保留 Watchdog、Tunnel、必要运行时、设置/升级/卸载、DPAPI、配置、OAuth、审批账本、数据库、快照和回滚索引。删除 Setup 下载包后，已安装 Settings 仍可配置自己的校验完整运行时；文件损坏或升级需要完整安装包。
 
-ChatGPT 的 `Opened …` 和 `CSP off` 属于宿主外壳。项目只能控制内部审批卡及自身 CSP 声明，不能保证修改宿主的布局或删除其提示。
+默认程序目录 `%LOCALAPPDATA%\Programs\YGPTLocal`，私人数据 `%LOCALAPPDATA%\YGPTLocal`。开始菜单按需打开 Settings，无需常驻托盘。维护先阻止新调用，检查本实例活动，未结束任务或审批时拒绝不安全替换。升级保留旧程序与私人状态。真正卸载需单独确认，会断开连接，默认保留私人数据和修改过或未知的文件。见 [迁移说明](docs/MIGRATION.md)。
 
-开发者构建步骤及许可证参见 [English README](README.md) 与 [第三方声明](THIRD_PARTY_NOTICES.md)。普通用户应使用图形安装器，不需要复制 PowerShell 命令。
+RC3 开发不停止当前正常生产 Tunnel，也不把其他 Tunnel 的安装当作垃圾删除。
+
+## 使用和恢复
+
+文件操作优先使用 `y_file_read`、`y_file_edit`、`y_search_text`、`y_sqlite_read`、`y_backup_diff`、`y_backup_restore`。本地完整目录实测为 92 项公开工具和 2 项 App 私有工具；真实 ChatGPT 目录仍需独立验收。
+
+普通授权读取、开发按所有者规则执行；批量删除、系统/安全/磁盘与凭据修改继续审批。卡片提供 Allow once、Always allow in this chat、Deny，会话复用限定在可审阅范围。
+
+恢复拒绝覆盖后续修改，返回 `CONFLICT / executed:false / filesRestored:0`，成功恢复产生撤销快照。批量操作不是原子事务，终端快照无法覆盖全部外部副作用。这些保护不是 Windows 沙箱。ChatGPT 外层 Opened/CSP 布局由宿主控制。
+
+构建步骤和独立 Windows 测试见 [English README](README.md)。本地协议、原生 GUI 和清理测试均不冒充真实 ChatGPT 或干净 VM。原创图标、代码采用 MIT，第三方保留 [各自许可](THIRD_PARTY_NOTICES.md)。此项目独立开发，不是 OpenAI 官方产品。

@@ -29,7 +29,11 @@ import {AsyncLocalStorage} from 'node:async_hooks';
 import {CURRENT_PROTOCOL,requestHost,nativeConsentSupported,nativeConsentRequest,resumeNativeConsent} from './host-consent.mjs';
 import {sqliteRead} from './sqlite-read.mjs';
 import {canonicalToolName} from '../compatibility/tool-names.mjs';
+import {firstUseRecorder} from '../service/first-use.mjs';
+import {startOwnerControl} from './owner-control.mjs';
 const wireContext=new AsyncLocalStorage();
+let activeOwnerRequests=0,ownerDraining=false;
+const recordFirstUse=firstUseRecorder({data:process.env.YGPT_SETUP_DATA_DIR,key:process.env.YGPT_FIRST_USE_KEY,transport:process.env.YGPT_TRANSPORT_SOURCE,clientName:()=>init?.clientInfo?.name??''});
 const source=path.join(RUNTIME,'compat-entry.mjs');
 const obj=(properties={},required=[])=>({type:'object',properties,required,additionalProperties:false});
 const str={type:'string'},id={type:'string',format:undefined,maxLength:128};
@@ -171,7 +175,7 @@ async function withFileLocks(paths,run){
   await Promise.all(previous);
   try{return await run();}finally{release();for(const key of keys)if(fileLocks.get(key)===hold)fileLocks.delete(key);}
 }
-const emit=o=>{if(o.result?._meta?.yBar&&wireContext.getStore()?.legacyApproval)o.result._meta.yBar={...o.result._meta.yBar,legacyBridge:true};if(o.result?._meta?.yBar)o={...o,result:{...o.result,_meta:{...o.result._meta,yukiBar:o.result._meta.yBar}}};if(o.result&&wireContext.getStore()?.version===CURRENT_PROTOCOL)o={...o,result:{resultType:'complete',...o.result}};process.stdout.write(JSON.stringify(o)+'\n');};
+const emit=o=>{if(o.result)recordFirstUse(wireContext.getStore()?.toolName,wireContext.getStore()?.toolArgs??{},o.result);if(o.result?._meta?.yBar&&wireContext.getStore()?.legacyApproval)o.result._meta.yBar={...o.result._meta.yBar,legacyBridge:true};if(o.result?._meta?.yBar)o={...o,result:{...o.result,_meta:{...o.result._meta,yukiBar:o.result._meta.yBar}}};if(o.result&&wireContext.getStore()?.version===CURRENT_PROTOCOL)o={...o,result:{resultType:'complete',...o.result}};process.stdout.write(JSON.stringify(o)+'\n');};
 const failure=(id,message)=>emit({jsonrpc:'2.0',id,error:{code:-32001,message}});
 const response=(id,value,isError=false)=>emit({jsonrpc:'2.0',id,result:{content:[{type:'text',text:typeof value==='string'?value:JSON.stringify(value)}],isError}});
 // Brand key local-file/terminal tools for ChatGPT discovery while retaining
@@ -418,6 +422,7 @@ async function handle(msg){
   if(['resources/list','resources/templates/list'].includes(msg.method))return emit({jsonrpc:'2.0',id,result:msg.method==='resources/list'?{resources:approvalResourceUris().map(uri=>({uri,name:'YGPT compact approval strip',mimeType:'text/html;profile=mcp-app'}))}:{resourceTemplates:[]}});
   if(msg.method==='resources/read'&&approvalResourceUris().includes(msg.params?.uri))return emit({jsonrpc:'2.0',id,result:{contents:[barResource(msg.params.uri)]}});
   if(msg.method!=='tools/call')throw Error('Unsupported method; no legacy in-chat resources');
+  if(ownerDraining||process.env.YGPT_SETUP_DATA_DIR&&fs.existsSync(path.join(process.env.YGPT_SETUP_DATA_DIR,'maintenance-request')))return response(id,{state:'paused',executed:false,message:'Owner maintenance is in progress; no tool operation was executed.'},true);
   const requestedName=canonicalToolName(msg.params?.name),rawArgs=msg.params?.arguments??{};
   const nativeCall=config.rc10Candidate&&(nativeExtension?.tools().some(t=>t.name===requestedName)||requestedName==='y_desktop_fixture');
   // The 1.0.1 YGPT plugin advertised y_local_* names. Keep them callable,
@@ -517,7 +522,13 @@ async function handle(msg){
   try{const r=await dispatch(name,args,callId,access.chatGrant===true);ledger.callFinish(callId,r.structuredContent?.error?.outcomeUnknown?'unknown':r.isError?'failed':'succeeded',r);emit({jsonrpc:'2.0',id,result:{...r,structuredContent:{...(r.structuredContent??{}),ygpt:{callId,resultToken:token}}}});}
   catch(e){const beforeEffect=e.effectStarted===false,state=beforeEffect?'failed':'unknown';ledger.callFinish(callId,state);response(id,{callId,state,executed:beforeEffect?false:null,code:e.code??'EXECUTION_UNCERTAIN',...(e.filesRestored!==undefined?{filesRestored:e.filesRestored,noFilesRestored:e.filesRestored===0}:{}),message:e.message},true);}
 }
-async function shutdown(){if(closing)return;closing=true;await nativeExtension?.engine.close();child?.kill();closePanel();portalServer?.close();releaseLease();setTimeout(()=>process.exit(0),150).unref();}
+const ownerControl=startOwnerControl({pipe:process.env.YGPT_CONTROL_PIPE,key:process.env.YGPT_LOCAL_CONTROL_KEY,status:async()=>({product:'YGPT Local',version:config.version,pid:process.pid,enginePid:child?.pid,localReady:ready&&!!nativeExtension,tools:tools().length,publicTools:tools().filter(t=>!t._meta?.ui?.visibility?.includes('app')).length,appOnly:tools().filter(t=>t._meta?.ui?.visibility?.includes('app')).length,draining:ownerDraining}),drain:async()=>{
+ if(activeOwnerRequests||ledger.pending().some(o=>o.state==='awaiting_user'))return {safeToStop:false,reason:'Active calls or pending approvals'};
+ let busy=false;const scan=v=>{if(v&&typeof v==='object'){if(['running','queued','starting','pending','awaiting_user','unknown'].includes(v.state))busy=true;for(const child of Object.values(v))scan(child);}};
+ try{for(const n of ['y_process_list','y_job_list']){const v=await nativeExtension.engine.invoke(n,{});if(v?.isError||v?.ok===false)throw Error('Inventory failed');scan(v);}const v=await engineRequest('tools/call',{name:'list_sessions',arguments:{}});if(v?.isError||v?.ok===false)throw Error('Inventory failed');scan(v);}catch{return {safeToStop:false,reason:'Owned activity inventory unavailable'};}
+ if(!busy)ownerDraining=true;return {safeToStop:!busy,reason:busy?'Owned activity is still active':null};
+}});
+async function shutdown(){if(closing)return;closing=true;ownerControl?.close();await nativeExtension?.engine.close();child?.kill();closePanel();portalServer?.close();releaseLease();setTimeout(()=>process.exit(0),150).unref();}
 process.once('exit',()=>{try{releaseLease();}catch{}});
 process.on('SIGINT',shutdown);process.on('SIGTERM',shutdown);
 if(!noLocalReview)portalServer=await launchPortal(execute);
@@ -528,5 +539,5 @@ runChild();
 if(eagerStartup)ensureEngine(startupInit).catch(e=>{process.stderr.write('YGPT startup self-test failed: '+scrub(e.message)+'\n');child?.kill();});
 const input=readline.createInterface({input:process.stdin});
 input.on('line',line=>{let msg;try{if(Buffer.byteLength(line)>131072)throw Error('Request too large');msg=JSON.parse(line);}catch{failure(null,'Malformed/oversized JSON-RPC');return;}
-  wireContext.run({version:msg.params?._meta?.['io.modelcontextprotocol/protocolVersion'],legacyApproval:typeof msg.params?.name==='string'&&msg.params.name.startsWith('yuki_')},()=>handle(msg).catch(e=>failure(msg.id??null,e.message)));});
+  activeOwnerRequests++;wireContext.run({version:msg.params?._meta?.['io.modelcontextprotocol/protocolVersion'],legacyApproval:typeof msg.params?.name==='string'&&msg.params.name.startsWith('yuki_'),toolName:canonicalToolName(msg.params?.name),toolArgs:msg.params?.arguments},()=>handle(msg).catch(e=>failure(msg.id??null,e.message)).finally(()=>activeOwnerRequests--));});
 input.once('close',shutdown);

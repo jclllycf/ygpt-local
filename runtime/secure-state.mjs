@@ -3,9 +3,9 @@ import path from 'node:path';
 import {execFileSync} from 'node:child_process';
 import {createCipheriv,createDecipheriv,randomBytes} from 'node:crypto';
 import {config,RUNTIME,cleanEnv} from './config.mjs';
-const windowsEnv={...process.env,PSModulePath:path.join(process.env.SystemRoot??'C:/Windows','System32/WindowsPowerShell/v1.0/Modules')};
+import {nativeWindows} from './windows-native.mjs';
 export function prepareState(root=config.stateDir){
-  const acl=JSON.parse(execFileSync('powershell.exe',['-NoProfile','-NonInteractive','-File',path.join(RUNTIME,'secure-state.ps1'),'-StateDir',root],{env:windowsEnv,encoding:'utf8',windowsHide:true,timeout:45000}));
+  const acl=nativeWindows('state-prepare',{root});
   for(const rel of ['tmp','jobs','engine-home','engine-home/AppData/Roaming','engine-home/AppData/Local'])fs.mkdirSync(path.join(root,rel),{recursive:true});
   return acl;
 }
@@ -25,7 +25,7 @@ export function protectForWindows(value){
   });
 }
 export function verifyState(root=config.stateDir){
-  return JSON.parse(execFileSync('powershell.exe',['-NoProfile','-NonInteractive','-File',path.join(RUNTIME,'secure-state.ps1'),'-StateDir',root,'-VerifyOnly'],{env:windowsEnv,encoding:'utf8',windowsHide:true,timeout:25000}));
+  return nativeWindows('state-verify',{root},25000);
 }
 export function acquireLease(){
   const lock=path.join(config.stateDir,'bridge.lock');

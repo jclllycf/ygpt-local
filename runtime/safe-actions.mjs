@@ -1,9 +1,9 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import {createHash} from 'node:crypto';
-import {execFile} from 'node:child_process';
-import {config,RUNTIME} from './config.mjs';
+import {config} from './config.mjs';
 import {canonical,route,within,authorize} from './access-policy.mjs';
+import {nativeWindows} from './windows-native.mjs';
 export const downloadSources=[
   ['raw.githubusercontent.com','/pbatard/Fido/'],['github.com','/ventoy/Ventoy/releases/download/'],
   ['release-assets.githubusercontent.com','/'],['software.download.prss.microsoft.com','/'],['software-download.microsoft.com','/'],
@@ -25,6 +25,6 @@ export async function checksum(filename,expected){
   const actual=hash.digest('hex');return {algorithm:'SHA-256',actual,match:expected?actual===expected.toLowerCase():null};
 }
 export function diskInspect(){
-  return new Promise((resolve,reject)=>execFile('powershell.exe',['-NoProfile','-NonInteractive','-File',path.join(RUNTIME,'disk-inspect.ps1')],{windowsHide:true,timeout:15000,maxBuffer:131072,encoding:'utf8',env:{...process.env,PSModulePath:path.join(process.env.SystemRoot??'C:/Windows','System32/WindowsPowerShell/v1.0/Modules')}},(e,out)=>{if(e)return reject(Error('Read-only disk inventory unavailable'));try{resolve(JSON.parse(out));}catch{reject(Error('Invalid disk inventory response'));}}));
+  return Promise.resolve().then(()=>nativeWindows('disk-inventory',{},15000));
 }
 export function deviceFingerprint(d){return createHash('sha256').update(JSON.stringify([d.number,d.serial,d.model,d.sizeBytes,d.partitions])).digest('hex');}
