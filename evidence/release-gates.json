@@ -1,16 +1,16 @@
 {
   "version": "1.0.0-rc.3",
-  "candidateCommit": "149f5dac036b37ebe1bab0871385039eadc16275",
+  "candidateCommit": "3c548a849d6ad582f7b000483a368d73320391cb",
   "artifacts": [
     {
       "file": "YGPTLocal-Setup-1.0.0-rc.3-win-x64.exe",
-      "bytes": 91039744,
-      "sha256": "2031f884bc3e11afb54af85792496e1adeff680d434ee468a8158cbffc7fea25"
+      "bytes": 91057664,
+      "sha256": "21403adeee5edf628913bdf3bdcc5a7fac9a0a25a946b7ed7c58472a95905d28"
     },
     {
       "file": "ygpt-local-portable-1.0.0-rc.3-win-x64.zip",
-      "bytes": 90854532,
-      "sha256": "ad1e18f2e720677b43b11db9df9a3018671614b4f15bc9b6da1e090114cdc0dc"
+      "bytes": 90860684,
+      "sha256": "22249647d44b31b2d6cae12170ff4bcb20d666f7007627d70eeb3ab4b92d15d1"
     }
   ],
   "freshInstaller": {
