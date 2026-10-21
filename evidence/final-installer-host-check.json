@@ -1,0 +1,18 @@
+﻿{
+    "passed":  true,
+    "source":  "actual packaged Windows installer driven through native UIA",
+    "repair":  false,
+    "localOnly":  true,
+    "localReady":  true,
+    "publicTools":  92,
+    "appOnly":  2,
+    "hostVerified":  false,
+    "node":  "v24.22.0",
+    "python":  "3.14.8",
+    "developerToolsRequiredForInstalledRuntime":  false,
+    "userDataPreserved":  true,
+    "ownerIdentityPreserved":  false,
+    "cleanWindowsVm":  false,
+    "installerSha256":  "1cacc24c9695cb20999515ed4252978bab9b678f5bcfb428d7ed08a8aa4484e4",
+    "at":  "2026-10-21T06:56:09.1363528Z"
+}

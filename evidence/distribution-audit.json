@@ -1,0 +1,20 @@
+{
+  "passed": true,
+  "manifestFilesVerified": 5792,
+  "findings": [],
+  "artifacts": [
+    {
+      "file": "YGPTLocal-Setup-1.0.0-rc.1-win-x64.exe",
+      "bytes": 90517504,
+      "sha256": "1cacc24c9695cb20999515ed4252978bab9b678f5bcfb428d7ed08a8aa4484e4"
+    },
+    {
+      "file": "ygpt-local-portable-1.0.0-rc.1-win-x64.zip",
+      "bytes": 90459524,
+      "sha256": "6e7b801b86b77f2e06200a0200a2abfaf5d456d268cacfffb8901cd6bbcb5efe"
+    }
+  ],
+  "source": "actual staged release files and generated installer/portable artifacts",
+  "notHostAcceptance": true,
+  "at": "2026-10-21T06:55:22.474Z"
+}

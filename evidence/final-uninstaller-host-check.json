@@ -1,0 +1,10 @@
+﻿{
+    "passed":  true,
+    "source":  "actual installed Windows GUI uninstaller with UIA confirmation on a disposable installation",
+    "applicationMarkerRemoved":  true,
+    "userFilePreserved":  true,
+    "encryptedCredentialsPreserved":  true,
+    "statePreserved":  true,
+    "hostVerified":  false,
+    "at":  "2026-10-21T06:57:35.6605976Z"
+}
