@@ -20,8 +20,11 @@ export class YTerminalEngine {
     if(!path.isAbsolute(executable??''))throw new EngineError('EXE_NOT_ALLOWED','Executable must use an absolute local path');
     if(!this.allowed.has(path.resolve(executable).toLowerCase())&&await this.authorizeExecutable?.({executable,args,cwd,timeoutMs})!==true)throw new EngineError('EXE_NOT_ALLOWED','Executable requires broker authorization for this exact invocation');
     if(!Array.isArray(args)||args.length>100||args.some(x=>typeof x!=='string'||x.includes('\0')||x.length>32768))throw new EngineError('BAD_ARGS','Use a bounded argv array');
-    const full=await fs.realpath(path.resolve(this.root,cwd)),rel=path.relative(this.root,full);
-    if(rel==='..'||rel.startsWith('..'+path.sep)||path.isAbsolute(rel))throw new EngineError('OUT_OF_SCOPE','Process cwd outside project root');
+    const full=await fs.realpath(path.resolve(this.root,cwd));
+    // Absolute cwd is accepted on any volume (broker policy authorizes it);
+    // a relative cwd stays confined to the engine root.
+    if(!path.isAbsolute(cwd)){const rel=path.relative(this.root,full);
+    if(rel==='..'||rel.startsWith('..'+path.sep)||path.isAbsolute(rel))throw new EngineError('OUT_OF_SCOPE','Relative process cwd escapes the engine root');}
     if(!Number.isInteger(timeoutMs)||timeoutMs<100||timeoutMs>86400000)throw new EngineError('BAD_TIMEOUT','Invalid timeout');
     return {executable,args,cwd:full,timeoutMs};
   }

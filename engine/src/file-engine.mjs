@@ -10,7 +10,9 @@ export class EngineError extends Error {
 const missing = error => error?.code === 'ENOENT';
 
 export class YFileEngine {
-  // This prototype is constrained to a fixture root, independent of the production YGPT policy.
+  // Path model: ABSOLUTE paths are accepted on any volume (the broker policy
+  // layer authorizes them); RELATIVE paths stay confined to the engine root.
+  // Every write requires the injected snapshot provider, whatever the path.
   static async create(root, { snapshot } = {}) {
     const real = await fs.realpath(root);
     if (!snapshot || typeof snapshot !== 'function') throw new EngineError('SNAPSHOT_REQUIRED', 'A pre-write snapshot provider is required');
@@ -31,14 +33,23 @@ export class YFileEngine {
   }
   async resolve(input) {
     if (typeof input !== 'string' || !input.trim() || input.includes('\0')) throw new EngineError('BAD_PATH', 'Invalid path');
-    const unprefixed=input.replace(/^[a-zA-Z]:[\\/]/,'');
-    if(unprefixed.split(/[\\/]/).some(p=>p.includes(':')||/[. ]$/.test(p)&&p!=='.'&&p!=='..'||/^(con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|$)/i.test(p)))throw new EngineError('BAD_PATH','Windows device, ADS and ambiguous path rejected');
+    // Owner model (blacklist): an ABSOLUTE path is accepted on any drive or
+    // volume. Authorization (project / gated system / protected deny) is the
+    // broker policy layer's job; the engine enforces path sanity and link
+    // safety only, so a new application folder on C: works without per-app
+    // enrollment. RELATIVE inputs stay confined to the engine root: they are
+    // relative to it by definition and escaping it is a malformed request.
+    const absolute = path.isAbsolute(input);
     const full = path.resolve(this.root, input);
-    const relative = path.relative(this.root, full);
-    if (relative === '..' || relative.startsWith('..' + path.sep) || path.isAbsolute(relative)) throw new EngineError('OUT_OF_SCOPE', 'Path outside YGPT fixture root');
-    if(relative.split(/[\\/]/).some(p=>p.includes(':')||/[. ]$/.test(p)||/^(con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|$)/i.test(p)))throw new EngineError('BAD_PATH','Windows device, ADS and ambiguous path rejected');
-    let current = this.root;
-    for (const part of relative.split(path.sep).filter(Boolean)) {
+    if (!absolute) {
+      const relative = path.relative(this.root, full);
+      if (relative === '..' || relative.startsWith('..' + path.sep) || path.isAbsolute(relative)) throw new EngineError('OUT_OF_SCOPE', 'Relative path escapes the engine root');
+    }
+    const anchor = path.parse(full).root;
+    const segments = path.relative(anchor, full).split(/[\\/]/).filter(Boolean);
+    if (segments.some(p=>p.includes(':')||/[. ]$/.test(p)&&p!=='.'&&p!=='..'||/^(con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|$)/i.test(p))) throw new EngineError('BAD_PATH', 'Windows device, ADS and ambiguous path rejected');
+    let current = anchor;
+    for (const part of segments) {
       current = path.join(current, part);
       let stat;
       try { stat = await fs.lstat(current); }

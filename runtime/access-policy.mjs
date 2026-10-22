@@ -126,7 +126,7 @@ export function highRiskCommand(command){
   // builds. They remain reviewable even within a trusted project directory.
   if(/\bgit(?:\.exe)?\s+(?:clean\s+-[a-z]*f[a-z]*|reset\s+--hard\b|checkout\s+--\s+\.|restore\s+(?:--worktree\s+)?\.)(?=\s|$|[;&|])/i.test(value))return true;
   if(/\b(?:rm|rmdir)\s+-(?:[a-z]*r[a-z]*f|[a-z]*f[a-z]*r)[a-z]*\b/i.test(value))return true;
-  return /\b(?:format-volume|clear-disk|initialize-disk|new-partition|remove-partition|resize-partition|set-partition|diskpart(?:\.exe)?|format\.com|bcdedit|manage-bde|reagentc|ventoy2disk|remove-localuser|set-mppreference|set-executionpolicy|takeown(?:\.exe)?|icacls(?:\.exe)?|reg\s+(?:delete|add)|vssadmin\s+delete|wbadmin\s+delete)\b|(?:^|\s)-verb\s+["']?runas\b|\b(?:rm|rmdir|del|erase|remove-item)\b[^\r\n]{0,200}(?:-recurse|-force|\/s|\/q|[a-z]:[\\/])|\b(?:rmSync|rmdirSync|rmtree)\s*\([^\r\n]{0,250}(?:[a-z]:[\\/]|recursive\s*:\s*true)/i.test(value);
+  return /\b(?:format-volume|clear-disk|initialize-disk|new-partition|remove-partition|resize-partition|set-partition|diskpart(?:\.exe)?|format\.com|bcdedit|manage-bde|reagentc|ventoy2disk|remove-localuser|set-mppreference|set-executionpolicy|takeown(?:\.exe)?|icacls(?:\.exe)?|reg\s+(?:delete|add)|vssadmin\s+delete|wbadmin\s+delete)\b|(?:^|\s)-verb\s+["']?runas\b|\b(?:rm|rmdir|del|erase|remove-item)\b[^\r\n]{0,200}(?:-recurse|-force|\/s|\/q|[a-z]:[\\/])|\b(?:rmSync|rmdirSync|rmtree)\s*\([^\r\n]{0,250}(?:[a-z]:[\\/]|recursive\s*:\s*true)|\bget-childitem\b[^\r\n]{0,400}\|[^\r\n]{0,200}\bremove-item\b|\b(?:remove-item|del|erase|rm|ri)\b[^\r\n]{0,160}\*/i.test(value);
 }
 // Policy intents. Typed tools are translated into these by rc9Intents
 // (read_file, write_file, edit_block, move_file, create_directory,
@@ -147,14 +147,22 @@ function authorizeImpl(name,a={}){
     if(workflow(a))return {...allow('Owner-configured workflow matches cwd, argv and reviewed file hashes'),workflow:true};
     return gate('job',JSON.stringify({argv:a.argv,cwd:a.cwd,releaseOutput:true},null,2),'Start a durable job; its bounded logs/results will be readable by this private owner instance',{cwd:a.cwd,targets:[t.target]});
   }
-  if(name==='y_download_file')return route(a.destination).permission==='project'?allow('Bounded HTTPS official-source file download; never executes it'):deny('Download target must be inside ordinary owner-allowed folders');
+  if(name==='y_download_file'){const r=route(a.destination);if(r.permission==='private'||r.permission==='vault'||ownWriteRoots.some(o=>within(r.target,o)))return deny('Download target is inside YGPT protected state or the vault');if(r.permission==='project')return allow('Bounded HTTPS official-source file download; never executes it');return gate('filesystem',JSON.stringify({tool:name,destination:r.target}),'Download outside enrolled project folders requires a verified owner decision; the file is never executed automatically',{targets:[r.target]});}
   if(name==='y_verify_checksum')return authorizeImpl('read_file',{path:a.path});
   if(name==='y_file_trash'){
     const paths=Array.isArray(a.paths)?a.paths:[];if(!paths.length||paths.length>20)return deny('Choose 1 to 20 paths to move to the Recycle Bin');
     const targets=paths.map(route);
+    // The only refused set: YGPT's own runtime/state/credentials and the vault —
+    // deleting them would destroy the approval and rollback machinery itself.
     if(targets.some(t=>ownWriteRoots.some(r=>within(t.target,r)||within(r,t.target))||t.permission==='private'||t.permission==='vault'))return deny('YGPT runtime, state, configuration and the G: vault cannot be trashed');
-    if(targets.some(t=>t.system||/^[a-z]:\\?$/.test(t.target)||projectRoots.includes(t.target)))return deny('System folders, drive roots and enrolled project roots themselves cannot be trashed');
-    return gate('filesystem-trash',JSON.stringify({tool:name,paths:targets.map(t=>t.target)}),'Moving files to the Recycle Bin requires a human decision; a protected snapshot is kept for restore',{targets:targets.map(t=>t.target)});
+    const isDir=t=>{try{return fs.statSync(t).isDirectory();}catch{return false;}};
+    const gated=targets.length>1||targets.some(t=>t.system||t.sensitive||t.secretAdjacent||/^[a-z]:\\?$/.test(t.target)||projectRoots.includes(t.target)||isDir(t.target));
+    if(gated)return gate('filesystem-trash',JSON.stringify({tool:name,paths:targets.map(t=>t.target)}),'Batch, directory or system delete: explicit owner decision required. A protected snapshot is taken first and its id restores the files.',{targets:targets.map(t=>t.target)});
+    // Owner model: a single working-directory file delete proceeds by default
+    // ONLY because the handler takes a verified protected snapshot before
+    // deleting (the snapshot id is the rollback handle; if the snapshot fails
+    // the handler aborts) and the Recycle Bin keeps its own copy.
+    return allow('Working-directory delete: verified protected snapshot first (rollback handle), then Recycle Bin');
   }
   if(statusTools.includes(name))return allow('Private single-owner status');
   const read=['read_file','read_multiple_files','list_directory','get_file_info','start_search'].includes(name);
@@ -166,7 +174,6 @@ function authorizeImpl(name,a={}){
     if(write&&targets.some(t=>ownWriteRoots.some(r=>within(t.target,r)||within(r,t.target))))return deny('Runtime/config/state or their containing directory cannot be modified via MCP');
     if(targets.some(t=>t.permission==='private')&&(write||paths.some(p=>within(canonical(p),canonical(config.stateDir)))))return deny('Runtime, configuration, approval secrets and state are inaccessible via MCP');
     if(write&&targets.some(t=>t.permission==='vault'))return deny('G: vault is read-only');
-    if((read||write)&&paths.some(p=>/\.(pdf|xlsx?|docx?|pptx?|od[stp])$/i.test(p)))return deny('Optional document parsers disabled in hardened RC');
     if(name==='start_search'&&(String(a.pattern??'').length>300||a.literalSearch===false))return deny('Only bounded literal searches are supported in RC');
     if(name==='start_search'&&a.searchType==='content')return gate('filesystem',JSON.stringify({tool:name,...a},null,2),'Recursive content searches may include hidden credentials; releases this query results only');
     if(targets.every(t=>t.permission==='project'||(read&&t.permission==='vault')))return allow('Ordinary project operation in owner-allowed roots');

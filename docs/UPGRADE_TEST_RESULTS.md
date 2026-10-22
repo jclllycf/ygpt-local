@@ -46,3 +46,9 @@ Environment for everything below: Linux VM (Ubuntu 24.04), Node 24, Roslyn csc f
 1. Install the candidate (`dist/YGPTLocal-Setup-1.0.0-rc.4-win-x64.exe`, SHA-256 in `dist/SHA256SUMS.txt`) in an isolated profile. The package is complete — runtimes, `NativeWindows.exe` and the Windows ripgrep binary included; rebuilding from source with `npm run build && npm run package` on Windows remains the fallback.
 2. The §4 rows marked "host run pending": three-chat concurrency in real ChatGPT, UIA Allow-once/Deny against a real third-party app, Agent-window refusal against the real Desktop Agent, installer lifecycle.
 3. Confirm the sprout icon in Explorer/taskbar/tray and the wizard end-to-end.
+
+## Owner blacklist model (1.0.0-rc.5), 2026-10-22
+
+- `tests/owner-model.test.mjs`: 2 pass — the file engine writes/reads an absolute path outside its root (a stand-in AppData config on a second volume) while relative escapes still fail `OUT_OF_SCOPE`; the access policy (run against a Windows-shaped owner config) allows the Clash-style AppData write and ordinary document writes, gates credential-adjacent writes, tiers `y_file_trash` (single file allow / batch approve / system path approve / YGPT state deny), gates downloads outside project folders, and flags wildcard and pipelined bulk deletes as high-risk.
+- Portable suites unchanged: `upgrade-portable` 21 pass + 1 skipped, `upgrade-new-tools` 5 pass. Full suite: 44 tests, 31 pass, 11 fail, 2 skipped — the 11 failures are the same Windows-only set as the rc.4 baseline comparison (no regressions). CSP check and public audit pass (211 files).
+- Still owner-only on Windows: the tiered trash executing end-to-end (snapshot -> Recycle Bin -> restore) and an actual AppData config edit through a real chat.
