@@ -12,7 +12,11 @@ master; there are no loose multi-size PNG files anymore.
 Usage: python3 scripts/make-icons-from-original.py   (requires Pillow)
 Outputs: assets/brand/ygpt-local-256.png, ygpt-local-light-256.png,
 plugin-icon-256.png, ygpt-local.ico; assets/png/icon-256.png, assets/ygpt.ico;
-plugin/assets/logo.png.
+plugin/assets/logo.png. The .ico files are written by hand below so every
+size entry is explicit; the shipped ICO was verified entry by entry (7 PNG
+frames, the 256 frame pixel-identical to the HD render). The setup also
+nudges the Windows icon cache after install, which otherwise keeps serving
+the first rendering it cached for the app's path.
 """
 import io
 import os
@@ -53,6 +57,25 @@ def optimized_256():
     raise SystemExit('could not fit the 256 icon under %d bytes' % MAX_PNG_BYTES)
 
 
+def write_ico(path):
+    """Write a real multi-size ICO: one PNG entry per size, full quality."""
+    import struct
+    payloads = []
+    for s in ICO_SIZES:
+        buf = io.BytesIO()
+        tile(s).save(buf, format='PNG', optimize=True)
+        payloads.append(buf.getvalue())
+    header = struct.pack('<HHH', 0, 1, len(payloads))
+    offset = 6 + 16 * len(payloads)
+    entries = b''
+    for s, data in zip(ICO_SIZES, payloads):
+        entries += struct.pack('<BBBBHHII', 0 if s == 256 else s, 0 if s == 256 else s,
+                               0, 0, 1, 32, len(data), offset)
+        offset += len(data)
+    with open(path, 'wb') as f:
+        f.write(header + entries + b''.join(payloads))
+
+
 def main():
     data = optimized_256()
     brand = os.path.join(ROOT, 'assets', 'brand')
@@ -63,10 +86,8 @@ def main():
         f.write(data)
     with open(os.path.join(ROOT, 'plugin', 'assets', 'logo.png'), 'wb') as f:
         f.write(data)
-    frames = {s: tile(s) for s in ICO_SIZES}
     for path in (os.path.join(brand, 'ygpt-local.ico'), os.path.join(ROOT, 'assets', 'ygpt.ico')):
-        frames[256].save(path, format='ICO', sizes=[(s, s) for s in ICO_SIZES],
-                         append_images=[frames[s] for s in ICO_SIZES[:-1]])
+        write_ico(path)
     print('shipped icons: one canonical 256x256 PNG (%d bytes) + multi-size ICOs' % len(data))
 
 

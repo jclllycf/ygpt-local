@@ -10,7 +10,7 @@ await fs.copyFile('build/YGPTWatchdog.exe',path.join(stage,'YGPTWatchdog.exe'));
 // ships one current icon plus one keepsake per earlier era — not the whole
 // design archive (the full set stays in the repo and in the exes' resources).
 // The glyph masters are build sources and are not staged either.
-const brandStage=path.join(stage,'assets','brand'),brandKeep=new Set(['plugin-icon-256.png','ygpt-local-green-256.png','ygpt-local-signature-256.png']);
+const brandStage=path.join(stage,'assets','brand'),brandKeep=new Set(['plugin-icon-256.png','ygpt-local-green-y-256.png','ygpt-local-sky-y-256.png','ygpt-local-green-256.png','ygpt-local-signature-256.png']);
 for(const e of await fs.readdir(brandStage))if(!brandKeep.has(e))await fs.rm(path.join(brandStage,e),{recursive:true,force:true});
 for(const f of ['icon-glyph.png','icon-glyph-hd.png'])await fs.rm(path.join(stage,'assets',f),{force:true});
 await fs.writeFile(path.join(stage,'runtimes/python/python314._pth'),'python314.zip\n.\n../../runtime\n../../engine/src/workers\n');
