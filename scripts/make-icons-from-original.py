@@ -1,31 +1,31 @@
 #!/usr/bin/env python3
 """Regenerate the shipped icon set from the owner's ORIGINAL artwork.
 
-`assets/icon-glyph.png` was extracted pixel-for-pixel from the owner's brand
-board (NEW_ICON_REFERENCE.png, the "App Icon" tile) and unpremultiplied from
-its white background — it is the source of truth for the shipped rasters.
-The earlier vector redraw (assets/icon.svg / scripts/make-icons.mjs) drifted
-from the original art, so the shipped PNG/ICO set is composed from the
-extracted glyph instead: the glyph centred on a clean white rounded tile,
-matching the board's app-icon presentation.
+Source of truth: assets/icon-glyph-hd.png (built by scripts/make-glyph-hd.py
+from the glyph extracted out of the owner's brand board). Shipped PNG icons
+follow the owner's spec: every standalone icon is 256x256 and at most 10 KB
+(the ChatGPT plugin form's upload limit) while staying crisp — the 256 is
+palette-optimized with libimagequant from the HD master. The Windows .ico
+files keep their multi-size frames (16-256) generated in memory from the
+master; there are no loose multi-size PNG files anymore.
 
 Usage: python3 scripts/make-icons-from-original.py   (requires Pillow)
-Outputs: assets/brand/ygpt-local*.png + ygpt-local.ico, assets/png/icon-*.png,
-assets/ygpt.ico, plugin/assets/logo.png — same files the SVG flow produced.
+Outputs: assets/brand/ygpt-local-256.png, ygpt-local-light-256.png,
+plugin-icon-256.png, ygpt-local.ico; assets/png/icon-256.png, assets/ygpt.ico;
+plugin/assets/logo.png.
 """
+import io
 import os
 from PIL import Image, ImageDraw
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-HD = os.path.join(ROOT, 'assets', 'icon-glyph-hd.png')
-GLYPH = Image.open(HD if os.path.exists(HD) else os.path.join(ROOT, 'assets', 'icon-glyph.png')).convert('RGBA')
-SIZES = [16, 24, 32, 48, 64, 128, 256, 512]
+GLYPH = Image.open(os.path.join(ROOT, 'assets', 'icon-glyph-hd.png')).convert('RGBA')
+ICO_SIZES = [16, 24, 32, 48, 64, 128, 256]
+MAX_PNG_BYTES = 10240
 
 
-def tile(size, glyph_scale=None):
-    """White rounded tile with the original glyph centred on transparency."""
-    if glyph_scale is None:
-        glyph_scale = 0.86 if size <= 32 else 0.78
+def tile(size):
+    glyph_scale = 0.86 if size <= 32 else 0.78
     img = Image.new('RGBA', (size, size), (0, 0, 0, 0))
     draw = ImageDraw.Draw(img)
     radius = max(2, round(size * 0.19))
@@ -34,32 +34,40 @@ def tile(size, glyph_scale=None):
     gh = round(gw * GLYPH.height / GLYPH.width)
     glyph = GLYPH.resize((gw, gh), Image.LANCZOS)
     x = (size - gw) // 2
-    # Optical centre slightly below the middle: the sun mass sits at the
-    # top, so a geometric centre reads as 'too high' (owner feedback).
+    # Optical centre slightly below the middle (owner: the mark rode too high).
     y = round(size * 0.145) if size > 32 else max(1, round(size * 0.51 - gh / 2))
     img.alpha_composite(glyph, (x, y))
     return img
 
 
+def optimized_256():
+    """The one canonical shipped PNG: 256x256, <=10 KB, from the HD master."""
+    img = tile(256)
+    for colors in (256, 192, 160, 128, 112, 96):
+        q = img.quantize(colors=colors, method=3, dither=Image.FLOYDSTEINBERG)
+        buf = io.BytesIO()
+        q.save(buf, format='PNG', optimize=True)
+        data = buf.getvalue()
+        if len(data) <= MAX_PNG_BYTES:
+            return data
+    raise SystemExit('could not fit the 256 icon under %d bytes' % MAX_PNG_BYTES)
+
+
 def main():
-    master = {s: tile(s) for s in SIZES}
+    data = optimized_256()
     brand = os.path.join(ROOT, 'assets', 'brand')
-    for s, img in master.items():
-        img.save(os.path.join(brand, f'ygpt-local-{s}.png'))
-        img.save(os.path.join(brand, f'ygpt-local-light-{s}.png'))
-    png_dir = os.path.join(ROOT, 'assets', 'png')
-    os.makedirs(png_dir, exist_ok=True)
-    for s in [16, 24, 32, 48, 64, 128, 256]:
-        master[s].save(os.path.join(png_dir, f'icon-{s}.png'))
-    ico_frames = [master[s] for s in [16, 24, 32, 48, 64, 128, 256]]
-    ico_frames[-1].save(os.path.join(brand, 'ygpt-local.ico'), format='ICO',
-                        sizes=[(s, s) for s in [16, 24, 32, 48, 64, 128, 256]],
-                        append_images=ico_frames[:-1])
-    ico_frames[-1].save(os.path.join(ROOT, 'assets', 'ygpt.ico'), format='ICO',
-                        sizes=[(s, s) for s in [16, 24, 32, 48, 64, 128, 256]],
-                        append_images=ico_frames[:-1])
-    master[512].save(os.path.join(ROOT, 'plugin', 'assets', 'logo.png'))
-    print('icon set regenerated from assets/icon-glyph.png (owner original)')
+    for name in ('ygpt-local-256.png', 'ygpt-local-light-256.png', 'plugin-icon-256.png'):
+        with open(os.path.join(brand, name), 'wb') as f:
+            f.write(data)
+    with open(os.path.join(ROOT, 'assets', 'png', 'icon-256.png'), 'wb') as f:
+        f.write(data)
+    with open(os.path.join(ROOT, 'plugin', 'assets', 'logo.png'), 'wb') as f:
+        f.write(data)
+    frames = {s: tile(s) for s in ICO_SIZES}
+    for path in (os.path.join(brand, 'ygpt-local.ico'), os.path.join(ROOT, 'assets', 'ygpt.ico')):
+        frames[256].save(path, format='ICO', sizes=[(s, s) for s in ICO_SIZES],
+                         append_images=[frames[s] for s in ICO_SIZES[:-1]])
+    print('shipped icons: one canonical 256x256 PNG (%d bytes) + multi-size ICOs' % len(data))
 
 
 if __name__ == '__main__':

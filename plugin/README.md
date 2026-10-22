@@ -1,7 +1,7 @@
 # YGPT Local personal plugin
 
 - Skill instructions: `skills/local-work/SKILL.md`
-- Logo: `assets/logo.png` (512×512 PNG, transparent corners): the sprout Y with its rising sun, on a white tile
+- Logo: `assets/logo.png` (256×256 PNG, ≤10 KB, transparent corners): the sprout Y with its rising sun, on a white tile
 
 ## Values for ChatGPT's "Add custom MCP server" form
 
