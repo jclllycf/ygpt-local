@@ -6,6 +6,13 @@ const version=JSON.parse(await fs.readFile('package.json')).version,stage=path.r
 for(const dir of ['runtime','service','engine/src','engine/vendor','engine/windows','engine/build','node_modules'])await fs.cp(dir,path.join(stage,dir),{recursive:true,filter:p=>!p.includes('__pycache__')&&!/\.py[co]$/.test(p)});
 await fs.cp('build/runtimes',path.join(stage,'runtimes'),{recursive:true});await fs.copyFile('build/YGPTLocal.exe',path.join(stage,'YGPTLocal.exe'));
 await fs.copyFile('build/YGPTWatchdog.exe',path.join(stage,'YGPTWatchdog.exe'));await fs.cp('assets',path.join(stage,'assets'),{recursive:true});
+// The installed brand folder doubles as the owner's plugin-icon picker, so it
+// ships one current icon plus one keepsake per earlier era — not the whole
+// design archive (the full set stays in the repo and in the exes' resources).
+// The glyph masters are build sources and are not staged either.
+const brandStage=path.join(stage,'assets','brand'),brandKeep=new Set(['plugin-icon-256.png','ygpt-local-green-256.png','ygpt-local-signature-256.png']);
+for(const e of await fs.readdir(brandStage))if(!brandKeep.has(e))await fs.rm(path.join(brandStage,e),{recursive:true,force:true});
+for(const f of ['icon-glyph.png','icon-glyph-hd.png'])await fs.rm(path.join(stage,'assets',f),{force:true});
 await fs.writeFile(path.join(stage,'runtimes/python/python314._pth'),'python314.zip\n.\n../../runtime\n../../engine/src/workers\n');
 for(const f of ['LICENSE','README.md','README.zh-CN.md','THIRD_PARTY_NOTICES.md','package.json','package-lock.json'])await fs.copyFile(f,path.join(stage,f));await fs.cp('docs',path.join(stage,'docs'),{recursive:true,filter:p=>!p.includes('NEXT_RELEASE_RC3_20261021')&&!path.basename(p).startsWith('RC3_')});
 const files=[],sha=b=>createHash('sha256').update(b).digest('hex');async function scan(dir,prefix=''){for(const e of await fs.readdir(dir,{withFileTypes:true})){const rel=prefix+e.name,p=path.join(dir,e.name);if(e.isSymbolicLink())throw Error('Linked package member refused');if(e.isDirectory())await scan(p,rel+'/');else{const b=await fs.readFile(p);files.push({path:rel,bytes:b.length,sha256:sha(b)});}}}await scan(stage);files.sort((a,b)=>a.path.localeCompare(b.path));await fs.writeFile(path.join(stage,'manifest.json'),JSON.stringify({product:'YGPT Local',version,files},null,2));

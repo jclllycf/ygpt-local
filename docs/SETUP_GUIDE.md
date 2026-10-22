@@ -16,7 +16,7 @@ Open [Platform Tunnels](https://platform.openai.com/settings/organization/tunnel
 
 | Current field / 字段 | What to enter / 填写内容 |
 | --- | --- |
-| Name | `YGPT Local - My Windows PC` — use **Copy suggested Tunnel name** in the installer instead of typing |
+| Name | `YGPT Local` — use **Copy suggested Tunnel name** in the installer instead of typing |
 | Description | `Private MCP connection for my Windows PC` — use **Copy suggested Tunnel description** |
 | Organizations | The intended Platform organization; not merely a ChatGPT subscription name / 运行 Key 所属 Platform 组织 |
 | ChatGPT workspaces | The workspace in which the personal plugin will be installed / 实际安装个人插件的 ChatGPT 工作区 |
