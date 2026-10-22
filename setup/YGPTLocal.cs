@@ -38,6 +38,7 @@ public static class YGPTApp {
   if(args.Contains("--uninstall-worker")){RemoveInstall(Arg(args,"--install-dir",Base),data);return;}
   if(args.Contains("--self-test")){var b=Encoding.UTF8.GetBytes("YGPT fixture");if(!b.SequenceEqual(ProtectedData.Unprotect(ProtectedData.Protect(b,null,DataProtectionScope.CurrentUser),null,DataProtectionScope.CurrentUser)))Environment.Exit(2);return;}
   bool ownSetup;using(var setupOwner=new Mutex(true,"Local\\YGPT-setup-"+HostCore.OwnerId(data),out ownSetup)){if(!ownSetup)return;
+  if(args.Contains("--update")||Path.GetFileNameWithoutExtension(Assembly.GetExecutingAssembly().Location).IndexOf("Update",StringComparison.OrdinalIgnoreCase)>=0){ServicePointManager.SecurityProtocol=SecurityProtocolType.Tls12;var updateApp=new Application();updateApp.Run(new UpdateWindow());return;}
   ServicePointManager.SecurityProtocol=SecurityProtocolType.Tls12;
   var app=new Application();var w=new SetupWindow(data,Arg(args,"--install-dir",File.Exists(Path.Combine(Base,".ygpt-install.json"))?Base:HostCore.DefaultInstallDir()));
   if(args.Contains("--uninstall"))w.Loaded+=(s,e)=>w.Uninstall();app.Run(w);}

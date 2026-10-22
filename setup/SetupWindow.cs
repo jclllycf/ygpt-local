@@ -28,6 +28,7 @@ public class SetupWindow:Window {
  readonly ComboBox mode=new ComboBox();readonly DispatcherTimer timer=new DispatcherTimer();
  readonly string[] steps={"Welcome","Environment","Connection","Credentials","Install","Verify","Connect ChatGPT","First task & finish"};
  string brandIcon="plugin-icon-256.png";string approvalStyle="current";readonly List<Border> iconTiles=new List<Border>();
+ Image previewIcon;Border previewHost;
  static readonly string[] BrandIconFiles={"plugin-icon-256.png","ygpt-local-green-y-256.png","ygpt-local-sky-y-256.png","ygpt-local-green-256.png","ygpt-local-signature-256.png"};
  static readonly string[] BrandIconResources={"YGPT.Brand","YGPT.BrandGreenY","YGPT.BrandSkyY","YGPT.BrandGreen","YGPT.BrandSignature"};
 
@@ -91,12 +92,35 @@ public class SetupWindow:Window {
  void BrandPicker(Panel p){
   Text(p,"Approval icon",14,true);Text(p,"Shown on the approval strip in ChatGPT. Change it any time by running Settings again.",12,false,Muted);
   var row=new StackPanel{Orientation=Orientation.Horizontal,Margin=new Thickness(0,2,0,10)};p.Children.Add(row);iconTiles.Clear();
-  for(int i=0;i<BrandIconFiles.Length;i++){int idx=i;var tile=new Border{Child=new Image{Source=BrandBitmap(idx),Width=44,Height=44,Margin=new Thickness(2)},BorderThickness=new Thickness(2),CornerRadius=new CornerRadius(9),Margin=new Thickness(0,0,8,0),Background=B("#FFFFFF")};tile.MouseLeftButtonUp+=(s,e)=>{brandIcon=BrandIconFiles[idx];RefreshIconTiles();};AutomationProperties.SetAutomationId(tile,"brand-icon-"+idx);iconTiles.Add(tile);row.Children.Add(tile);}
+  for(int i=0;i<BrandIconFiles.Length;i++){int idx=i;var tile=new Border{Child=new Image{Source=BrandBitmap(idx),Width=44,Height=44,Margin=new Thickness(2)},BorderThickness=new Thickness(2),CornerRadius=new CornerRadius(9),Margin=new Thickness(0,0,8,0),Background=B("#FFFFFF")};tile.MouseLeftButtonUp+=(s,e)=>{brandIcon=BrandIconFiles[idx];RefreshIconTiles();RefreshBrandPreview();};AutomationProperties.SetAutomationId(tile,"brand-icon-"+idx);iconTiles.Add(tile);row.Children.Add(tile);}
   RefreshIconTiles();
   Text(p,"Approval strip style",14,true);
-  var current=new RadioButton{Content="New strip — follows the icon you pick",GroupName="approvalstyle",MinHeight=32,Margin=new Thickness(0,2,0,2),IsChecked=approvalStyle!="legacy"};AutomationProperties.SetAutomationId(current,"approval-style-current");current.Checked+=(s,e)=>{approvalStyle="current";};
-  var legacy=new RadioButton{Content="Classic strip — the original design",GroupName="approvalstyle",MinHeight=32,Margin=new Thickness(0,2,0,2),IsChecked=approvalStyle=="legacy"};AutomationProperties.SetAutomationId(legacy,"approval-style-legacy");legacy.Checked+=(s,e)=>{approvalStyle="legacy";};
+  var current=new RadioButton{Content="New strip — follows the icon you pick",GroupName="approvalstyle",MinHeight=32,Margin=new Thickness(0,2,0,2),IsChecked=approvalStyle!="legacy"};AutomationProperties.SetAutomationId(current,"approval-style-current");current.Checked+=(s,e)=>{approvalStyle="current";RefreshBrandPreview();};
+  var legacy=new RadioButton{Content="Classic strip — the original design",GroupName="approvalstyle",MinHeight=32,Margin=new Thickness(0,2,0,2),IsChecked=approvalStyle=="legacy"};AutomationProperties.SetAutomationId(legacy,"approval-style-legacy");legacy.Checked+=(s,e)=>{approvalStyle="legacy";RefreshBrandPreview();};
   p.Children.Add(current);p.Children.Add(legacy);
+  Text(p,"Preview",14,true);previewHost=new Border{Margin=new Thickness(0,2,0,4)};p.Children.Add(previewHost);RefreshBrandPreview();
+ }
+ Border BuildStripMock(){
+  var inner=new StackPanel();
+  var head=new DockPanel{Margin=new Thickness(0,0,0,8)};previewIcon=new Image{Width=26,Height=26,Margin=new Thickness(0,0,10,0)};head.Children.Add(previewIcon);
+  var title=new TextBlock{Text="Review an operation",FontSize=14,FontWeight=FontWeights.SemiBold,VerticalAlignment=VerticalAlignment.Center};head.Children.Add(title);
+  var pill=new Border{Background=B("#EFF8FE"),CornerRadius=new CornerRadius(8),Padding=new Thickness(8,2,8,2),HorizontalAlignment=HorizontalAlignment.Right,Child=new TextBlock{Text="Awaiting approval",FontSize=11,Foreground=B(Muted)}};DockPanel.SetDock(pill,Dock.Right);head.Children.Add(pill);inner.Children.Add(head);
+  inner.Children.Add(new TextBlock{Text="D:\\Projects\\demo\\app.log",FontSize=13,Margin=new Thickness(0,0,0,6)});
+  inner.Children.Add(new TextBlock{Text="The file will be moved to the Recycle Bin. A snapshot keeps it restorable.",FontSize=13,Foreground=B(Muted),TextWrapping=TextWrapping.Wrap,Margin=new Thickness(0,0,0,10)});
+  var actions=new StackPanel{Orientation=Orientation.Horizontal,HorizontalAlignment=HorizontalAlignment.Right};
+  foreach(var label in new[]{"Allow once","Always allow in this chat","Deny"}){var b=new Button{Content=label,IsEnabled=false,MinHeight=30,Padding=new Thickness(10,2,10,2),Margin=new Thickness(6,0,0,0),FontSize=12};StyleButton(b,label=="Allow once");actions.Children.Add(b);}
+  inner.Children.Add(actions);
+  return new Border{Background=Brushes.White,BorderBrush=B(Line),BorderThickness=new Thickness(1),CornerRadius=new CornerRadius(12),Padding=new Thickness(14),Child=inner};
+ }
+ void RefreshBrandPreview(){
+  if(previewHost==null)return;
+  if(approvalStyle=="legacy"){
+   BitmapSource classic=null;using(var stream=Assembly.GetExecutingAssembly().GetManifestResourceStream("YGPT.PreviewClassic")){if(stream!=null){var b=new BitmapImage();b.BeginInit();b.CacheOption=BitmapCacheOption.OnLoad;b.StreamSource=stream;b.EndInit();classic=b;}}
+   previewHost.Child=classic!=null?new Image{Source=classic,Stretch=Stretch.Uniform}:(UIElement)new TextBlock{Text="Classic strip — the original design.",Foreground=B(Muted)};
+  }else{
+   var mock=BuildStripMock();previewHost.Child=mock;
+   for(int i=0;i<BrandIconFiles.Length;i++)if(BrandIconFiles[i]==brandIcon)previewIcon.Source=BrandBitmap(i);
+  }
  }
  void CleanupPlan(Panel p){Expander(p,"Review the exact cleanup plan",x=>{Text(x,"Only exact files registered to this installation generation are eligible. Temp and Downloads are never swept.",12,false,Muted);if(Assembly.GetExecutingAssembly().GetManifestResourceNames().Contains("YGPT.Payload")&&!HostCore.Within(source,install)){Text(x,source,12);Text(x,"Downloaded Setup size: "+(new FileInfo(source).Length/1048576.0).ToString("F1")+" MiB",12);Check(sourceCleanup,"Also remove this exact downloaded Setup after it exits. I explicitly authorize this file; installed Settings stays available.");x.Children.Add(sourceCleanup);}else Text(x,"No owned download is registered by this settings window. The installed maintenance entry is retained.",13);Text(x,"Kept: Watchdog, Tunnel, runtimes, settings/repair/uninstall, encrypted credentials, databases and snapshots.",12,false,Muted);},"cleanup-plan");}
  void EnvironmentPage(){var p=Card("A small, silent connection core");Text(p,(Environment.Is64BitOperatingSystem?"✓  ":"!  ")+"Windows x64",16,true);try{var drive=new DriveInfo(Path.GetPathRoot(fields["install"].Text));Text(p,"Available on installation drive: "+(drive.AvailableFreeSpace/1073741824.0).ToString("F1")+" GiB",13);var probe=new byte[]{71,80,84};var sealedProbe=System.Security.Cryptography.ProtectedData.Protect(probe,null,System.Security.Cryptography.DataProtectionScope.CurrentUser);if(!probe.SequenceEqual(System.Security.Cryptography.ProtectedData.Unprotect(sealedProbe,null,System.Security.Cryptography.DataProtectionScope.CurrentUser)))throw new Exception();Text(p,"✓  Windows user encryption available",13);}catch{Text(p,"!  Storage / Windows encryption requires review",13);}
