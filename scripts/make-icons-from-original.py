@@ -17,7 +17,8 @@ import os
 from PIL import Image, ImageDraw
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-GLYPH = Image.open(os.path.join(ROOT, 'assets', 'icon-glyph.png')).convert('RGBA')
+HD = os.path.join(ROOT, 'assets', 'icon-glyph-hd.png')
+GLYPH = Image.open(HD if os.path.exists(HD) else os.path.join(ROOT, 'assets', 'icon-glyph.png')).convert('RGBA')
 SIZES = [16, 24, 32, 48, 64, 128, 256, 512]
 
 
@@ -33,7 +34,9 @@ def tile(size, glyph_scale=None):
     gh = round(gw * GLYPH.height / GLYPH.width)
     glyph = GLYPH.resize((gw, gh), Image.LANCZOS)
     x = (size - gw) // 2
-    y = round(size * 0.10) if size > 32 else max(1, (size - gh) // 2 - 1)
+    # Optical centre slightly below the middle: the sun mass sits at the
+    # top, so a geometric centre reads as 'too high' (owner feedback).
+    y = round(size * 0.145) if size > 32 else max(1, round(size * 0.51 - gh / 2))
     img.alpha_composite(glyph, (x, y))
     return img
 
