@@ -27,7 +27,7 @@ public static class YGPTApp {
  public const string Version=HostCore.Version;
  public static readonly JavaScriptSerializer Json=new JavaScriptSerializer{MaxJsonLength=32*1024*1024};
  public static string Base=AppDomain.CurrentDomain.BaseDirectory;
- public static string DefaultData=Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),"YGPTLocal");
+ public static string DefaultData=HostCore.DefaultDataDir();
  public static string Q(string s){if(s.IndexOf('"')>=0||s.Any(c=>c<' '))throw new Exception("Invalid path characters");return "\""+s+new string('\\',s.Reverse().TakeWhile(c=>c=='\\').Count())+"\"";}
  public static string Arg(string[] a,string k,string fallback){int i=Array.IndexOf(a,k);return i>=0&&i+1<a.Length?a[i+1]:fallback;}
  [STAThread] public static void Main(string[] args){try{
@@ -39,7 +39,7 @@ public static class YGPTApp {
   if(args.Contains("--self-test")){var b=Encoding.UTF8.GetBytes("YGPT fixture");if(!b.SequenceEqual(ProtectedData.Unprotect(ProtectedData.Protect(b,null,DataProtectionScope.CurrentUser),null,DataProtectionScope.CurrentUser)))Environment.Exit(2);return;}
   bool ownSetup;using(var setupOwner=new Mutex(true,"Local\\YGPT-setup-"+HostCore.OwnerId(data),out ownSetup)){if(!ownSetup)return;
   ServicePointManager.SecurityProtocol=SecurityProtocolType.Tls12;
-  var app=new Application();var w=new SetupWindow(data,Arg(args,"--install-dir",File.Exists(Path.Combine(Base,".ygpt-install.json"))?Base:Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),"Programs","YGPTLocal")));
+  var app=new Application();var w=new SetupWindow(data,Arg(args,"--install-dir",File.Exists(Path.Combine(Base,".ygpt-install.json"))?Base:HostCore.DefaultInstallDir()));
   if(args.Contains("--uninstall"))w.Loaded+=(s,e)=>w.Uninstall();app.Run(w);}
  }catch(Exception ex){MessageBox.Show(ex.Message,"YGPT Local",MessageBoxButton.OK,MessageBoxImage.Error);Environment.ExitCode=1;}}
  public static string Hash(string file){using(var s=File.OpenRead(file))using(var h=SHA256.Create())return BitConverter.ToString(h.ComputeHash(s)).Replace("-","").ToLowerInvariant();}

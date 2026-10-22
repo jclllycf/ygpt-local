@@ -65,7 +65,7 @@ public class SetupWindow:Window {
   foreach(var b in fields.Values)if(b.Parent is Panel)((Panel)b.Parent).Children.Remove(b);foreach(var b in passwords.Values)if(b.Parent is Panel)((Panel)b.Parent).Children.Remove(b);foreach(var b in new[]{consent,startup,cleanup,sourceCleanup,createConsent})if(b.Parent is Panel)((Panel)b.Parent).Children.Remove(b);
   body.Children.Clear();rail.Children.Clear();dashboards.Clear();message.Text="";
   string icon=Path.Combine(YGPTApp.Base,"assets","brand","ygpt-local-256.png");BitmapSource brand=null;if(File.Exists(icon))brand=new BitmapImage(new Uri(icon));else using(var stream=Assembly.GetExecutingAssembly().GetManifestResourceStream("YGPT.Brand")){if(stream!=null){var b=new BitmapImage();b.BeginInit();b.CacheOption=BitmapCacheOption.OnLoad;b.StreamSource=stream;b.EndInit();brand=b;}}if(brand!=null)rail.Children.Add(new Image{Source=brand,Width=52,Height=52,HorizontalAlignment=HorizontalAlignment.Left,Margin=new Thickness(0,0,0,20)});
-  Text(rail,"YGPT Local",23,true,"#F7FBFE");Text(rail,"Your PC. A private connection.",13,false,"#56708A");
+  Text(rail,"YGPT Local",23,true,"#0B3B5E");Text(rail,"Your PC. A private connection.",13,false,"#56708A");
   for(int i=0;i<steps.Length;i++){var row=new TextBlock{Text=(i<step?"✓  ":(i+1)+"  ")+steps[i],TextWrapping=TextWrapping.Wrap,FontWeight=i==step?FontWeights.SemiBold:FontWeights.Normal,Foreground=B(i==step?Mint:"#56708A"),Margin=new Thickness(0,i==0?24:0,0,18)};rail.Children.Add(row);}
   Text(rail,HostCore.Version+"\n"+"Setup closes. Connection stays.",12,false,"#56708A");
   Text(body,"STEP "+(step+1)+" / 8",12,true,Muted);Text(body,steps[step],30,true);

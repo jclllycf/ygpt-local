@@ -69,7 +69,7 @@ public static class YGPTWatchdog {
  }
  public static int Main(string[] args){
   try{
-   data=HostCore.Full(HostCore.Arg(args,"--data-dir",Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),"YGPTLocal")));install=HostCore.Full(HostCore.Arg(args,"--install-dir",install));HostCore.CheckPath(data);HostCore.CheckPath(install);
+   data=HostCore.Full(HostCore.Arg(args,"--data-dir",HostCore.DefaultDataDir()));install=HostCore.Full(HostCore.Arg(args,"--install-dir",install));HostCore.CheckPath(data);HostCore.CheckPath(install);
    if(args.Contains("--cleanup-once")){InstallCleanup.Run(data,install);return 0;}
    var connection=HostCore.Read(Path.Combine(data,"connection.json"));var secrets=HostCore.Secrets(data);bool fresh;using(var owner=new Mutex(true,"Local\\YGPT-owner-"+HostCore.OwnerId(data),out fresh)){if(!fresh)return 0;
     string tunnel=HostCore.S(connection,"tunnelId",HostCore.S(connection,"publicOrigin",data));bool unique;using(var tunnelOwner=new Mutex(true,"Local\\YGPT-tunnel-"+HostCore.HashText(System.Security.Principal.WindowsIdentity.GetCurrent().User.Value+"|"+tunnel).Substring(0,32),out unique)){if(!unique){phase="other-owner-active";Health(false,false);return 2;}

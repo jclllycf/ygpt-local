@@ -18,6 +18,13 @@ public static class HostCore {
  public const string Version="1.0.0-rc.3";
  public static readonly JavaScriptSerializer Json=new JavaScriptSerializer{MaxJsonLength=32*1024*1024};
  public static string Full(string p){return Path.GetFullPath(p).TrimEnd(Path.DirectorySeparatorChar);}
+ // Fresh-install defaults prefer a non-system fixed drive (D: when present)
+ // so the runtime, state, snapshots and backups do not consume the system
+ // drive. Explicit --data-dir/--install-dir arguments always win; machines
+ // with only a system drive keep the classic AppData defaults.
+ public static string PreferredDriveRoot(){string sys=Path.GetPathRoot(Environment.GetFolderPath(Environment.SpecialFolder.Windows));DriveInfo best=null;foreach(DriveInfo d in DriveInfo.GetDrives()){if(d.DriveType!=DriveType.Fixed)continue;string ready=null;try{if(d.IsReady)ready=d.Name;}catch{}if(ready==null)continue;if(String.Equals(ready,sys,StringComparison.OrdinalIgnoreCase))continue;if(String.Equals(ready,"D:\\",StringComparison.OrdinalIgnoreCase))return ready;if(best==null||d.TotalSize>best.TotalSize)best=d;}return best==null?null:best.Name;}
+ public static string DefaultDataDir(){string r=PreferredDriveRoot();return r==null?Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),"YGPTLocal"):Path.Combine(r,"YGPTLocalData");}
+ public static string DefaultInstallDir(){string r=PreferredDriveRoot();return r==null?Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),"Programs","YGPTLocal"):Path.Combine(r,"YGPTLocal");}
  public static string HashText(string s){using(var h=SHA256.Create())return Hex(h.ComputeHash(Encoding.UTF8.GetBytes(s)));}
  public static string Hex(byte[] b){return BitConverter.ToString(b).Replace("-","").ToLowerInvariant();}
  public static string Hash(string p){using(var f=File.Open(p,FileMode.Open,FileAccess.Read,FileShare.Read))using(var h=SHA256.Create())return Hex(h.ComputeHash(f));}
