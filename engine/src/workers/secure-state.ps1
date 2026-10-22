@@ -1,9 +1,11 @@
-﻿param([Parameter(Mandatory=$true)][string]$StateDir,[switch]$VerifyOnly)
+param([Parameter(Mandatory=$true)][string]$StateDir,[switch]$VerifyOnly)
 $ErrorActionPreference='Stop'
 $target=[IO.Path]::GetFullPath($StateDir)
 if($target -eq [IO.Path]::GetPathRoot($target)){throw 'Refusing drive root ACL mutation'}
 $sid=[Security.Principal.WindowsIdentity]::GetCurrent().User
 $allowed=@($sid.Value,'S-1-5-18')
+$chromiumSandboxSid='S-1-15-3-1024-3239966617-1410756637-3494353204-65451782-2225605771-3526040376-1730753648-3419555762'
+$chromeSandboxSid='S-1-15-3-1024-1653277547-598600573-1504598449-2187120098-1115546814-1860042162-2924348907-3700367812'
 if(-not $VerifyOnly){
   [IO.Directory]::CreateDirectory($target) | Out-Null
   # Load/change only Access. Setting even the same owner through .NET can
@@ -65,20 +67,27 @@ $unsafe=@(Get-ChildItem -LiteralPath $target -Recurse -Force | ForEach-Object {
     # child process first initializes its isolated USERPROFILE. Its target is
     # another directory under the *same protected state root*. Check both
     # exact paths and link type; no general reparse-point exemption is safe.
-    $cacheBase=Join-Path $target 'engine-home\AppData\Local\Microsoft\Windows\INetCache'
-    $expectedLink=Join-Path $cacheBase 'Content.IE5'
-    $expectedTarget=Join-Path $cacheBase 'IE'
-    $actualTarget=[string]$_.Target
-    $isSafeCacheJunction=($_.FullName -eq $expectedLink) -and
-      ($_.LinkType -eq 'Junction') -and
-      ($actualTarget -eq $expectedTarget) -and
-      (Test-Path -LiteralPath $expectedTarget -PathType Container)
+    $isSafeCacheJunction=$false
+    foreach($profileRoot in @('engine-home','home')){
+      $cacheBase=Join-Path $target ($profileRoot+'\AppData\Local\Microsoft\Windows\INetCache')
+      $expectedLink=Join-Path $cacheBase 'Content.IE5'
+      $expectedTarget=Join-Path $cacheBase 'IE'
+      if($_.FullName -ieq $expectedLink -and $_.LinkType -eq 'Junction' -and [string]$_.Target -ieq $expectedTarget -and (Test-Path -LiteralPath $expectedTarget -PathType Container)){$isSafeCacheJunction=$true;break}
+    }
     if(-not $isSafeCacheJunction){throw ('Reparse point inside state directory: '+$_.FullName)}
     return
   }
   $itemAcl=Get-Acl -LiteralPath $_.FullName
+  $relative=$_.FullName.Substring($target.TrimEnd('\').Length).TrimStart('\')
+  $isBrowserCache=($relative -match '^tmp\\playwright_chromiumdev_profile-[A-Za-z0-9_-]{6,}\\Default\\(?:Cache|Network|Shared Dictionary)(?:\\|$)')
+  $isChromeCache=($relative -match '^(?:engine-home|home)\\AppData\\Local\\Google\\Chrome\\User Data\\Default\\(?:Cache|Network|Safe Browsing Network|Shared Dictionary|Storage)(?:\\|$)')
+  $isOwner=($itemAcl.GetOwner([Security.Principal.SecurityIdentifier]).Value -eq $sid.Value)
   foreach($r in $itemAcl.GetAccessRules($true,$true,[Security.Principal.SecurityIdentifier])){
-    if($r.AccessControlType -eq 'Allow' -and $r.IdentityReference.Value -notin $allowed){$_.FullName}
+    if($r.AccessControlType -eq 'Allow' -and $r.IdentityReference.Value -notin $allowed){
+      if($isBrowserCache -and $isOwner -and $r.IdentityReference.Value -eq $chromiumSandboxSid){continue}
+      if($isChromeCache -and $isOwner -and $r.IdentityReference.Value -eq $chromeSandboxSid){continue}
+      $_.FullName
+    }
   }
 })
 if($unsafe.Count -gt 0){throw 'Existing state descendants contain broad explicit ACLs; use a new state directory'}

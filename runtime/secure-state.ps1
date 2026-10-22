@@ -1,4 +1,4 @@
-﻿param([Parameter(Mandatory=$true)][string]$StateDir,[switch]$VerifyOnly)
+param([Parameter(Mandatory=$true)][string]$StateDir,[switch]$VerifyOnly)
 $ErrorActionPreference='Stop'
 $target=[IO.Path]::GetFullPath($StateDir)
 if($target -eq [IO.Path]::GetPathRoot($target)){throw 'Refusing drive root ACL mutation'}
@@ -70,28 +70,31 @@ $unsafe=@(Get-ChildItem -LiteralPath $target -Recurse -Force | ForEach-Object {
     # child process first initializes its isolated USERPROFILE. Its target is
     # another directory under the *same protected state root*. Check both
     # exact paths and link type; no general reparse-point exemption is safe.
-    $cacheBase=Join-Path $target 'engine-home\AppData\Local\Microsoft\Windows\INetCache'
-    $expectedLink=Join-Path $cacheBase 'Content.IE5'
-    $expectedTarget=Join-Path $cacheBase 'IE'
-    # PowerShell 5.1 exposes neither LinkType nor Target on Get-Item. Query
-    # the actual NTFS reparse tag and SUBSTITUTE target via Windows fsutil,
-    # rather than trusting the display-only Print Name or following the link.
-    $reparse=(& (Join-Path $env:SystemRoot 'System32\fsutil.exe') reparsepoint query $_.FullName 2>&1) -join "`n"
-    $queryOk=($LASTEXITCODE -eq 0)
-    $isJunction=($reparse -match '(?m)^Reparse Tag Value\s*:\s*0xa0000003\s*$')
-    $substitute=[regex]::Match($reparse,'(?m)^Substitute Name\s*:\s*\\\?\?\\([^\r\n]+?)\s*$')
-    $actualTarget=if($substitute.Success){$substitute.Groups[1].Value}else{''}
-    $isSafeCacheJunction=($_.FullName -eq $expectedLink) -and
-      $queryOk -and $isJunction -and
-      ($actualTarget -eq $expectedTarget) -and
-      (Test-Path -LiteralPath $expectedTarget -PathType Container)
+    # Windows may create this legacy cache junction under either isolated
+    # profile used by YGPT. Permit only the exact Content.IE5 -> IE pair in
+    # those two fixed roots; verify the NTFS tag and substitute target below.
+    $isSafeCacheJunction=$false
+    foreach($profileRoot in @('engine-home','home')){
+      $cacheBase=Join-Path $target ($profileRoot+'\AppData\Local\Microsoft\Windows\INetCache')
+      $expectedLink=Join-Path $cacheBase 'Content.IE5'
+      $expectedTarget=Join-Path $cacheBase 'IE'
+      if($_.FullName -ine $expectedLink){continue}
+      # PowerShell 5.1 exposes neither LinkType nor Target on Get-Item. Query
+      # the actual NTFS reparse tag and SUBSTITUTE target, never its display name.
+      $reparse=(& (Join-Path $env:SystemRoot 'System32\fsutil.exe') reparsepoint query $_.FullName 2>&1) -join "`n"
+      $queryOk=($LASTEXITCODE -eq 0)
+      $isJunction=($reparse -match '(?m)^Reparse Tag Value\s*:\s*0xa0000003\s*$')
+      $substitute=[regex]::Match($reparse,'(?m)^Substitute Name\s*:\s*\\\?\?\\([^\r\n]+?)\s*$')
+      $actualTarget=if($substitute.Success){$substitute.Groups[1].Value}else{''}
+      if($queryOk -and $isJunction -and $actualTarget -ieq $expectedTarget -and (Test-Path -LiteralPath $expectedTarget -PathType Container)){$isSafeCacheJunction=$true;break}
+    }
     if(-not $isSafeCacheJunction){throw ('Reparse point inside state directory: '+$_.FullName)}
     return
   }
   $itemAcl=Get-Acl -LiteralPath $_.FullName
   $relative=$_.FullName.Substring($target.TrimEnd('\').Length).TrimStart('\')
   $isBrowserCache=($relative -match '^tmp\\playwright_chromiumdev_profile-[A-Za-z0-9_-]{6,}\\Default\\(?:Cache|Network|Shared Dictionary)(?:\\|$)')
-  $isChromeCache=($relative -match '^engine-home\\AppData\\Local\\Google\\Chrome\\User Data\\Default\\(?:Cache|Network|Safe Browsing Network|Shared Dictionary|Storage)(?:\\|$)')
+  $isChromeCache=($relative -match '^(?:engine-home|home)\\AppData\\Local\\Google\\Chrome\\User Data\\Default\\(?:Cache|Network|Safe Browsing Network|Shared Dictionary|Storage)(?:\\|$)')
   $isOwner=($itemAcl.GetOwner([Security.Principal.SecurityIdentifier]).Value -eq $sid.Value)
   foreach($r in $itemAcl.GetAccessRules($true,$true,[Security.Principal.SecurityIdentifier])){
     if($r.AccessControlType -eq 'Allow' -and $r.IdentityReference.Value -notin $allowed){
