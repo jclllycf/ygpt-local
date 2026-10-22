@@ -41,7 +41,8 @@ test('Access policy: trash tiers, downloads and document writes follow the owner
   // A system folder -> human gate (the owner asked for authorization, not refusal).
   assert.equal(authorize('y_file_trash',{paths:['C:\\Windows\\Temp\\old.log']}).decision,'approve');
   // YGPT's own state -> the one refused set.
-  assert.equal(authorize('y_file_trash',{paths:['C:\\YGPT\\data\\state\\ops.sqlite3']}).decision,'deny');
+  // rc.13: even YGPT's own state is never hard-refused — a human gate decides.
+  assert.equal(authorize('y_file_trash',{paths:['C:\\YGPT\\data\\state\\ops.sqlite3']}).decision,'approve');
   // Document files are ordinary work now: writing one in a project is allowed.
   assert.equal(authorize('write_file',{path:'D:\\AI\\Projects\\report.docx',content:'x'}).decision,'allow');
   // A clean write outside every enrolled root (an app config on C:) is allowed

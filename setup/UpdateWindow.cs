@@ -29,7 +29,7 @@ public class UpdateWindow:Window{
  readonly StackPanel pickerHost=new StackPanel();
  string install="",data="",brandIcon="plugin-icon-256.png",approvalStyle="current";
  readonly List<Border> iconTiles=new List<Border>();
- Image previewIcon;Border previewHost;
+ Border previewHost;
  bool busy=false;
  static SolidColorBrush B(string s){return (SolidColorBrush)new BrushConverter().ConvertFromString(s);}
  public UpdateWindow(){
@@ -82,6 +82,23 @@ public class UpdateWindow:Window{
   }catch{}
   add(HostCore.DefaultInstallDir(),HostCore.DefaultDataDir());
   add(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),"Programs","YGPTLocal"),Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),"YGPTLocal"));
+  // The Start Menu shortcut Setup created points at the real folders even if
+  // the owner later moved them or changed download/install locations.
+  try{
+   string lnk=Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),"Microsoft","Windows","Start Menu","Programs","YGPT Local.lnk");
+   if(File.Exists(lnk)){
+    Type shellType=Type.GetTypeFromProgID("WScript.Shell");
+    if(shellType!=null){
+     dynamic shell=Activator.CreateInstance(shellType);dynamic shortcut=shell.CreateShortcut(lnk);
+     string target=Convert.ToString(shortcut.TargetPath),args=Convert.ToString(shortcut.Arguments),dat="";
+     int i=args.IndexOf("--data-dir ",StringComparison.Ordinal);if(i>=0)dat=args.Substring(i+"--data-dir ".Length).Trim().Trim('"');
+     if(!String.IsNullOrEmpty(target))add(Path.GetDirectoryName(target),dat);
+    }
+   }
+  }catch{}
+  // Fixed-drive roots: fresh installs prefer a non-system drive, and owners
+  // relocate folders; check each drive's YGPTLocal / YGPTLocalData pair.
+  try{foreach(var d in DriveInfo.GetDrives()){if(d.DriveType!=DriveType.Fixed)continue;add(Path.Combine(d.RootDirectory.FullName,"YGPTLocal"),Path.Combine(d.RootDirectory.FullName,"YGPTLocalData"));}}catch{}
   return found;
  }
  void SelectInstall(int index){
@@ -114,38 +131,34 @@ public class UpdateWindow:Window{
   p.Children.Add(current);p.Children.Add(legacy);
   PickerText(p,"Preview",14,true,Ink);previewHost=new Border{Margin=new Thickness(0,2,0,12)};p.Children.Add(previewHost);RefreshBrandPreview();
  }
- Border BuildStripMock(){
-  var inner=new StackPanel();
-  var head=new DockPanel{Margin=new Thickness(0,0,0,8)};previewIcon=new Image{Width=26,Height=26,Margin=new Thickness(0,0,10,0)};head.Children.Add(previewIcon);
-  head.Children.Add(new TextBlock{Text="Review an operation",FontSize=14,FontWeight=FontWeights.SemiBold,VerticalAlignment=VerticalAlignment.Center});
-  var pill=new Border{Background=B("#EFF8FE"),CornerRadius=new CornerRadius(8),Padding=new Thickness(8,2,8,2),Child=new TextBlock{Text="Awaiting approval",FontSize=11,Foreground=B(Muted)}};DockPanel.SetDock(pill,Dock.Right);head.Children.Add(pill);inner.Children.Add(head);
-  inner.Children.Add(new TextBlock{Text="D:\\Projects\\demo\\app.log",FontSize=13,Margin=new Thickness(0,0,0,6)});
-  inner.Children.Add(new TextBlock{Text="The file will be moved to the Recycle Bin. A snapshot keeps it restorable.",FontSize=13,Foreground=B(Muted),TextWrapping=TextWrapping.Wrap,Margin=new Thickness(0,0,0,10)});
-  var actions=new StackPanel{Orientation=Orientation.Horizontal,HorizontalAlignment=HorizontalAlignment.Right};
-  foreach(var label in new[]{"Allow once","Always allow in this chat","Deny"})actions.Children.Add(new Button{Content=label,IsEnabled=false,MinHeight=30,Padding=new Thickness(10,2,10,2),Margin=new Thickness(6,0,0,0),FontSize=12});
-  inner.Children.Add(actions);
-  return new Border{Background=Brushes.White,BorderBrush=B(Line),BorderThickness=new Thickness(1),CornerRadius=new CornerRadius(12),Padding=new Thickness(14),Child=inner};
- }
- void RefreshBrandPreview(){
+  void RefreshBrandPreview(){
   if(previewHost==null)return;
-  if(approvalStyle=="legacy"){
-   BitmapSource classic=null;using(var stream=Assembly.GetExecutingAssembly().GetManifestResourceStream("YGPT.PreviewClassic")){if(stream!=null){var b=new BitmapImage();b.BeginInit();b.CacheOption=BitmapCacheOption.OnLoad;b.StreamSource=stream;b.EndInit();classic=b;}}
-   previewHost.Child=classic!=null?new Image{Source=classic,Stretch=Stretch.Uniform}:(UIElement)new TextBlock{Text="Classic strip — the original design.",Foreground=B(Muted)};
-  }else{
-   previewHost.Child=BuildStripMock();
-   for(int i=0;i<BrandIconFiles.Length;i++)if(BrandIconFiles[i]==brandIcon)previewIcon.Source=BrandBitmap(i);
-  }
+  string resource=approvalStyle=="legacy"?"YGPT.PreviewClassic":"YGPT.PreviewNew0";
+  if(approvalStyle!="legacy")for(int i=0;i<BrandIconFiles.Length;i++)if(BrandIconFiles[i]==brandIcon)resource="YGPT.PreviewNew"+i;
+  BitmapSource shot=null;using(var stream=Assembly.GetExecutingAssembly().GetManifestResourceStream(resource)){if(stream!=null){var b=new BitmapImage();b.BeginInit();b.CacheOption=BitmapCacheOption.OnLoad;b.StreamSource=stream;b.EndInit();shot=b;}}
+  previewHost.Child=shot!=null?new Image{Source=shot,Stretch=Stretch.Uniform}:(UIElement)new TextBlock{Text=approvalStyle=="legacy"?"Classic strip - the original design.":"New strip - follows the icon you pick.",Foreground=B(Muted)};
  }
  void Log(string line){log.Text=log.Text.Length==0?line:log.Text+"\n"+line;}
  async Task RunUpdate(){
   if(busy)return;busy=true;updateButton.IsEnabled=false;log.Text="";
   try{
    Log("Pausing the current connection…");
-   await Task.Run(()=>{if(File.Exists(Path.Combine(install,".ygpt-install.json")))HostCore.PrepareOwnedRepair(install,data);});
+   bool pausedOk=File.Exists(Path.Combine(install,".ygpt-install.json"))?false:true;
+   for(int attempt=0;attempt<120&&!pausedOk;attempt++){
+    Exception failure=null;
+    try{await Task.Run(()=>HostCore.PrepareOwnedRepair(install,data));pausedOk=true;}
+    catch(Exception ex){failure=ex;}
+    if(pausedOk)break;
+    if(!failure.Message.Contains("Finish active work"))throw failure;
+    if(attempt==0)Log("Waiting — something in ChatGPT is still active: a request waiting for your Allow/Deny, or a running task. Nothing has been changed yet. I'll continue automatically as soon as it clears; deciding that request now is the fastest way.");
+    await Task.Delay(5000);
+   }
+   if(!pausedOk){Log("Stopped after waiting 10 minutes: the connection stayed busy, so nothing was changed. Finish the pending request in ChatGPT, then run the update again.");return;}
    Log("Replacing application files (your data folder is not touched)…");
    await Task.Run(()=>YGPTApp.InstallPayload(install));
    Log("Saving your icon and strip style…");
-   await Task.Run(()=>{string cfgPath=Path.Combine(data,"ygpt.config.json");var cfg=YGPTApp.Read(cfgPath);cfg["brandIcon"]=brandIcon;cfg["approvalStyle"]=approvalStyle;HostCore.Save(cfgPath,cfg);});
+   try{await Task.Run(()=>{string cfgPath=Path.Combine(data,"ygpt.config.json");var cfg=YGPTApp.Read(cfgPath);cfg["brandIcon"]=brandIcon;cfg["approvalStyle"]=approvalStyle;HostCore.Save(cfgPath,cfg);});}
+   catch(Exception ex){Log("Note: the icon choice could not be saved ("+ex.Message+"). Cosmetic choices never block a core update — you can pick it again later via Setup → Repair.");}
    YGPTApp.RefreshIconCache();
    Log("Restarting the connection…");
    await Task.Run(()=>HostCore.Start(install,data));

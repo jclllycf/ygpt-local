@@ -1,13 +1,16 @@
 // Desktop UI Automation consent policy. UIA stays available; what it may do
-// without a person is limited to reading the window list (Agent and credential
-// windows shielded) and reading a window this chat was approved to bind.
+// without a person is limited to reading the window list (nothing shielded —
+// the owner blacklist model lists every window as it is) and reading a
+// window this chat was approved to bind. App-control authorization lives
+// here, inside the desktop operations: the bind approval names the exact
+// application and window, and every input action asks again.
 // An owner enrollment list (path + SHA-256) is NOT consent for an operation.
 import crypto from 'node:crypto';
 const digest=v=>crypto.createHash('sha256').update(JSON.stringify(v)).digest('hex');
 export const UIA_ACTION_GRANT_MS=10*60000;
 const allow=reason=>({decision:'allow',reason}),approve=reason=>({decision:'approve',kind:'desktop',reason});
 export function uiaDecision(tool){
- if(tool==='y_desktop_windows')return allow('Read-only window inventory; Agent windows shielded, credential titles withheld');
+ if(tool==='y_desktop_windows')return allow('Read-only window inventory; every window listed with its real title and identity');
  if(tool==='y_desktop_bind')return approve('Binding a window for UI Automation requires a human Allow once for that exact window');
  if(['y_desktop_inspect','y_desktop_value','y_desktop_screenshot'].includes(tool))return allow('Reads the exact window a human approved for this chat; identity re-verified before each read');
  if(tool==='y_desktop_action')return approve('Focus, click, invoke, type and setValue each require a human decision');

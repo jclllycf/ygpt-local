@@ -7,7 +7,7 @@ import {fileURLToPath} from 'node:url';
 import {createRc9EngineExtension} from '../engine/src/rc9-integration.mjs';
 import {config} from './config.mjs';
 import {isReadOnlyInvocation} from './read-only-policy.mjs';
-import {authorize,canonical,route,within,highRiskCommand,argvRiskText,projectRoots,agentBoundary} from './access-policy.mjs';
+import {authorize,canonical,route,within,highRiskCommand,argvRiskText,projectRoots} from './access-policy.mjs';
 import {currentOwner,currentCall} from './ownership.mjs';
 import {diskInspect,deviceFingerprint} from './safe-actions.mjs';
 import {uiaDecision,uiaPresentation,uiaChatScope,windowIdentity} from '../engine/src/uia-consent.mjs';
@@ -17,15 +17,17 @@ export function authorizeNative(intent){
   const n=intent.tool,a=intent.args??{};
   if(!/^y_(?:file_|search_|project_|process_|job_|browser_|desktop_|system_)/.test(n))return authorize(n,a);
   if(n.startsWith('y_browser_')){
-    // Every navigation/resource is independently checked by the engine. Only
-    // owner-enrolled interactive origins permit clicks/typing/downloads.
-    if(['y_browser_action','y_browser_download'].includes(n))return config.blacklistDefaultAllow?allow('Owner default-allow browser interaction; engine destination and tab ownership checks still apply'):hold('Browser interaction requires an owner-enrolled workflow origin');
-    return allow('Isolated YGPT browser; enrolled destinations only');
+    // Owner blacklist (rc.13): any http/https destination is allowed unless
+    // the owner blocklisted it; the engine still enforces tab ownership and
+    // download bounds. Interaction holds only in the owner's opt-in
+    // non-default-allow configuration.
+    if(['y_browser_action','y_browser_download'].includes(n))return config.blacklistDefaultAllow?allow('Owner default-allow browser interaction; engine destination blacklist and tab ownership checks still apply'):hold('Browser interaction requires an owner-enrolled workflow origin');
+    return allow('YGPT browser (isolated by default, or the owner existing browser after y_browser_attach); destination blacklist applies');
   }
   // UIA stays available; binding and every input/focus action need a human decision.
-  if(n.startsWith('y_desktop_'))return uiaDecision(n)??deny('Unclassified desktop capability: '+n);
+  if(n.startsWith('y_desktop_'))return uiaDecision(n)??hold('Unclassified desktop capability: '+n);
   if(['y_system_inspect','y_process_list'].includes(n))return allow('Fixed read-only diagnostics or this chat\'s process inventory');
-  if(n==='y_project_inspect'){const t=route(a.path??'');if(t.permission==='private'||t.permission==='vault'||t.sensitive)return deny('Protected project inspection target');return allow('Read-only project structure, manifest and Git inspection');}
+  if(n==='y_project_inspect'){const t=route(a.path??'');if(t.permission==='private'||t.permission==='vault'||t.sensitive)return hold('Project inspection target is protected or credential-adjacent: a verified owner decision is required');return allow('Read-only project structure, manifest and Git inspection');}
   if(['y_process_run','y_process_start','y_job_submit'].includes(n)){
     if(config.readOnlyAutoAllow&&isReadOnlyInvocation(a))return allow('Parsed read-only PowerShell invocation; no approval');
     const cwd=a.cwd??projectRoots[0];
@@ -35,7 +37,7 @@ export function authorizeNative(intent){
     return allow('Pinned executable, enrolled project cwd, current user; bounded pre-write coverage');
   }
   if(['y_process_poll','y_process_input','y_process_cancel','y_job_status','y_job_logs','y_job_cancel','y_job_list'].includes(n))return allow('Private ingress, engine-owned sessions and durable owner-scoped job IDs only');
-  return deny('Unclassified native capability: '+n);
+  return hold('Unclassified native capability: '+n+' — instead of a blanket refusal, a verified owner decision is required');
 }
 
 export async function createNativeExtension({backups,ledger,protectState}){
@@ -64,14 +66,13 @@ export async function createNativeExtension({backups,ledger,protectState}){
     if(tokenNames.includes(intent.tool)){
       const a=request.args,kind=intent.tool.startsWith('y_job_')?'job':'session',id=kind==='job'?a.id:a.sessionId;
       if(!ledger.owns(kind,id,a.outputToken))return deny('Missing, foreign or stale outputToken for this task/session');
-      if(intent.tool==='y_process_input'){const foreign=agentBoundary('interact_with_process',{input:a.text});if(foreign)return {...deny(foreign),code:'TARGET_FOREIGN'};}
       if(intent.tool==='y_process_input'&&highRiskCommand(a.text??''))return hold('Sensitive process stdin requires verified host review');
       return ledger.owns(kind,id,a.outputToken)?allow('Original call output capability verified'):deny('Missing, foreign or stale outputToken for this task/session');
     }
     if(intent.tool==='y_browser_action'||intent.tool==='y_browser_download'){
       let url;try{url=new URL(engine.browser.page(request.args.tabId).url());}catch(e){return {...deny(e.message||'Unknown owned browser tab'),...(e.code?{code:e.code}:{})};}
       if(config.blacklistDefaultAllow){
-        try{engine.browser.validateUrl(url.href);}catch{return deny('Browser destination is not enrolled');}
+        try{engine.browser.validateUrl(url.href);}catch(e){return deny(e.message);}
         return allow('Owner default-allow interaction in an owned isolated tab; destination and download bounds remain enforced');
       }
       // Loopback's ephemeral fixture port is allowed only when the exact host
@@ -107,7 +108,6 @@ export async function createNativeExtension({backups,ledger,protectState}){
   const rawBind=engine.desktop.bind.bind(engine.desktop);
   engine.desktop.bind=async hwnd=>{
     const win=await engine.desktop.window(hwnd);
-    if(win.protected||!win.controllable)return rawBind(hwnd);
     if(config.desktopRequireEnrollment){
       const rule=config.desktopAllowedApps.find(r=>r.path&&r.sha256&&win.executablePath&&canonical(r.path)===canonical(win.executablePath));
       if(!rule||createHash('sha256').update(fs.readFileSync(rule.path)).digest('hex')!==rule.sha256)throw Object.assign(Error('DESKTOP_NOT_ENROLLED: the owner restricted UIA to enrolled executables (path + SHA-256)'),{code:'DESKTOP_NOT_ENROLLED'});

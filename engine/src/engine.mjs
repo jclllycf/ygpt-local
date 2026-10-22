@@ -8,13 +8,12 @@ import {zodToJsonSchema} from 'zod-to-json-schema';
 import {YFileEngine,EngineError,sha256} from './file-engine.mjs';
 import {YSearchEngine} from './search-engine.mjs';
 import {YTerminalEngine} from './terminal-engine.mjs';
-import {YBrowserEngine} from './browser-engine.mjs';
+import {YBrowserFacade} from './browser-engine.mjs';
 import {YDesktopEngine} from './desktop-engine.mjs';
 import {YSystemEngine} from './system-engine.mjs';
 import {DurableJobs} from './durable-jobs.mjs';
 import {EngineLedger} from './ledger.mjs';
 import {fixtureSnapshotProvider,rc9SnapshotProvider} from './snapshot-adapter.mjs';
-import {assertIsolatedBrowserConfig} from './agent-protection.mjs';
 import {protectState as protectWindowsState} from './state-protection.mjs';
 import lockfile from 'proper-lockfile';
 
@@ -28,9 +27,10 @@ export async function createEngine(config,{authorize,backupManager,ledger:outerL
   const root=await fs.realpath(config.root),stateDir=path.resolve(config.stateDir);
   // The broker supplies the calling chat context; standalone fixtures use one local owner.
   const currentOwner=typeof config.currentOwner==='function'?()=>config.currentOwner()??'local':()=>'local';
-  // YGPT's browser is always its own Playwright Edge instance: no CDP, profile
-  // or debugging endpoint of the user's or the Agent's browser can be configured.
-  assertIsolatedBrowserConfig(config.browser);
+  // Two browser modes (owner model rc.13): an isolated Playwright browser
+  // (default; Chrome unless the owner configures Edge) and, on request, a
+  // take-over of the owner's own existing browser over CDP (y_browser_attach).
+  // The chat asks the owner which to use; no answer means the isolated one.
   await fs.mkdir(stateDir,{recursive:true});await (protectState??protectWindowsState)(stateDir);
   if(config.mode!=='fixture'&&(!authorize||!backupManager||!outerLedger))throw new EngineError('RC9_REQUIRED','Live integration requires trusted authorize, BackupManager and shared ledger; no model-supplied approval is accepted');
   const snapshot=backupManager?rc9SnapshotProvider(backupManager):await fixtureSnapshotProvider(root,stateDir);
@@ -38,7 +38,7 @@ export async function createEngine(config,{authorize,backupManager,ledger:outerL
   // A second stale timer would reject a legitimate immediate crash recovery.
   const release=config.mode==='rc9-integrated'?async()=>{}:await lockfile.lock(stateDir,{lockfilePath:path.join(stateDir,'engine-instance.lock'),stale:30000,update:5000,retries:0});
   const file=await YFileEngine.create(root,{snapshot}),terminal=new YTerminalEngine({root,stateDir,allowedExecutables:config.allowedExecutables,authorizeExecutable:config.mode==='rc9-integrated'?config.authorizeExecutable:undefined,maxOutputBytes:2*1024*1024,currentOwner});
-  const search=new YSearchEngine(file),browser=new YBrowserEngine({stateDir,...config.browser,currentOwner}),desktop=new YDesktopEngine({stateDir,allowedPids:config.desktopAllowedPids??[],protectedPaths:config.agentProtectedRoots??[],currentOwner}),system=new YSystemEngine({stateDir,physicalDisks:config.physicalDisks}),jobs=new DurableJobs({terminal,stateDir,python:config.python,pythonArgs:config.pythonArgs,ingressId:config.ingressId});
+  const search=new YSearchEngine(file),browser=new YBrowserFacade({stateDir,...config.browser,currentOwner}),desktop=new YDesktopEngine({stateDir,allowedPids:config.desktopAllowedPids??[],protectedPaths:config.agentProtectedRoots??[],currentOwner}),system=new YSystemEngine({stateDir,physicalDisks:config.physicalDisks}),jobs=new DurableJobs({terminal,stateDir,python:config.python,pythonArgs:config.pythonArgs,ingressId:config.ingressId});
   const ledger=outerLedger??new EngineLedger(stateDir),table=new Map();
   const add=(name,shape,handler,{mutating=false,openWorld=false,description=name}={})=>{
     const schema=z.object({...shape,requestKey:z.string().max(120).optional(),...(config.mode==='rc9-integrated'?{outputToken:z.string().max(128).optional()}:{})}).strict();
@@ -102,7 +102,9 @@ export async function createEngine(config,{authorize,backupManager,ledger:outerL
   // A durable job is for long work: default 30 minutes, up to 24 hours.
   add('y_job_submit',{...processSpec,timeoutMs:z.number().int().min(100).max(86400000).default(1800000),id:sid},a=>jobs.submit(a),{mutating:true});
   add('y_job_status',{id:sid},a=>jobs.status(a.id));add('y_job_logs',{id:sid},a=>jobs.logs(a.id));add('y_job_cancel',{id:sid},a=>jobs.cancel(a.id),{mutating:true});add('y_job_list',{},()=>jobs.list());
-  add('y_browser_open',{url:str},a=>browser.open(a.url),{mutating:true,openWorld:true});
+  add('y_browser_open',{url:str,target:z.enum(['isolated','existing']).optional()},a=>browser.open(a.url,{target:a.target}),{mutating:true,openWorld:true,description:'Open a page. Ask the owner which browser to use when it matters: target=existing takes over their own Chrome/Edge (attach first with y_browser_attach); with no preference answer, omit target — the isolated browser is the default'});
+  add('y_browser_attach',{port:z.number().int().min(1).max(65535).optional()},a=>browser.attach(a),{mutating:true,openWorld:true,description:'Take over the owner existing Chrome/Edge through its remote-debugging port (default 9222, owner-configurable). The owner enables the port; attaching never closes their browser — y_browser_detach only disconnects'});
+  add('y_browser_detach',{},()=>browser.detach(),{description:'Disconnect from the owner existing browser without closing it'});
   add('y_browser_tabs',{},()=>browser.list());
   add('y_browser_snapshot',{tabId:sid},a=>browser.snapshot(a.tabId));
   add('y_browser_navigate',{tabId:sid,url:str},a=>browser.navigate(a.tabId,a.url),{mutating:true,openWorld:true});

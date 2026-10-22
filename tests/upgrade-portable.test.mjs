@@ -75,35 +75,43 @@ test('Call provenance records a short context label and transport, never the tok
   ledger.close();
 });
 
-test('Agent boundary: Agent program/state folders and Agent process control are TARGET_FOREIGN',()=>{
+test('No Agent boundary (rc.13 owner directive): Agent targets are ordinary; classification never protects',()=>{
+  // Identity helpers still recognize Agent paths (inventory information only).
   assert.equal(agentPath('c:\\users\\example\\appdata\\local\\packages\\openai.chatgpt-desktop_abc\\localstate\\x'),true);
-  assert.equal(agentPath('c:\\program files\\windowsapps\\openai.chatgpt-desktop_1.0_x64__x\\app\\chatgpt.exe'),true);
-  assert.equal(agentPath('c:\\users\\example\\.codex\\sessions\\1.jsonl'),true);
   assert.equal(agentPath('d:\\ai\\projects\\codex-notes\\readme.md'),false);
-  assert.match(agentCommandSignal('Stop-Process -Name ChatGPT -Force'),/Agent/);
-  assert.match(agentCommandSignal('taskkill /IM codex.exe /F'),/Agent/);
-  assert.match(agentCommandSignal('Get-Process chatgpt | Stop-Process'),/Agent/);
-  assert.equal(agentCommandSignal('npm test'),null);
-  assert.equal(agentCommandSignal('Get-Content C:\\Users\\Example\\.codex\\config.toml'),null,'.codex reads keep the existing review signal');
-  assert.match(agentBoundary('write_file',{path:'C:\\Users\\Example\\AppData\\Local\\OpenAI\\state.json'}),/^TARGET_FOREIGN/);
-  assert.match(agentBoundary('move_file',{source:'C:\\Users\\Example\\AppData\\Roaming\\ChatGPT\\a',destination:'D:\\work\\a'}),/^TARGET_FOREIGN/);
-  assert.match(agentBoundary('job_submit',{cwd:'D:\\work',argv:['C:\\Windows\\System32\\taskkill.exe','/IM','ChatGPT.exe']}),/^TARGET_FOREIGN/);
+  // The policy boundary is retired: writes, moves and jobs naming Agent
+  // resources return null (no refusal) and follow the normal blacklist rules.
+  assert.equal(agentBoundary('write_file',{path:'C:\\Users\\Example\\AppData\\Local\\OpenAI\\state.json'}),null);
+  assert.equal(agentBoundary('move_file',{source:'C:\\Users\\Example\\AppData\\Roaming\\ChatGPT\\a',destination:'D:\\work\\a'}),null);
+  assert.equal(agentBoundary('job_submit',{cwd:'D:\\work',argv:['C:\\Windows\\System32\\taskkill.exe','/IM','ChatGPT.exe']}),null);
   assert.equal(agentBoundary('write_file',{path:'D:\\work\\notes.txt'}),null);
-});
-
-test('Window classification shields the Agent, its process tree and unverifiable identities',()=>{
+  // Window classification never shields: Agent processes, trees, signers and
+  // unverifiable identities all report not protected.
   assert.equal(classifyWindow({process:'notepad',executablePath:'C:\\Windows\\notepad.exe'}).protected,false);
-  assert.equal(classifyWindow({process:'ChatGPT',executablePath:'C:\\x\\ChatGPT.exe'}).reason,'AGENT_PROCESS');
-  assert.equal(classifyWindow({process:'msedge',executablePath:'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe',ancestors:[{process:'ChatGPT',executablePath:'C:\\Program Files\\WindowsApps\\OpenAI.ChatGPT-Desktop_1\\app\\ChatGPT.exe'}]}).protected,true);
-  assert.equal(classifyWindow({process:'app',executablePath:'C:\\a\\app.exe',signer:'CN=OpenAI, O=OpenAI, L=San Francisco'}).reason,'AGENT_SIGNER');
-  assert.equal(classifyWindow({process:'secure',executablePath:null}).reason,'IDENTITY_UNVERIFIED');
-  assert.equal(classifyWindow({process:'x',executablePath:'C:\\x.exe',protected:true,protectedReason:'AGENT_OWNED_WINDOW'}).reason,'AGENT_OWNED_WINDOW');
+  assert.equal(classifyWindow({process:'ChatGPT',executablePath:'C:\\x\\ChatGPT.exe'}).protected,false);
+  assert.equal(classifyWindow({process:'msedge',executablePath:'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe',ancestors:[{process:'ChatGPT',executablePath:'C:\\Program Files\\WindowsApps\\OpenAI.ChatGPT-Desktop_1\\app\\ChatGPT.exe'}]}).protected,false);
+  assert.equal(classifyWindow({process:'secure',executablePath:null}).protected,false);
 });
 
-test('Browser configuration cannot attach to an existing browser, profile or debugging port',()=>{
-  assert.equal(assertIsolatedBrowserConfig({headless:true,allowedHosts:['127.0.0.1']}),true);
-  for(const bad of [{cdpUrl:'http://127.0.0.1:9222'},{userDataDir:'C:\\Users\\Example\\AppData\\Local\\Google\\Chrome\\User Data'},{args:['--remote-debugging-port=9222']}])
-    assert.throws(()=>assertIsolatedBrowserConfig(bad),e=>e.code==='TARGET_FOREIGN');
+test('Browser: destinations follow an owner blacklist; take-over is a separate mode, never a config refusal',async()=>{
+  const {YBrowserEngine}=await import('../engine/src/browser-engine.mjs');
+  // Default: any http/https destination is allowed (public web included).
+  const open=new YBrowserEngine({stateDir:tmp()});
+  assert.equal(open.validateUrl('https://example.com/some/page?q=1'),'https://example.com/some/page?q=1');
+  assert.equal(open.channel,'chrome','isolated browser defaults to Chrome');
+  // The pre-rc.13 shipped default (localhost only) migrates to allow-all.
+  const legacy=new YBrowserEngine({stateDir:tmp(),allowedHosts:['127.0.0.1','localhost','[::1]']});
+  assert.equal(legacy.validateUrl('https://example.com/'),'https://example.com/');
+  // Blacklist entries: blocklisted hosts and URLs with embedded credentials.
+  const blocked=new YBrowserEngine({stateDir:tmp(),blockedHosts:['evil.example']});
+  assert.throws(()=>blocked.validateUrl('https://evil.example/x'),e=>e.code==='URL_BLOCKED');
+  assert.throws(()=>open.validateUrl('https://user:pass@example.com/'),e=>e.code==='URL_BLOCKED');
+  assert.throws(()=>open.validateUrl('file:///C:/Windows/win.ini'),e=>e.code==='URL_BLOCKED');
+  // An owner may still opt into an allowlist; other hosts are then reported.
+  const allowlist=new YBrowserEngine({stateDir:tmp(),allowedHosts:['example.com']});
+  assert.throws(()=>allowlist.validateUrl('https://other.example/'),e=>e.code==='URL_NOT_ENROLLED');
+  // The old isolated-config refusal is retired (take-over lives in its own mode).
+  assert.equal(assertIsolatedBrowserConfig({cdpUrl:'http://127.0.0.1:9222'}),true);
 });
 
 // A fake YDesktop helper: answers the JSON protocol with a fixed inventory.
@@ -112,20 +120,22 @@ function fakeHelper(dir,windows){
   fs.writeFileSync(file,'#!/usr/bin/env node\nlet s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const r=JSON.parse(s);const w='+JSON.stringify(windows)+';process.stdout.write(JSON.stringify(r.action==="windows"?{ok:true,result:{windows:w,interactive:true}}:{ok:true,result:{action:r.action,hwnd:r.hwnd,protectedPaths:r.protectedPaths.length}}));});\n');
   fs.chmodSync(file,0o755);return file;
 }
-test('UIA targets belong to the binding chat; Agent windows cannot be bound',{skip:process.platform==='win32'?'fake helper uses a POSIX shebang':false},async()=>{
+test('UIA targets belong to the binding chat; any window (incl. the ChatGPT app) binds after broker approval',{skip:process.platform==='win32'?'fake helper uses a POSIX shebang':false},async()=>{
   const dir=tmp();let owner='ctx-a';
   const windows=[{hwnd:'100',pid:4100,process:'notepad',executablePath:'C:\\Windows\\notepad.exe',title:'notes',birth:'1'},{hwnd:'200',pid:4200,process:'ChatGPT',executablePath:'C:\\x\\ChatGPT.exe',title:'Agent task: private',birth:'2'}];
   const desktop=new YDesktopEngine({stateDir:dir,helper:fakeHelper(dir,windows),currentOwner:()=>owner,hashFile:async()=>'a'.repeat(64)});
   const list=await desktop.windows();
-  const agent=list.windows.find(w=>w.hwnd==='200');assert.equal(agent.protected,true);assert.equal(agent.controllable,false);assert.ok(!JSON.stringify(agent).includes('private'));
-  await assert.rejects(desktop.bind('200'),e=>e.code==='TARGET_FOREIGN');
+  const agent=list.windows.find(w=>w.hwnd==='200');assert.equal(agent.protected,false);assert.equal(agent.controllable,true);assert.ok(JSON.stringify(agent).includes('Agent task: private'),'real titles are listed, nothing is shielded');
+  await assert.rejects(desktop.bind('200'),e=>e.code==='DESKTOP_NOT_ENROLLED','binding still requires the broker to approve the exact window first');
+  desktop.enrollFromBroker(4200,'2');
+  const agentTarget=await desktop.bind('200');assert.ok(agentTarget.targetId,'the ChatGPT app window binds like any other after approval');
   await assert.rejects(desktop.bind('100'),e=>e.code==='DESKTOP_NOT_ENROLLED','binding still requires the broker to approve the exact window first');
   desktop.enrollFromBroker(4100,'1');
   const {targetId}=await desktop.bind('100');
   assert.equal((await desktop.act(targetId,'tree')).result.action,'tree');
   owner='ctx-b';
   await assert.rejects(desktop.act(targetId,'tree'),e=>e.code==='SESSION_FOREIGN');
-  assert.deepEqual(desktop.owned(),[]);assert.equal(desktop.foreignCount(),1);
+  assert.deepEqual(desktop.owned(),[]);assert.equal(desktop.foreignCount(),2);
   owner='ctx-a';desktop.release('ctx-a');assert.throws(()=>desktop.target(targetId),e=>e.code==='NO_TARGET');
 });
 
@@ -156,23 +166,25 @@ test('Durable job children do not inherit YGPT_* pointers, except the bundled do
   assert.equal(r.stdout.trim(),"[] True s",r.stderr);assert.ok(source.length>0);
 });
 
-test('Credential and terminal windows are listed but never controllable',{skip:process.platform==='win32'?'fake helper uses a POSIX shebang':false},async()=>{
+test('Credential and terminal windows are listed as they are and bind after broker approval (app-control consent lives in the approval)',{skip:process.platform==='win32'?'fake helper uses a POSIX shebang':false},async()=>{
   const dir=tmp();
   const windows=[{hwnd:'300',pid:4300,process:'KeePass',executablePath:'C:\\Program Files\\KeePass\\KeePass.exe',title:'bank.kdbx - KeePass',birth:'3'},{hwnd:'301',pid:4301,process:'WindowsTerminal',executablePath:'C:\\Program Files\\WindowsApps\\Microsoft.WindowsTerminal\\wt.exe',title:'PowerShell',birth:'4'}];
-  const desktop=new YDesktopEngine({stateDir:dir,helper:fakeHelper(dir,windows),currentOwner:()=>'ctx-a'});
+  const desktop=new YDesktopEngine({stateDir:dir,helper:fakeHelper(dir,windows),currentOwner:()=>'ctx-a',hashFile:async()=>'b'.repeat(64)});
   const list=(await desktop.windows()).windows;
   const keepass=list.find(w=>w.hwnd==='300'),terminal=list.find(w=>w.hwnd==='301');
-  assert.equal(keepass.controllable,false);assert.equal(keepass.protectedReason,'PROTECTED_APPLICATION');assert.ok(!JSON.stringify(keepass).includes('bank'));
-  assert.equal(terminal.controllable,false);assert.equal(terminal.title,'PowerShell');
+  assert.equal(keepass.controllable,true);assert.equal(keepass.protected,false);assert.ok(JSON.stringify(keepass).includes('bank.kdbx'),'titles are no longer withheld');
+  assert.equal(terminal.controllable,true);assert.equal(terminal.title,'PowerShell');
+  await assert.rejects(desktop.bind('300'),e=>e.code==='DESKTOP_NOT_ENROLLED');
   desktop.enrollFromBroker(4300,'3');
-  await assert.rejects(desktop.bind('300'),e=>e.code==='PROTECTED_APPLICATION');
+  const {targetId}=await desktop.bind('300');assert.ok(targetId,'a password manager binds after the human approved that exact window');
 });
 
-test('Engine denial codes reach the caller: TARGET_FOREIGN is not collapsed into a generic block',async()=>{
+test('Engine denial codes reach the caller: a policy code in the reason is not collapsed into a generic block',async()=>{
   const {createEngine}=await import('../engine/src/engine.mjs');
   const dir=tmp(),root=path.join(dir,'root');fs.mkdirSync(root);fs.writeFileSync(path.join(root,'.ygpt-engine-fixture'),'YGPT disposable fixture\n');
-  await assert.rejects(createEngine({mode:'fixture',root,stateDir:path.join(dir,'state'),browser:{userDataDir:'C:\\Users\\Example\\AppData\\Local\\Microsoft\\Edge\\User Data'}},{protectState:async()=>{}}),e=>e.code==='TARGET_FOREIGN');
-  const engine=await createEngine({mode:'fixture',root,stateDir:path.join(dir,'state2'),legacyTools:false},{protectState:async()=>{},authorize:async()=>({allowed:false,reason:'TARGET_FOREIGN: Agent folders cannot be a YGPT working directory'})});
+  // A take-over-flavoured browser config no longer aborts engine creation;
+  // attaching to an existing browser is its own tool (y_browser_attach).
+  const engine=await createEngine({mode:'fixture',root,stateDir:path.join(dir,'state'),browser:{cdpUrl:'http://127.0.0.1:9222'},legacyTools:false},{protectState:async()=>{},authorize:async()=>({allowed:false,reason:'TARGET_FOREIGN: Agent folders cannot be a YGPT working directory'})});
   try{const r=await engine.invoke('y_file_list',{path:'.'});assert.equal(r.ok,false);assert.equal(r.error.code,'TARGET_FOREIGN');}
   finally{await engine.close();}
 });

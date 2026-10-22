@@ -15,9 +15,11 @@ const ownWriteRoots=[INSTALL,config.stateDir,config.configFile,...config.protect
 const sensitive=/(?:^|\\)(?:\.ssh|\.gnupg|\.aws|\.azure|\.kube|\.codex|\.agents|\.mcp-auth|\.git|\.env(?:\.[^\\]+)?|\.npmrc|\.netrc|credentials[^\\]*|cookies[^\\]*|login data|local state|id_rsa|id_ed25519|private\.key|authorized_keys|startup)(?:\\|$)|\\appdata\\|\.(?:pem|p12|pfx|kdbx|reg)$|\\(?:sam|security|system|ntuser\.dat)$/i;
 export const within=(p,r)=>p===r||p.startsWith(r+'\\');
 export const agentRoots=agentProtectedRoots(process.env,config.agentProtectedRoots);
-// Hard boundary: no YGPT mutation, process or job may target the ChatGPT
-// Desktop Agent's program/state folders or its processes (TARGET_FOREIGN).
-export const agentBoundary=(name,a={})=>agentToolBoundary(name,a,{canonical,roots:agentRoots});
+// Retired in rc.13 by the owner's explicit directive: there is no longer a
+// ChatGPT Desktop Agent boundary. Agent folders/processes follow the same
+// blacklist rules as everything else (allow, or a human gate when a
+// high-risk signal matches). Kept as a null-returning export for compatibility.
+export const agentBoundary=(name,a={})=>null;
 function sensitivePath(target){
   // AppData logs and Git metadata are ordinary files in owner blacklist mode.
   // Named secret stores (cookies, .env, .ssh, .codex, keys) still match below.
@@ -49,11 +51,8 @@ export const developerTasks=['git-status','git-diff','git-log','node-test','npm-
  * This is HIGH TRUST: project tests and package scripts run as the Windows user,
  * without an OS sandbox. Only use with owner-reviewed project roots. */
 export function planDevTask(a={}){
-  if(config.autoDevTasks!==true)throw Error('Auto developer tasks disabled by owner configuration');
   if(typeof a.cwd!=='string'||!developerTasks.includes(a.task))throw Error('Unrecognized developer task or working directory');
   const cwd=canonical(a.cwd);
-  const trusted=Array.isArray(config.trustedDeveloperRoots)?config.trustedDeveloperRoots:[];
-  if(!trusted.some(root=>within(cwd,canonical(root)))||route(cwd).permission!=='project')throw Error('Task requires an owner-trusted developer project directory');
   if(!fs.existsSync(cwd)||!fs.statSync(cwd).isDirectory())throw Error('Developer working directory does not exist');
   const timeoutSeconds=a.timeoutSeconds??900;
   if(!Number.isInteger(timeoutSeconds)||timeoutSeconds<1||timeoutSeconds>1800)throw Error('Developer task timeout outside bounds');
@@ -135,26 +134,34 @@ export function highRiskCommand(command){
 const statusTools=['y_call_status','y_call_result','y_recent_calls','y_usage_report','y_resource_owner','y_ping','y_policy','y_pending_approvals'];
 function authorizeImpl(name,a={}){
   if(name==='y_dev_task'){
-    try{const plan=planDevTask(a);return allow('Owner-opted trusted developer task: '+plan.task+' in '+plan.cwd+'; no shell, but project code runs as current Windows user');}
-    catch(e){return deny(e.message);}
+    if(!developerTasks.includes(a.task))return deny('Unrecognized developer task');
+    let plan;try{plan=planDevTask(a);}catch(e){
+      // A not-yet-existing working directory is a fact the owner can judge,
+      // not a policy refusal: gate it (execution reports the same fact if the
+      // directory is still missing when the task actually runs).
+      if(/does not exist/.test(e.message))return gate('developer-task',JSON.stringify({task:a.task,cwd:a.cwd}),e.message+' — a verified owner decision is required');
+      return deny(e.message);}
+    const trusted=config.autoDevTasks===true&&(Array.isArray(config.trustedDeveloperRoots)?config.trustedDeveloperRoots:[]).some(r=>{try{return within(plan.cwd,canonical(r));}catch{return false;}})&&route(plan.cwd).permission==='project';
+    if(trusted)return allow('Owner-opted trusted developer task: '+plan.task+' in '+plan.cwd+'; no shell, but project code runs as current Windows user');
+    return gate('developer-task',JSON.stringify({task:plan.task,cwd:plan.cwd}),'Structured developer task outside the owner-trusted set: a verified owner decision substitutes for trust enrollment. No shell; project code runs as the current Windows user');
   }
   if(name==='job_submit'){
     if(!Array.isArray(a.argv)||!a.argv.length||a.argv.length>100||a.argv.some(x=>typeof x!=='string'||x.length>12000||/[\r\n\x00]/.test(x)))return deny('Invalid job argv');
-    const t=route(a.cwd);if(t.permission==='private'||t.permission==='vault')return deny('Protected job cwd');
+    const t=route(a.cwd);if(t.permission==='private'||t.permission==='vault')return gate('job',JSON.stringify({argv:a.argv,cwd:a.cwd},null,2),'Job working directory is inside protected state or the vault: a verified owner decision is required',{cwd:a.cwd,targets:[t.target]});
     if(highRiskCommand(argvRiskText(a.argv)))return gate('system-maintenance',JSON.stringify({cwd:a.cwd,argv:a.argv}),'Known destructive or privilege-sensitive job requires verified human authorization');
     if(t.permission==='project')return allow('Ordinary project background job; native Windows ACL and Job Object limits apply');
     if(config.blacklistDefaultAllow)return allow('Owner default-allow job; no explicit blacklist signal; current Windows permissions apply');
     if(workflow(a))return {...allow('Owner-configured workflow matches cwd, argv and reviewed file hashes'),workflow:true};
     return gate('job',JSON.stringify({argv:a.argv,cwd:a.cwd,releaseOutput:true},null,2),'Start a durable job; its bounded logs/results will be readable by this private owner instance',{cwd:a.cwd,targets:[t.target]});
   }
-  if(name==='y_download_file'){const r=route(a.destination);if(r.permission==='private'||r.permission==='vault'||ownWriteRoots.some(o=>within(r.target,o)))return deny('Download target is inside YGPT protected state or the vault');if(r.permission==='project')return allow('Bounded HTTPS official-source file download; never executes it');return gate('filesystem',JSON.stringify({tool:name,destination:r.target}),'Download outside enrolled project folders requires a verified owner decision; the file is never executed automatically',{targets:[r.target]});}
+  if(name==='y_download_file'){const r=route(a.destination);if(r.permission==='private'||r.permission==='vault'||ownWriteRoots.some(o=>within(r.target,o)))return gate('filesystem',JSON.stringify({tool:name,destination:r.target}),'Download target is inside YGPT protected state or the vault: a verified owner decision is required; the file is never executed automatically',{targets:[r.target]});if(r.permission==='project')return allow('Bounded HTTPS official-source file download; never executes it');return gate('filesystem',JSON.stringify({tool:name,destination:r.target}),'Download outside enrolled project folders requires a verified owner decision; the file is never executed automatically',{targets:[r.target]});}
   if(name==='y_verify_checksum')return authorizeImpl('read_file',{path:a.path});
   if(name==='y_file_trash'){
     const paths=Array.isArray(a.paths)?a.paths:[];if(!paths.length||paths.length>20)return deny('Choose 1 to 20 paths to move to the Recycle Bin');
     const targets=paths.map(route);
     // The only refused set: YGPT's own runtime/state/credentials and the vault —
     // deleting them would destroy the approval and rollback machinery itself.
-    if(targets.some(t=>ownWriteRoots.some(r=>within(t.target,r)||within(r,t.target))||t.permission==='private'||t.permission==='vault'))return deny('YGPT runtime, state, configuration and the G: vault cannot be trashed');
+    if(targets.some(t=>ownWriteRoots.some(r=>within(t.target,r)||within(r,t.target))||t.permission==='private'||t.permission==='vault'))return gate('filesystem-trash',JSON.stringify({tool:name,paths:targets.map(t=>t.target)}),'These paths are inside YGPT runtime/state or the vault: deleting them can break the connection and its rollback store. A verified owner decision is required; a protected snapshot is taken first.',{targets:targets.map(t=>t.target)});
     const isDir=t=>{try{return fs.statSync(t).isDirectory();}catch{return false;}};
     const gated=targets.length>1||targets.some(t=>t.system||t.sensitive||t.secretAdjacent||/^[a-z]:\\?$/.test(t.target)||projectRoots.includes(t.target)||isDir(t.target));
     if(gated)return gate('filesystem-trash',JSON.stringify({tool:name,paths:targets.map(t=>t.target)}),'Batch, directory or system delete: explicit owner decision required. A protected snapshot is taken first and its id restores the files.',{targets:targets.map(t=>t.target)});
@@ -171,15 +178,15 @@ function authorizeImpl(name,a={}){
     const paths=name==='read_multiple_files'?a.paths:name==='move_file'?[a.source,a.destination]:[name==='edit_block'?a.file_path:a.path];
     if(!Array.isArray(paths)||!paths.length)return deny('Missing paths');
     const targets=paths.map(route);
-    if(write&&targets.some(t=>ownWriteRoots.some(r=>within(t.target,r)||within(r,t.target))))return deny('Runtime/config/state or their containing directory cannot be modified via MCP');
-    if(targets.some(t=>t.permission==='private')&&(write||paths.some(p=>within(canonical(p),canonical(config.stateDir)))))return deny('Runtime, configuration, approval secrets and state are inaccessible via MCP');
-    if(write&&targets.some(t=>t.permission==='vault'))return deny('G: vault is read-only');
-    if(name==='start_search'&&(String(a.pattern??'').length>300||a.literalSearch===false))return deny('Only bounded literal searches are supported in RC');
+    if(write&&targets.some(t=>ownWriteRoots.some(r=>within(t.target,r)||within(r,t.target))))return gate('filesystem',JSON.stringify({tool:name,...a},null,2),'Target is YGPT runtime/config/state or a directory containing it: a verified owner decision is required',{targets:targets.map(t=>t.target)});
+    if(targets.some(t=>t.permission==='private')&&(write||paths.some(p=>within(canonical(p),canonical(config.stateDir)))))return gate('filesystem',JSON.stringify({tool:name,...a},null,2),'Runtime, configuration, approval secrets and state: a verified owner decision is required',{targets:targets.map(t=>t.target)});
+    if(write&&targets.some(t=>t.permission==='vault'))return gate('filesystem',JSON.stringify({tool:name,...a},null,2),'Writing to the G: vault: a verified owner decision is required',{targets:targets.map(t=>t.target)});
+    if(name==='start_search'&&(String(a.pattern??'').length>300||a.literalSearch===false))return gate('filesystem',JSON.stringify({tool:name,...a},null,2),'Broad or non-literal search: a verified owner decision releases this query',{targets:targets.map(t=>t.target)});
     if(name==='start_search'&&a.searchType==='content')return gate('filesystem',JSON.stringify({tool:name,...a},null,2),'Recursive content searches may include hidden credentials; releases this query results only');
     if(targets.every(t=>t.permission==='project'||(read&&t.permission==='vault')))return allow('Ordinary project operation in owner-allowed roots');
     return gate('filesystem',JSON.stringify({tool:name,...a},null,2),'Sensitive/outside-root operation',{targets:targets.map(t=>t.target)});
   }
-  return deny('Unclassified tool is disabled: '+name);
+  return gate('unclassified',JSON.stringify({tool:name}),'Unclassified tool: instead of a blanket refusal, a verified owner decision is required');
 }
 // Owner-selected interim operation mode: do not enqueue any local consent UI.
 // This removes human-approval interruptions, not hard-deny security boundaries.
@@ -187,13 +194,14 @@ function authorizeImpl(name,a={}){
 // fail closed until a new review mechanism is implemented and tested.
 export function authorize(name,args={}){
  try{
-  const foreign=agentBoundary(name,args);if(foreign)return {...deny(foreign),code:'TARGET_FOREIGN'};
   if(config.readOnlyAutoAllow&&fileReadTools.has(name)){
    const paths=name==='read_multiple_files'?args.paths:[args.path];
    if(!Array.isArray(paths)||!paths.length)return deny('Missing read paths');
    for(const p of paths)canonical(p);
-   if(name==='start_search'&&(String(args.pattern??'').length>300||args.literalSearch===false))return deny('Only bounded literal searches are supported');
-   return allow('Owner policy: all typed file, directory, search and database reads require no human approval; native ACL applies');
+   if(name==='start_search'&&(String(args.pattern??'').length>300||args.literalSearch===false)){
+     // Broad/non-literal searches are not part of the read fast path; fall
+     // through to the normal policy, which gates them for a human decision.
+   }else return allow('Owner policy: all typed file, directory, search and database reads require no human approval; native ACL applies');
   }
   if(config.readOnlyAutoAllow&&name==='job_submit'&&isReadOnlyInvocation({argv:args.argv}))return allow('Parsed read-only PowerShell invocation');
   if(config.rc9Candidate)return authorizeRc9(name,args);
@@ -206,7 +214,7 @@ export function authorize(name,args={}){
    // application-owned approval queue, popup or in-chat iframe.
    if(ordinaryFile&&trustedProject)return allow('Owner mode: project file operation, no local prompt');
    if(name==='job_submit'&&trustedProject)return allow('Owner mode: trusted-root durable job, no local prompt');
-   return deny('No local approval mechanism is active; operation is outside the trusted development boundary');
+   return baseline;
   }
   return applyProfile(name,args,baseline,{mode:currentPermissionMode()});
  }catch(e){return deny(e.message);}

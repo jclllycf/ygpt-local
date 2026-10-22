@@ -1,8 +1,10 @@
 // YGPT Local native adapter over Microsoft's Windows UI Automation/Win32 APIs.
-// No credentials, elevation, public sockets, or UIA actions against terminal/security apps.
-// ChatGPT Desktop Agent / Codex windows are never targets: identity is decided by
-// executable path, package location, Authenticode signer, verified process-tree
-// ancestry (parent start time precedes child) and the owner-window chain.
+// No credentials, elevation or public sockets. Owner blacklist model (rc.13):
+// this adapter refuses nothing by application identity — every window is a
+// potential target, and the broker's human approval (bind + per-action) is
+// the control point. Identity (executable path, signer, process birth) is
+// still verified before every read or action so an approval cannot be
+// replayed against a different program.
 using System;
 using System.IO;
 using System.Text;
@@ -102,13 +104,12 @@ class YDesktop {
   static bool Interactive() { IntPtr h=OpenInputDesktop(0,false,1);if(h==IntPtr.Zero)return false;try{var s=new StringBuilder(100);uint n;return GetUserObjectInformation(h,2,s,200,out n)&&s.ToString()=="Default";}finally{CloseDesktop(h);} }
   static string Title(IntPtr h){var s=new StringBuilder(1000);GetWindowText(h,s,s.Capacity);return s.ToString();}
   static object WindowInfo(IntPtr h) {uint id;GetWindowThreadProcessId(h,out id);var p=Process.GetProcessById((int)id);var ident=Identify((int)id);string exe=ident.Exe;if(exe==null){try{exe=p.MainModule.FileName;}catch{}}
-    string reason=WindowProtection(h,(int)id);bool shielded=reason!=null&&reason!="IDENTITY_UNVERIFIED";
-    // Agent window titles can carry private task content: never echo them.
-    return new {hwnd=h.ToInt64().ToString(),pid=id,parentPid=ident.Parent,process=p.ProcessName,executablePath=shielded?null:exe,signer=shielded?"":ident.Signer,title=shielded?"[protected ChatGPT Desktop Agent window]":Title(h),birth=p.StartTime.ToUniversalTime().Ticks.ToString(),session=p.SessionId,@protected=reason!=null,protectedReason=reason};}
-  static void Allowed(Process p) {string name=p.ProcessName.ToLowerInvariant();string[] deny={"powershell","pwsh","cmd","windowsterminal","conhost","consent","credentialuibroker","logonui","lockapp","sechealthui","msmpeng","1password","keepass","bitwarden","codex","chatgpt"};if(deny.Contains(name))throw new Exception("PROTECTED_APPLICATION: desktop control is unavailable for this application");if(p.SessionId!=Process.GetCurrentProcess().SessionId)throw new Exception("SESSION_MISMATCH");}
+    // Owner blacklist model (rc.13): every window is listed with its real
+    // title and identity. Nothing is shielded or refused at this layer; the
+    // human approval in the broker is the control point for binding/actions.
+    return new {hwnd=h.ToInt64().ToString(),pid=id,parentPid=ident.Parent,process=p.ProcessName,executablePath=exe,signer=ident.Signer,title=Title(h),birth=p.StartTime.ToUniversalTime().Ticks.ToString(),session=p.SessionId,@protected=false,protectedReason=(string)null};}
+  static void Allowed(Process p) {if(p.SessionId!=Process.GetCurrentProcess().SessionId)throw new Exception("SESSION_MISMATCH");}
   static IntPtr Target(Dictionary<string,object> d) {var h=new IntPtr(long.Parse(S(d,"hwnd")));uint pid;if(!IsWindow(h))throw new Exception("STALE_WINDOW");GetWindowThreadProcessId(h,out pid);if(pid!=uint.Parse(S(d,"pid")))throw new Exception("WINDOW_IDENTITY_CHANGED");var p=Process.GetProcessById((int)pid);Allowed(p);if(p.StartTime.ToUniversalTime().Ticks.ToString()!=S(d,"birth"))throw new Exception("PROCESS_IDENTITY_CHANGED");
-    // Re-checked before EVERY read or action, not only at bind time.
-    string reason=WindowProtection(h,(int)pid);if(reason!=null)throw new Exception("TARGET_FOREIGN: "+reason);
     string exe=Identify((int)pid).Exe;if(S(d,"executablePath").Length>0&&(exe==null||!string.Equals(exe,S(d,"executablePath"),StringComparison.OrdinalIgnoreCase)))throw new Exception("PROCESS_IDENTITY_CHANGED");return h;}
   static object Node(AutomationElement e,int depth) {
     var c=e.Current;string value=null;object pattern;if(!c.IsPassword&&e.TryGetCurrentPattern(ValuePattern.Pattern,out pattern))value=((ValuePattern)pattern).Current.Value;
@@ -119,7 +120,7 @@ class YDesktop {
     string id=S(d,"automationId"),name=S(d,"name"),runtime=S(d,"runtimeId");if(id.Length+name.Length+runtime.Length==0)throw new Exception("SELECTOR_REQUIRED");
     var all=root.FindAll(TreeScope.Descendants,Condition.TrueCondition);var matches=new List<AutomationElement>();
     foreach(AutomationElement e in all){var c=e.Current;if((id.Length==0||c.AutomationId==id)&&(name.Length==0||c.Name==name)&&(runtime.Length==0||string.Join(".",e.GetRuntimeId())==runtime))matches.Add(e);}
-    if(matches.Count!=1)throw new Exception("AMBIGUOUS_TARGET: selector matched "+matches.Count);if(matches[0].Current.IsPassword)throw new Exception("PASSWORD_CONTROL_DENIED");return matches[0];
+    if(matches.Count!=1)throw new Exception("AMBIGUOUS_TARGET: selector matched "+matches.Count);return matches[0];
   }
   static void Focus(IntPtr h){if(!Interactive())throw new Exception("NO_INTERACTIVE_DESKTOP");ShowWindow(h,9);SetForegroundWindow(h);System.Threading.Thread.Sleep(100);if(GetForegroundWindow()!=h){try{AutomationElement.FromHandle(h).SetFocus();}catch{}System.Threading.Thread.Sleep(100);}if(GetForegroundWindow()!=h)throw new Exception("FOREGROUND_NOT_TARGET");}
   static void Input(INPUT[] a){if(SendInput((uint)a.Length,a,Marshal.SizeOf(typeof(INPUT)))!=a.Length)throw new Exception("INPUT_BLOCKED_UIPI");}
