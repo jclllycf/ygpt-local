@@ -7,7 +7,7 @@ const configFile=process.env.YGPT_CONFIG??path.join(INSTALL,'ygpt.config.json');
 const raw=fs.existsSync(configFile)?JSON.parse(fs.readFileSync(configFile,'utf8').replace(/^\uFEFF/,'')):{};
 const abs=v=>path.resolve(path.dirname(configFile),v);
 export const config={
-  version: '1.0.0-rc.10',
+  version: '1.0.0-rc.11',
   readOnlyAutoAllow:raw.rc11Patch3===true||raw.readOnlyAutoAllow===true,
   blacklistDefaultAllow:raw.blacklistDefaultAllow===true,
   chatAppConsent:raw.rc11Candidate===true&&raw.chatAppConsent===true,
@@ -38,6 +38,8 @@ export const config={
   engineModules:abs(raw.engineModules??'node_modules'),
   downloadProxy:raw.downloadProxy??null,
   approvalSurface:raw.approvalSurface??'chat',
+  brandIcon:['plugin-icon-256.png','ygpt-local-green-y-256.png','ygpt-local-sky-y-256.png','ygpt-local-green-256.png','ygpt-local-signature-256.png'].includes(raw.brandIcon)?raw.brandIcon:'plugin-icon-256.png',
+  approvalStyle:raw.approvalStyle==='legacy'?'legacy':'current',
   allowInlineDecisions:raw.allowInlineDecisions===true,
   enableMcpUi:raw.enableMcpUi===true,
   autoDevTasks:raw.autoDevTasks===true,

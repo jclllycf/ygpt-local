@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import {config,RUNTIME} from './config.mjs';
+import {config,RUNTIME,INSTALL} from './config.mjs';
 // New resource URI forces hosts to fetch the revised CSP and bridge bundle.
 export const BAR_URI='ui://ygpt/approval/strip-v3.html';
 // The prior ChatGPT tool catalog can retain this URI across conversations.
@@ -70,7 +70,14 @@ export function previewResult(){
 // Default to plain MCP tools: no chat file-preview widgets or app resources.
 export const uiEnabled=()=>config.chatAppConsent||config.enableMcpUi===true&&config.localApprovalDisabled!==true;
 export const barEnabled=()=>uiEnabled()&&config.approvalSurface==='chat'&&(!config.chatAppConsent||config.allowInlineDecisions);
-export function barResource(uri=BAR_URI){return {uri,name:'YGPT compact approval strip',mimeType:'text/html;profile=mcp-app',text:fs.readFileSync(path.join(RUNTIME,'approval-bar.html'),'utf8'),_meta:{ui:{prefersBorder:false,csp:{connectDomains:[],resourceDomains:[],frameDomains:[]}},'openai/widgetPrefersBorder':false,'openai/widgetCSP':{connect_domains:[],resource_domains:[]}}};}
+const BRAND_ICON_FILES=['plugin-icon-256.png','ygpt-local-green-y-256.png','ygpt-local-sky-y-256.png','ygpt-local-green-256.png','ygpt-local-signature-256.png'];
+// The strip cannot load external images (its CSP allows none), so the owner's
+// chosen icon is inlined as a data URL when the resource is served. Default
+// and fallback: the current sprout (assets/brand/plugin-icon-256.png).
+function brandIconDataUrl(){const name=BRAND_ICON_FILES.includes(config.brandIcon)?config.brandIcon:'plugin-icon-256.png';for(const candidate of [name,'plugin-icon-256.png']){try{return 'data:image/png;base64,'+fs.readFileSync(path.join(INSTALL,'assets','brand',candidate)).toString('base64');}catch{}}return 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFAAH/qp5gaQAAAABJRU5ErkJggg==';}
+export function barResource(uri=BAR_URI){const legacy=config.approvalStyle==='legacy';let text=fs.readFileSync(path.join(RUNTIME,legacy?'approval-bar-legacy.html':'approval-bar.html'),'utf8');if(!legacy)text=text.replace('__YGPT_BRAND_ICON__',brandIconDataUrl());return {uri,name:legacy?'YGPT compact approval strip (classic)':'YGPT compact approval strip',mimeType:'text/html;profile=mcp-app',text,_meta:{ui:{prefersBorder:false,csp:{connectDomains:[],resourceDomains:[],frameDomains:[]}},'openai/widgetPrefersBorder':false,'openai/widgetCSP':{connect_domains:[],resource_domains:[]}}};}
+// Test hook: the exact HTML a host receives for the current configuration.
+export function barHtmlForTest(){return barResource(BAR_URI).text;}
 export function handleBar(name,args,ledger,onApproved,isWaiting=()=>false){
  const id=args.requestId,operation=ledger.get(id);
  if(config.chatAppConsent&&['y_show_approval','y_review_approval','y_approval_center'].includes(name))return chatApprovalResult(ledger,args);
