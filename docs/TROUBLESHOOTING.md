@@ -22,7 +22,13 @@
 | Maintenance refused | Active work, pending approvals or unknown task state prevent replacement. The application does not kill uncertain work. |
 | Restore conflict | CONFLICT / executed:false / filesRestored:0 preserves later edits. Review the diff; do not repeat the stale restore. |
 | Desktop app lacks your login | Tool processes use a sanitized HOME/APPDATA; they are not your normal interactive profile. |
-
-OpenAI Secure MCP Tunnel is the default. For a dedicated private Tunnel, No authentication means no additional ChatGPT application OAuth; the Tunnel runtime key and identity still apply. Advanced public HTTPS/Cloudflare retains OAuth. Local-only is a development route, not a ChatGPT connection.
-
-The final RC3 candidate is unsigned and awaits owner testing. Never share keys, private profiles, raw logs or approval tokens in issues. See [setup guide](SETUP_GUIDE.md).
+| Tunnel disconnected | Check the connector token, outbound HTTPS/proxy, route and credentials. A Cloudflare connector token cannot create DNS. Do not replace an unrelated tunnel. |
+| Authentication failed | Distinguish Cloudflare API token, connector token, OAuth pairing key and Secure MCP Tunnel runtime key. Use the exact MCP resource URL and callback URI. |
+| SQLite tool missing | Compare the public catalog with ChatGPT's refreshed plugin tools. `y_sqlite_read` is public; two approval tools are App-only. Refresh the personal connection if needed. |
+| Restore conflict | `CONFLICT`, `executed:false`, `filesRestored:0` preserves newer content. Review the diff and restore in the correct order. Do not retry the stale restore. |
+| Desktop app has no login | Terminal processes use a sanitized HOME/APPDATA. This is different from your normal interactive app profile. No Windows account switch is implied. |
+| "App setup was rate limited" in ChatGPT | ChatGPT is pacing plugin creation. It is not a tunnel or local service failure; the Check step still shows your connection state. Wait a few minutes and create the plugin again with the same values. |
+| Check step shows "!" on Connection | Read the row's suggestions. They separate "not running", "running but not ready", key or tunnel ID mismatch, proxy or firewall, and a tunnel already used elsewhere. Run the checks again after each change. |
+| Owner approval page says "That key didn't match" | Copy the owner pairing key again from the setup window (Connect ChatGPT, then Copy) and paste it on the same page. If the page says it expired, start the connection again from ChatGPT. |
+| Native popup said "请求已过期或已处理" on every click (builds before this fix) | The popup sent the wrong CSRF header name, so the local server refused every decision. This is fixed in `runtime/approval-panel.ps1`. Update, then decide again. |
+| Setup retry after partial install | Retain existing files and credentials. The candidate currently refuses in-place overwrite; use a new empty candidate directory. Do not delete snapshots to force a reinstall. |

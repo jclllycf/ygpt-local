@@ -13,7 +13,7 @@ export const INSPECTION_URI=config.chatAppConsent?'ui://ygpt/approval/compact-v1
 const knownResources=[BAR_URI,LEGACY_BAR_URI,INSPECTION_URI,...['compact-v11-3','interactive-v11-2c','interactive-v11-2b','interactive-v11-2','interactive-v11-1','interactive-v11','inspection-v1'].map(n=>'ui://ygpt/approval/'+n+'.html')];
 export function approvalResourceUris(){
  const modern=config.rc10Candidate?knownResources:!config.rc9Candidate&&uiEnabled()?(barEnabled()?[BAR_URI,LEGACY_BAR_URI]:[BAR_URI]):[];
- return [...new Set(modern.flatMap(uri=>[uri,uri.replace('ui://ygpt/','ui://yuki/')]))];
+ return [...new Set(modern)];
 }
 export const approvalCenterTool={
  name:'y_approval_center',

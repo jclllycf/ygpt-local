@@ -7,21 +7,25 @@ import {fileURLToPath} from 'node:url';
 import {createRc9EngineExtension} from '../engine/src/rc9-integration.mjs';
 import {config} from './config.mjs';
 import {isReadOnlyInvocation} from './read-only-policy.mjs';
-import {authorize,canonical,route,within,highRiskCommand,argvRiskText,projectRoots} from './access-policy.mjs';
+import {authorize,canonical,route,within,highRiskCommand,argvRiskText,projectRoots,agentBoundary} from './access-policy.mjs';
+import {currentOwner,currentCall} from './ownership.mjs';
+import {diskInspect,deviceFingerprint} from './safe-actions.mjs';
+import {uiaDecision,uiaPresentation,uiaChatScope,windowIdentity} from '../engine/src/uia-consent.mjs';
 
 const allow=reason=>({decision:'allow',reason}),hold=reason=>({decision:'approve',kind:'capability',reason}),deny=reason=>({decision:'deny',reason});
 export function authorizeNative(intent){
   const n=intent.tool,a=intent.args??{};
-  if(!/^y_(?:file_|search_|process_|job_|browser_|desktop_|system_|engine_)/.test(n))return authorize(n,a);
+  if(!/^y_(?:file_|search_|project_|process_|job_|browser_|desktop_|system_)/.test(n))return authorize(n,a);
   if(n.startsWith('y_browser_')){
     // Every navigation/resource is independently checked by the engine. Only
     // owner-enrolled interactive origins permit clicks/typing/downloads.
     if(['y_browser_action','y_browser_download'].includes(n))return config.blacklistDefaultAllow?allow('Owner default-allow browser interaction; engine destination and tab ownership checks still apply'):hold('Browser interaction requires an owner-enrolled workflow origin');
     return allow('Isolated YGPT browser; enrolled destinations only');
   }
-  if(n==='y_desktop_windows')return allow('Read-only window inventory');
-  if(n.startsWith('y_desktop_'))return allow('Only owner-enrolled executable hashes and process birth identities are controllable');
-  if(['y_system_inspect','y_engine_history','y_process_list'].includes(n))return allow('Fixed read-only diagnostics or owner process inventory');
+  // UIA stays available; binding and every input/focus action need a human decision.
+  if(n.startsWith('y_desktop_'))return uiaDecision(n)??deny('Unclassified desktop capability: '+n);
+  if(['y_system_inspect','y_process_list'].includes(n))return allow('Fixed read-only diagnostics or this chat\'s process inventory');
+  if(n==='y_project_inspect'){const t=route(a.path??'');if(t.permission==='private'||t.permission==='vault'||t.sensitive)return deny('Protected project inspection target');return allow('Read-only project structure, manifest and Git inspection');}
   if(['y_process_run','y_process_start','y_job_submit'].includes(n)){
     if(config.readOnlyAutoAllow&&isReadOnlyInvocation(a))return allow('Parsed read-only PowerShell invocation; no approval');
     const cwd=a.cwd??projectRoots[0];
@@ -60,11 +64,12 @@ export async function createNativeExtension({backups,ledger,protectState}){
     if(tokenNames.includes(intent.tool)){
       const a=request.args,kind=intent.tool.startsWith('y_job_')?'job':'session',id=kind==='job'?a.id:a.sessionId;
       if(!ledger.owns(kind,id,a.outputToken))return deny('Missing, foreign or stale outputToken for this task/session');
+      if(intent.tool==='y_process_input'){const foreign=agentBoundary('interact_with_process',{input:a.text});if(foreign)return {...deny(foreign),code:'TARGET_FOREIGN'};}
       if(intent.tool==='y_process_input'&&highRiskCommand(a.text??''))return hold('Sensitive process stdin requires verified host review');
       return ledger.owns(kind,id,a.outputToken)?allow('Original call output capability verified'):deny('Missing, foreign or stale outputToken for this task/session');
     }
     if(intent.tool==='y_browser_action'||intent.tool==='y_browser_download'){
-      let url;try{url=new URL(engine.browser.page(request.args.tabId).url());}catch{return deny('Unknown owned browser tab');}
+      let url;try{url=new URL(engine.browser.page(request.args.tabId).url());}catch(e){return {...deny(e.message||'Unknown owned browser tab'),...(e.code?{code:e.code}:{})};}
       if(config.blacklistDefaultAllow){
         try{engine.browser.validateUrl(url.href);}catch{return deny('Browser destination is not enrolled');}
         return allow('Owner default-allow interaction in an owned isolated tab; destination and download bounds remain enforced');
@@ -78,7 +83,9 @@ export async function createNativeExtension({backups,ledger,protectState}){
   };
   engine=await createRc9EngineExtension({config:{mode:'rc9-integrated',root,stateDir:config.stateDir,legacyTools:false,python:config.python,pythonArgs:config.pythonArgs,ingressId:config.ingressId,
     allowedExecutables:[process.execPath,config.python,config.executables.git,path.join(process.env.SystemRoot,'System32/WindowsPowerShell/v1.0/powershell.exe'),path.join(process.env.SystemRoot,'System32/cmd.exe')].filter(Boolean),
-    browser:config.browser,authorizeExecutable},authorizeOperation,backupManager:backups,operationLedger:ledger,protectState});
+    browser:config.browser,authorizeExecutable,currentOwner,currentCall,agentProtectedRoots:config.agentProtectedRoots,
+    // Read-only physical disk/partition inventory (was y_disk_inspect).
+    physicalDisks:async()=>(await diskInspect()).map(d=>({...d,fingerprint:deviceFingerprint(d)}))},authorizeOperation,backupManager:backups,operationLedger:ledger,protectState});
   const invokeWithPolicy=engine.invoke.bind(engine);
   engine.invoke=(name,args)=>invocationScope.run({name,args},()=>invokeWithPolicy(name,args));
   if(config.readOnlyAutoAllow){
@@ -93,24 +100,46 @@ export async function createNativeExtension({backups,ledger,protectState}){
     };
     engine.invoke=(name,args)=>readScope.run(reads.has(name),()=>invoke(name,args));
   }
+  // The engine only reaches bind after the broker claimed a human-approved
+  // request for this exact window identity (see binding()). An owner may
+  // additionally restrict UIA to enrolled executables (path + SHA-256); that
+  // list narrows what can be approved, it never replaces the approval.
   const rawBind=engine.desktop.bind.bind(engine.desktop);
   engine.desktop.bind=async hwnd=>{
-    const inventory=await engine.desktop.windows(),win=inventory.windows.find(w=>w.hwnd===String(hwnd));
-    if(!win)throw Error('Window disappeared');
-    const rule=config.desktopAllowedApps.find(r=>r.path&&r.sha256&&win.executablePath&&canonical(r.path)===canonical(win.executablePath));
-    if(!rule||createHash('sha256').update(fs.readFileSync(rule.path)).digest('hex')!==rule.sha256)throw Error('Desktop app requires exact owner-enrolled path and SHA-256; no model enrollment');
+    const win=await engine.desktop.window(hwnd);
+    if(win.protected||!win.controllable)return rawBind(hwnd);
+    if(config.desktopRequireEnrollment){
+      const rule=config.desktopAllowedApps.find(r=>r.path&&r.sha256&&win.executablePath&&canonical(r.path)===canonical(win.executablePath));
+      if(!rule||createHash('sha256').update(fs.readFileSync(rule.path)).digest('hex')!==rule.sha256)throw Object.assign(Error('DESKTOP_NOT_ENROLLED: the owner restricted UIA to enrolled executables (path + SHA-256)'),{code:'DESKTOP_NOT_ENROLLED'});
+    }
     engine.desktop.enrollFromBroker(win.pid,win.birth);
     return rawBind(hwnd);
   };
+  // Window identity for approval binding and the card: exe path + SHA-256 + PID
+  // + process birth + hwnd. Bound targets keep the identity approved at bind.
+  const desktopWindow=async(name,args)=>{
+    if(name==='y_desktop_bind'){const win=await engine.desktop.window(args.hwnd);return {...win,executableSha256:win.executablePath?await engine.desktop.executableDigest(win.executablePath).catch(()=>null):null};}
+    if(name.startsWith('y_desktop_')&&args.targetId)return engine.desktop.target(args.targetId);
+    return null;
+  };
   return {engine,authorizeOperation,
     invokeApproved:(name,args)=>approvedInvocation.run({tool:name},()=>engine.invoke(name,args)),
-    binding(name,args){
+    async binding(name,args){
+      if(name==='y_desktop_bind'||name==='y_desktop_action')return {window:windowIdentity(await desktopWindow(name,args))};
       if(name.startsWith('y_browser_')&&args.tabId)return {tabId:args.tabId,url:engine.browser.page(args.tabId).url()};
       if(processTools.has(name)){
         const files=[args.executable,...(args.args??[]).filter(a=>typeof a==='string'&&path.isAbsolute(a)&&/\.(?:mjs|cjs|js|ps1|py|cmd|bat)$/i.test(a))];
         return {files:files.map(p=>({path:canonical(p),sha256:createHash('sha256').update(fs.readFileSync(p)).digest('hex')}))};
       }
       return null;
+    },
+    // Approval card content for capabilities that need more than the arguments.
+    async presentation(name,args){return name.startsWith('y_desktop_')?uiaPresentation(name,args,await desktopWindow(name,args)):null;},
+    // Narrow conversation grant for UIA; null means the broker's default rules.
+    chatScope(name,args){
+      if(!name.startsWith('y_desktop_'))return null;
+      let win=null;try{if(args.targetId)win=engine.desktop.target(args.targetId);}catch{}
+      return uiaChatScope(name,args,win);
     },
     tools:()=>engine.tools().filter(t=>t.name!=='y_ping').map(t=>{
       if(!['y_job_logs','y_job_cancel','y_process_poll','y_process_input','y_process_cancel'].includes(t.name))return t;

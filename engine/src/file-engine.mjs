@@ -16,8 +16,19 @@ export class YFileEngine {
     if (!snapshot || typeof snapshot !== 'function') throw new EngineError('SNAPSHOT_REQUIRED', 'A pre-write snapshot provider is required');
     return new YFileEngine(real, snapshot);
   }
-  constructor(root, snapshot) { this.root = root; this.snapshot = snapshot; this.pending=Promise.resolve(); }
-  exclusive(fn) { const work=this.pending.catch(()=>{}).then(fn);this.pending=work;return work; }
+  constructor(root, snapshot) { this.root = root; this.snapshot = snapshot; this.locks=new Map(); }
+  // Short per-target locks: writers of the same file (or a move/copy touching
+  // it) queue behind each other; different files proceed in parallel. Keys are
+  // taken in sorted order and only wait on earlier holders, so no deadlock.
+  // Conflicts with writers outside this process are caught by the hash checks.
+  async exclusive(targets, fn) {
+    const keys=[...new Set(targets.map(t=>path.resolve(t).toLowerCase()))].sort();
+    const prior=[...new Set(keys.map(k=>this.locks.get(k)).filter(Boolean))];
+    let release;const held=new Promise(resolve=>{release=resolve;});
+    for(const k of keys)this.locks.set(k,held);
+    try{await Promise.all(prior);return await fn();}
+    finally{release();for(const k of keys)if(this.locks.get(k)===held)this.locks.delete(k);}
+  }
   async resolve(input) {
     if (typeof input !== 'string' || !input.trim() || input.includes('\0')) throw new EngineError('BAD_PATH', 'Invalid path');
     const unprefixed=input.replace(/^[a-zA-Z]:[\\/]/,'');
@@ -57,7 +68,7 @@ export class YFileEngine {
     return { path: target, content: all.slice(offset, offset + lines).join('\n'), totalLines: all.length,
       remainingLines: Math.max(0, all.length - offset - lines), sha256: sha256(data) };
   }
-  async atomicWrite(input,value,options={}) { return this.exclusive(()=>this.writeLocked(input,value,options)); }
+  async atomicWrite(input,value,options={}) { return this.exclusive([await this.resolve(input)],()=>this.writeLocked(input,value,options)); }
   async writeLocked(input, value, { expectedSha256 } = {}) {
     const target = await this.resolve(input), bytes = Buffer.isBuffer(value) ? value : Buffer.from(String(value), 'utf8');
     if (bytes.length > 8 * 1024 * 1024) throw new EngineError('WRITE_LIMIT', 'Prototype file size limit: 8 MiB');
@@ -96,7 +107,7 @@ export class YFileEngine {
     try{const stat=await h.stat();if(!stat.isFile())throw new EngineError('NOT_FILE','Regular file required');const buffer=Buffer.alloc(length),{bytesRead}=await h.read(buffer,0,length,offset);return {path:target,offset,bytesRead,totalBytes:stat.size,base64:buffer.subarray(0,bytesRead).toString('base64'),nextOffset:offset+bytesRead};}finally{await h.close();}
   }
   async copy(source,destination,{expectedSha256,expectedSourceSha256}={}) {
-    return this.exclusive(async()=>{
+    return this.exclusive([await this.resolve(source),await this.resolve(destination)],async()=>{
       const src=await this.resolve(source),data=await this.boundedBytes(src,8*1024*1024);
       if(data.length>8*1024*1024)throw new EngineError('WRITE_LIMIT','Copy limit is 8 MiB');
       if(expectedSourceSha256!==undefined&&sha256(data)!==expectedSourceSha256)throw new EngineError('STALE_PREIMAGE','Source changed');
@@ -104,7 +115,7 @@ export class YFileEngine {
     });
   }
   async move(source,destination,{expectedSha256}={}) {
-    return this.exclusive(async()=>{
+    return this.exclusive([await this.resolve(source),await this.resolve(destination)],async()=>{
       const src=await this.resolve(source),dest=await this.resolve(destination);
       if(src.toLowerCase()===dest.toLowerCase())throw new EngineError('SAME_PATH','Source and destination are identical');
       const data=await this.boundedBytes(src,8*1024*1024),digest=sha256(data);
@@ -122,7 +133,7 @@ export class YFileEngine {
     });
   }
   async mkdir(input) {
-    return this.exclusive(async()=>{const target=await this.resolve(input),receipt=await this.snapshot({path:target,before:null,existed:false,sha256:null});
+    return this.exclusive([await this.resolve(input)],async()=>{const target=await this.resolve(input),receipt=await this.snapshot({path:target,before:null,existed:false,sha256:null});
       if(!receipt?.durable)throw new EngineError('BACKUP_FAILED','Directory preimage missing');let ok=false;
       try{await fs.mkdir(target);ok=true;return {path:target,snapshotId:receipt.id};}finally{await this.snapshot.finish?.(receipt.id,ok);}});
   }

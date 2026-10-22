@@ -1,18 +1,20 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import {execFile} from 'node:child_process';
+import {promisify} from 'node:util';
+const execFileP=promisify(execFile);
 import {z} from 'zod';
 import {zodToJsonSchema} from 'zod-to-json-schema';
-import Ajv from 'ajv';
 import {YFileEngine,EngineError,sha256} from './file-engine.mjs';
 import {YSearchEngine} from './search-engine.mjs';
 import {YTerminalEngine} from './terminal-engine.mjs';
 import {YBrowserEngine} from './browser-engine.mjs';
 import {YDesktopEngine} from './desktop-engine.mjs';
 import {YSystemEngine} from './system-engine.mjs';
-import {DesktopCommanderAdapter} from './compat-adapter.mjs';
 import {DurableJobs} from './durable-jobs.mjs';
 import {EngineLedger} from './ledger.mjs';
 import {fixtureSnapshotProvider,rc9SnapshotProvider} from './snapshot-adapter.mjs';
+import {assertIsolatedBrowserConfig} from './agent-protection.mjs';
 import {protectState as protectWindowsState} from './state-protection.mjs';
 import lockfile from 'proper-lockfile';
 
@@ -24,21 +26,25 @@ const processSpec={executable:str,args:z.array(z.string().max(32768)).max(100).d
 const sid=z.string().uuid();
 export async function createEngine(config,{authorize,backupManager,ledger:outerLedger,protectState}={}) {
   const root=await fs.realpath(config.root),stateDir=path.resolve(config.stateDir);
+  // The broker supplies the calling chat context; standalone fixtures use one local owner.
+  const currentOwner=typeof config.currentOwner==='function'?()=>config.currentOwner()??'local':()=>'local';
+  // YGPT's browser is always its own Playwright Edge instance: no CDP, profile
+  // or debugging endpoint of the user's or the Agent's browser can be configured.
+  assertIsolatedBrowserConfig(config.browser);
   await fs.mkdir(stateDir,{recursive:true});await (protectState??protectWindowsState)(stateDir);
   if(config.mode!=='fixture'&&(!authorize||!backupManager||!outerLedger))throw new EngineError('RC9_REQUIRED','Live integration requires trusted authorize, BackupManager and shared ledger; no model-supplied approval is accepted');
   const snapshot=backupManager?rc9SnapshotProvider(backupManager):await fixtureSnapshotProvider(root,stateDir);
   // Integrated mode is already guarded by the RC broker's PID+birth lease.
   // A second stale timer would reject a legitimate immediate crash recovery.
   const release=config.mode==='rc9-integrated'?async()=>{}:await lockfile.lock(stateDir,{lockfilePath:path.join(stateDir,'engine-instance.lock'),stale:30000,update:5000,retries:0});
-  const file=await YFileEngine.create(root,{snapshot}),terminal=new YTerminalEngine({root,stateDir,allowedExecutables:config.allowedExecutables,authorizeExecutable:config.mode==='rc9-integrated'?config.authorizeExecutable:undefined,maxOutputBytes:2*1024*1024});
-  const search=new YSearchEngine(file),browser=new YBrowserEngine({stateDir,...config.browser}),desktop=new YDesktopEngine({stateDir,allowedPids:config.desktopAllowedPids??[]}),system=new YSystemEngine(),dc=new DesktopCommanderAdapter({root,stateDir}),jobs=new DurableJobs({terminal,stateDir,python:config.python,pythonArgs:config.pythonArgs,ingressId:config.ingressId});
+  const file=await YFileEngine.create(root,{snapshot}),terminal=new YTerminalEngine({root,stateDir,allowedExecutables:config.allowedExecutables,authorizeExecutable:config.mode==='rc9-integrated'?config.authorizeExecutable:undefined,maxOutputBytes:2*1024*1024,currentOwner});
+  const search=new YSearchEngine(file),browser=new YBrowserEngine({stateDir,...config.browser,currentOwner}),desktop=new YDesktopEngine({stateDir,allowedPids:config.desktopAllowedPids??[],protectedPaths:config.agentProtectedRoots??[],currentOwner}),system=new YSystemEngine({stateDir,physicalDisks:config.physicalDisks}),jobs=new DurableJobs({terminal,stateDir,python:config.python,pythonArgs:config.pythonArgs,ingressId:config.ingressId});
   const ledger=outerLedger??new EngineLedger(stateDir),table=new Map();
   const add=(name,shape,handler,{mutating=false,openWorld=false,description=name}={})=>{
     const schema=z.object({...shape,requestKey:z.string().max(120).optional(),...(config.mode==='rc9-integrated'?{outputToken:z.string().max(128).optional()}:{})}).strict();
     table.set(name,{name,title:'YGPT Local · '+name,description:'YGPT Local: '+description,inputSchema:zodToJsonSchema(schema,{$refStrategy:'none'}),annotations:{readOnlyHint:!mutating,destructiveHint:mutating,idempotentHint:!mutating,openWorldHint:openWorld},parse:a=>schema.parse(a),handler,mutating});
   };
   add('y_ping',{},async()=>({...identity,processId:process.pid,mode:config.mode,scope:root,rc9Protection:!!backupManager,modules:['file','terminal','search','browser','desktop','system'],chatgptConnected:false,tunnelCreated:false}));
-  add('y_engine_history',{limit:z.number().int().min(1).max(100).default(30)},a=>ledger.history(a.limit));
   add('y_file_list',{path:str.default('.')},a=>file.list(a.path));
   add('y_file_info',{path:str},a=>file.stat(a.path));
   add('y_file_read',{path:str,offset:z.number().int().min(0).default(0),lines:z.number().int().min(1).max(2000).default(100)},a=>file.read(a.path,a));
@@ -49,6 +55,42 @@ export async function createEngine(config,{authorize,backupManager,ledger:outerL
   add('y_file_move',{source:str,destination:str,expectedSha256:hash},a=>file.move(a.source,a.destination,a),{mutating:true});
   add('y_file_mkdir',{path:str},a=>file.mkdir(a.path),{mutating:true});
   add('y_file_batch',{operations:z.array(z.object({kind:z.enum(['write','copy','move','edit']),path:str.optional(),source:str.optional(),destination:str.optional(),content:text.optional(),oldText:str.optional(),newText:text.optional(),expectedSha256:hash}).strict()).min(1).max(50)},a=>file.batch(a.operations),{mutating:true});
+  add('y_file_read_many',{paths:z.array(str).min(1).max(20),lines:z.number().int().min(1).max(2000).default(200),maxBytesPerFile:z.number().int().min(1024).max(1048576).default(262144)},async a=>{
+    const files=[];for(const p of a.paths){try{const r=await file.read(p,{lines:a.lines,maxBytes:a.maxBytesPerFile});files.push({path:r.path,ok:true,content:r.content,sha256:r.sha256,totalLines:r.totalLines,remainingLines:r.remainingLines});}catch(e){files.push({path:p,ok:false,error:{code:e.code??'READ_FAILED',message:String(e.message).slice(0,300)}});}}
+    return {files,succeeded:files.filter(f=>f.ok).length,failed:files.filter(f=>!f.ok).length};
+  },{description:'Read several text files in one call: per-file byte/line limits, a failure in one file never fails the batch, SHA-256 per file'});
+  add('y_file_patch',{path:str,expectedSha256:z.string().regex(/^[a-f0-9]{64}$/),hunks:z.array(z.object({oldText:z.string().min(1).max(1048576),newText:z.string().max(1048576),count:z.number().int().min(1).max(1000).optional()}).strict()).min(1).max(50),dryRun:z.boolean().default(false)},async a=>{
+    const target=await file.resolve(a.path);const data=await file.boundedBytes(target,8*1024*1024);
+    const before=sha256(data);if(before!==a.expectedSha256)throw new EngineError('STALE_PREIMAGE','Target changed since inspection');
+    let content=new TextDecoder('utf-8',{fatal:true}).decode(data);
+    for(const [i,h] of a.hunks.entries()){const occurrences=content.split(h.oldText).length-1;
+      if(occurrences===0)throw new EngineError('PATCH_NOT_FOUND','Hunk '+(i+1)+' text not found');
+      if(h.count!==undefined&&occurrences!==h.count)throw new EngineError('PATCH_MISMATCH','Hunk '+(i+1)+' expected '+h.count+' occurrence(s), found '+occurrences);
+      content=content.split(h.oldText).join(h.newText);}
+    const afterBytes=Buffer.from(content,'utf8');
+    if(a.dryRun)return {path:target,dryRun:true,beforeSha256:before,afterSha256:sha256(afterBytes),hunksApplied:a.hunks.length,bytesBefore:data.length,bytesAfter:afterBytes.length};
+    const written=await file.atomicWrite(a.path,content,{expectedSha256:before});
+    return {path:target,beforeSha256:before,afterSha256:written.sha256,snapshotId:written.snapshotId,hunksApplied:a.hunks.length,bytes:afterBytes.length};
+  },{mutating:true,description:'Apply exact text hunks to one file, guarded by the expectedSha256 from your last read; atomic write with a pre-write snapshot; dryRun previews the resulting SHA without writing'});
+  add('y_project_inspect',{path:str.default('.'),maxEntries:z.number().int().min(1).max(500).default(200)},async a=>{
+    const dir=await file.resolve(a.path);const info=await fs.stat(dir);if(!info.isDirectory())throw new EngineError('NOT_DIRECTORY','Project inspection target is not a directory');
+    const entries=[];let truncated=false;
+    const walk=async(rel,depth)=>{if(entries.length>=a.maxEntries){truncated=true;return;}
+      let items;try{items=await fs.readdir(path.join(dir,rel),{withFileTypes:true});}catch{return;}
+      items.sort((x,y)=>x.name.localeCompare(y.name));
+      for(const it of items){if(entries.length>=a.maxEntries){truncated=true;break;}
+        if(['node_modules','.git'].includes(it.name))continue;
+        const r=rel?rel+'/'+it.name:it.name;
+        if(it.isDirectory()){entries.push({path:r,type:'directory'});if(depth<3)await walk(r,depth+1);}
+        else if(it.isFile()){let size=null;try{size=(await fs.stat(path.join(dir,r))).size;}catch{}entries.push({path:r,type:'file',size});}}};
+    await walk('',0);
+    const manifests={};
+    for(const name of ['package.json','pyproject.toml','Cargo.toml','go.mod']){try{const raw=await fs.readFile(path.join(dir,name),'utf8');manifests[name]=name==='package.json'?(()=>{try{const j=JSON.parse(raw);return {name:j.name??null,scripts:Object.keys(j.scripts??{})};}catch{return {present:true};}})():{present:true};}catch{}}
+    let git=null;const gitExe=(config.allowedExecutables??[]).find(x=>/git(?:\.exe)?$/i.test(String(x)));
+    if(gitExe){const run=async args=>{const {stdout}=await execFileP(gitExe,['-C',dir,...args],{timeout:5000,windowsHide:true,maxBuffer:65536});return stdout.trim();};
+      try{if(await run(['rev-parse','--is-inside-work-tree'])==='true'){const [branch,status,log]=await Promise.all([run(['branch','--show-current']).catch(()=>''),run(['status','--porcelain=v1']).catch(()=>''),run(['log','--oneline','-5']).catch(()=>'' )]);git={branch:branch||null,dirtyLines:status?status.split('\n').length:0,status:status?status.split('\n').slice(0,50):[],recentCommits:log?log.split('\n'):[]};}}catch{git=null;}}
+    return {path:dir,entries,truncated,manifests,git};
+  },{description:'One bounded read of a project: directory structure, package manifests and read-only Git state (branch, dirty summary, recent commits)'});
   add('y_search_text',{directory:str.default('.'),pattern:str,regex:z.boolean().default(false),caseSensitive:z.boolean().default(true),glob:str.optional(),offset:z.number().int().min(0).max(5000).default(0),maxMatches:z.number().int().min(1).max(2000).default(100)},a=>search.findText(a.directory,a.pattern,a));
   add('y_search_files',{directory:str.default('.'),pattern:str.default('*'),offset:z.number().int().min(0).default(0),limit:z.number().int().min(1).max(1000).default(100)},a=>search.findFiles(a.directory,a.pattern,a));
   add('y_process_run',processSpec,a=>terminal.run(a),{mutating:true});
@@ -57,7 +99,8 @@ export async function createEngine(config,{authorize,backupManager,ledger:outerL
   add('y_process_input',{sessionId:sid,text:z.string().max(65536),end:z.boolean().default(false)},a=>terminal.input(a.sessionId,a.text,a),{mutating:true});
   add('y_process_cancel',{sessionId:sid},a=>terminal.cancel(a.sessionId),{mutating:true});
   add('y_process_list',{},()=>terminal.list());
-  add('y_job_submit',{...processSpec,id:sid},a=>jobs.submit(a),{mutating:true});
+  // A durable job is for long work: default 30 minutes, up to 24 hours.
+  add('y_job_submit',{...processSpec,timeoutMs:z.number().int().min(100).max(86400000).default(1800000),id:sid},a=>jobs.submit(a),{mutating:true});
   add('y_job_status',{id:sid},a=>jobs.status(a.id));add('y_job_logs',{id:sid},a=>jobs.logs(a.id));add('y_job_cancel',{id:sid},a=>jobs.cancel(a.id),{mutating:true});add('y_job_list',{},()=>jobs.list());
   add('y_browser_open',{url:str},a=>browser.open(a.url),{mutating:true,openWorld:true});
   add('y_browser_tabs',{},()=>browser.list());
@@ -74,36 +117,18 @@ export async function createEngine(config,{authorize,backupManager,ledger:outerL
   add('y_desktop_value',{targetId:sid,...selector},a=>desktop.act(a.targetId,'value',a));
   add('y_desktop_action',{targetId:sid,action:z.enum(['focus','setValue','invoke','click','type']),...selector,value:z.string().max(10000).optional()},a=>desktop.act(a.targetId,a.action,a),{mutating:true,openWorld:true});
   add('y_desktop_screenshot',{targetId:sid},a=>desktop.capture(a.targetId));
-  add('y_system_inspect',{kind:z.enum(['health','processes','services','events','autostarts','disks']).default('health')},a=>system.inspect(a.kind));
+  add('y_system_inspect',{kind:z.enum(['health','processes','services','events','autostarts','disks','physical-disks']).default('health')},a=>system.inspect(a.kind));
 
-  const dcNames=new Set(['get_config','read_file','read_multiple_files','write_file','create_directory','list_directory','move_file','start_search','get_more_search_results','stop_search','list_searches','get_file_info','edit_block','start_process','read_process_output','interact_with_process','force_terminate','list_sessions']);
-  const dcWrites=new Set(['write_file','edit_block','create_directory','move_file']),dcMutates=new Set([...dcWrites,'start_process','interact_with_process','force_terminate']);
-  const ajv=new Ajv({strict:false,allErrors:true});
-  if(config.legacyTools!==false){for(const upstream of await dc.tools()){
-    if(!dcNames.has(upstream.name))continue;const validate=ajv.compile(upstream.inputSchema),name=upstream.name;
-    const handler=async a=>{
-      for(const key of ['path','file_path','source','destination'])if(a[key])a={...a,[key]:await file.resolve(a[key])};
-      if(a.paths)a={...a,paths:await Promise.all(a.paths.map(p=>file.resolve(p)))};
-      // Shell strings are supplied by an authenticated owner/broker; this is not an OS sandbox.
-      if(name==='start_process'&&!config.allowLegacyCommands)throw new EngineError('RC9_REQUIRED','Legacy shell commands require explicit owner config and outer RC9 authorization');
-      const receipts=[];if(dcWrites.has(name))for(const target of [a.path,a.file_path,a.source,a.destination].filter(Boolean)){
-        let before=null;try{before=await file.boundedBytes(target);}catch(e){if(e.code!=='ENOENT')throw e;}
-        const receipt=await snapshot({path:target,before,existed:before!==null,sha256:before===null?null:sha256(before)});if(!receipt?.durable)throw new EngineError('BACKUP_FAILED','Legacy write snapshot failed');receipts.push(receipt);}
-      let ok=false;try{const got=await dc.invoke(name,a);ok=!got.isError;return {upstreamResult:got};}finally{for(const r of receipts)await snapshot.finish?.(r.id,ok);}
-    };
-    const definition={...upstream,inputSchema:{...upstream.inputSchema,properties:{...upstream.inputSchema.properties,contextToken:{type:'string',description:'Compatibility only. Never grants permission.'}}},title:'YGPT Local · '+name,description:'YGPT Local compatible '+name+'. '+(upstream.description??'').replace(/Desktop Commander/gi,'local engine'),_meta:undefined,mutating:dcMutates.has(name),annotations:{readOnlyHint:!dcMutates.has(name),destructiveHint:dcMutates.has(name),openWorldHint:name==='start_process'},parse:a=>{const {contextToken,...rest}=a;if(!validate(rest))throw new EngineError('BAD_ARGS',ajv.errorsText(validate.errors));return rest;},handler};
-    table.set(name,definition);table.set('y_local_'+name,{...definition,name:'y_local_'+name});
-  }}
-  return {identity,file,terminal,search,browser,desktop,system,dc,jobs,ledger,
+  return {identity,file,terminal,search,browser,desktop,system,jobs,ledger,
     tools(){return [...table.values()].map(({parse,handler,mutating,...tool})=>tool);},
     async invoke(name,args={}){
       let operation;try{const t=table.get(name);if(!t)throw new EngineError('NO_TOOL','Unknown YGPT Local tool');const parsed=t.parse(args),{requestKey,...a}=parsed;
         const decision=authorize?await authorize({tool:name,args:a,mutating:t.mutating,openWorld:t.annotations?.openWorldHint,root}):{allowed:config.mode==='fixture'};
-        if(decision?.allowed!==true)throw new EngineError('RC9_BLOCKED',decision?.reason??'Outer policy did not authorize this exact operation');
+        if(decision?.allowed!==true)throw new EngineError(decision?.code??/^(TARGET_FOREIGN|SESSION_FOREIGN)\b/.exec(decision?.reason??'')?.[1]??'RC9_BLOCKED',decision?.reason??'Outer policy did not authorize this exact operation');
         operation=ledger.begin(name,a,requestKey);if(operation.reused)return operation.result;
-        const result=await t.handler(a),upstreamError=result?.upstreamResult?.isError===true,processError=name==='y_process_run'&&result.state!=='succeeded',response={product:'YGPT Local',callId:operation.id,ok:!upstreamError&&!processError,result,...(upstreamError?{error:{code:'UPSTREAM_EXECUTION_FAILED',message:'The compatible upstream operation returned an error; see original tool content'}}:processError?{error:{code:'PROCESS_EXIT_FAILED',message:'Process ended with state '+result.state+' and exit code '+result.exitCode}}:{})};ledger.finish(operation.id,response);return response;
+        const result=await t.handler(a),processError=name==='y_process_run'&&result.state!=='succeeded',response={product:'YGPT Local',callId:operation.id,ok:!processError,result,...(processError?{error:{code:'PROCESS_EXIT_FAILED',message:'Process ended with state '+result.state+' and exit code '+result.exitCode}}:{})};ledger.finish(operation.id,response);return response;
       }catch(e){const outcomeUnknown=['UIA_TIMEOUT','JOB_CONTROL_TIMEOUT'].includes(e.code)||e.name==='TimeoutError';const response={product:'YGPT Local',callId:operation?.id??null,ok:false,error:{code:e.code??(outcomeUnknown?'RESULT_UNKNOWN':'EXECUTION_FAILED'),message:String(e.message).slice(0,1000),...(outcomeUnknown?{outcomeUnknown:true}:{})}};if(operation&&!operation.reused)ledger.finish(operation.id,response);return response;}
     },
-    async close(){await Promise.allSettled([terminal.close(),browser.close(),dc.close()]);if(!outerLedger)ledger.close();await release();}
+    async close(){await Promise.allSettled([terminal.close(),browser.close()]);if(!outerLedger)ledger.close();await release();}
   };
 }

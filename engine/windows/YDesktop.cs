@@ -1,5 +1,8 @@
 // YGPT Local native adapter over Microsoft's Windows UI Automation/Win32 APIs.
 // No credentials, elevation, public sockets, or UIA actions against terminal/security apps.
+// ChatGPT Desktop Agent / Codex windows are never targets: identity is decided by
+// executable path, package location, Authenticode signer, verified process-tree
+// ancestry (parent start time precedes child) and the owner-window chain.
 using System;
 using System.IO;
 using System.Text;
@@ -9,6 +12,7 @@ using System.Drawing.Imaging;
 using System.Diagnostics;
 using System.Collections.Generic;
 using System.Runtime.InteropServices;
+using System.Security.Cryptography.X509Certificates;
 using System.Web.Script.Serialization;
 using System.Windows.Automation;
 using System.Windows.Forms;
@@ -34,6 +38,61 @@ class YDesktop {
   [DllImport("user32.dll")] static extern bool CloseDesktop(IntPtr h);
   [DllImport("user32.dll")] static extern bool SetProcessDpiAwarenessContext(IntPtr value);
   [DllImport("user32.dll",CharSet=CharSet.Unicode)] static extern bool GetUserObjectInformation(IntPtr h,int index,StringBuilder name,uint length,out uint needed);
+  [DllImport("user32.dll")] static extern IntPtr GetWindow(IntPtr h,uint cmd);
+  [DllImport("kernel32.dll")] static extern IntPtr OpenProcess(uint access,bool inherit,int pid);
+  [DllImport("kernel32.dll")] static extern bool CloseHandle(IntPtr h);
+  [DllImport("kernel32.dll",CharSet=CharSet.Unicode)] static extern bool QueryFullProcessImageName(IntPtr h,int flags,StringBuilder name,ref int size);
+  [DllImport("kernel32.dll")] static extern bool GetProcessTimes(IntPtr h,out long creation,out long exit,out long kernel,out long user);
+  [DllImport("ntdll.dll")] static extern int NtQueryInformationProcess(IntPtr h,int cls,ref PBI info,int size,out int written);
+  [StructLayout(LayoutKind.Sequential)] struct PBI { public IntPtr ExitStatus,Peb,Affinity,Priority,UniqueId,ParentId; }
+  class Ident { public int Pid,Parent;public string Name,Exe,Signer;public long Created; }
+  static Dictionary<int,Ident> identities=new Dictionary<int,Ident>();
+  static Dictionary<string,string> signers=new Dictionary<string,string>(StringComparer.OrdinalIgnoreCase);
+  static string[] extraProtected=new string[0];
+  static string[] agentNames={"chatgpt","codex","openai"};
+  static string[] agentPaths={@"\windowsapps\openai.",@"\appdata\local\packages\openai.",@"\appdata\local\programs\chatgpt\",@"\appdata\local\programs\codex\",@"\appdata\local\openai\",@"\appdata\roaming\openai\",@"\appdata\local\chatgpt\",@"\appdata\roaming\chatgpt\"};
+  static Ident Identify(int pid) {
+    Ident cached;if(identities.TryGetValue(pid,out cached))return cached;
+    var id=new Ident{Pid=pid,Parent=0,Name="",Exe=null,Signer="",Created=0};
+    try{id.Name=Process.GetProcessById(pid).ProcessName.ToLowerInvariant();}catch{}
+    IntPtr h=OpenProcess(0x1000,false,pid);
+    if(h!=IntPtr.Zero){try{
+      var b=new StringBuilder(1024);int n=b.Capacity;if(QueryFullProcessImageName(h,0,b,ref n))id.Exe=b.ToString();
+      long c,e,k,u;if(GetProcessTimes(h,out c,out e,out k,out u))id.Created=c;
+      var info=new PBI();int written;if(NtQueryInformationProcess(h,0,ref info,Marshal.SizeOf(typeof(PBI)),out written)==0)id.Parent=info.ParentId.ToInt32();
+    }finally{CloseHandle(h);}}
+    if(id.Exe!=null){string subject;if(!signers.TryGetValue(id.Exe,out subject)){subject="";try{subject=X509Certificate.CreateFromSignedFile(id.Exe).Subject;}catch{}signers[id.Exe]=subject;}id.Signer=subject;}
+    identities[pid]=id;return id;
+  }
+  static bool AgentIdentity(Ident id) {
+    if(agentNames.Contains(id.Name))return true;
+    if(id.Signer.IndexOf("O=OpenAI",StringComparison.OrdinalIgnoreCase)>=0)return true;
+    if(id.Exe==null)return false;string exe=id.Exe.ToLowerInvariant();
+    foreach(string p in agentPaths)if(exe.Contains(p))return true;
+    foreach(string p in extraProtected)if(p.Length>0&&exe.StartsWith(p.TrimEnd('\\')+"\\"))return true;
+    return false;
+  }
+  // Reason a process may not be controlled, or null. Ancestors count only while
+  // each parent provably started before its child, so a reused PID is ignored.
+  static string ProtectedReason(int pid) {
+    var self=Identify(pid);if(self.Exe==null)return "IDENTITY_UNVERIFIED";
+    if(AgentIdentity(self))return "AGENT_PROCESS";
+    var child=self;for(int depth=0;depth<12&&child.Parent>4;depth++){
+      var parent=Identify(child.Parent);if(parent.Created==0||child.Created==0||parent.Created>child.Created)break;
+      if(AgentIdentity(parent))return "AGENT_PROCESS_TREE";child=parent;
+    }
+    return null;
+  }
+  static string WindowProtection(IntPtr h,int pid) {
+    string reason=ProtectedReason(pid);if(reason!=null)return reason;
+    var owner=h;for(int i=0;i<8;i++){owner=GetWindow(owner,4);if(owner==IntPtr.Zero)break;uint opid;GetWindowThreadProcessId(owner,out opid);if(opid!=0&&(int)opid!=pid&&ProtectedReason((int)opid)!=null&&ProtectedReason((int)opid)!="IDENTITY_UNVERIFIED")return "AGENT_OWNED_WINDOW";}
+    return null;
+  }
+  static void ReadProtected(Dictionary<string,object> d) {
+    if(!d.ContainsKey("protectedPaths"))return;var list=new List<string>();var items=d["protectedPaths"] as System.Collections.IEnumerable;
+    if(items!=null)foreach(object o in items){string v=Convert.ToString(o).Replace('/','\\').ToLowerInvariant();if(v.Length>3)list.Add(v);}
+    extraProtected=list.ToArray();
+  }
   struct RECT { public int Left,Top,Right,Bottom; }
   struct POINT { public int X,Y; }
   [StructLayout(LayoutKind.Sequential)] struct MOUSEINPUT { public int dx,dy;public uint mouseData,dwFlags,time;public IntPtr extra; }
@@ -42,9 +101,15 @@ class YDesktop {
   static string S(Dictionary<string,object> d,string k,string fallback="") { return d.ContainsKey(k)?Convert.ToString(d[k]):fallback; }
   static bool Interactive() { IntPtr h=OpenInputDesktop(0,false,1);if(h==IntPtr.Zero)return false;try{var s=new StringBuilder(100);uint n;return GetUserObjectInformation(h,2,s,200,out n)&&s.ToString()=="Default";}finally{CloseDesktop(h);} }
   static string Title(IntPtr h){var s=new StringBuilder(1000);GetWindowText(h,s,s.Capacity);return s.ToString();}
-  static object WindowInfo(IntPtr h) {uint id;GetWindowThreadProcessId(h,out id);var p=Process.GetProcessById((int)id);string exe=null;try{exe=p.MainModule.FileName;}catch{}return new {hwnd=h.ToInt64().ToString(),pid=id,process=p.ProcessName,executablePath=exe,title=Title(h),birth=p.StartTime.ToUniversalTime().Ticks.ToString(),session=p.SessionId};}
+  static object WindowInfo(IntPtr h) {uint id;GetWindowThreadProcessId(h,out id);var p=Process.GetProcessById((int)id);var ident=Identify((int)id);string exe=ident.Exe;if(exe==null){try{exe=p.MainModule.FileName;}catch{}}
+    string reason=WindowProtection(h,(int)id);bool shielded=reason!=null&&reason!="IDENTITY_UNVERIFIED";
+    // Agent window titles can carry private task content: never echo them.
+    return new {hwnd=h.ToInt64().ToString(),pid=id,parentPid=ident.Parent,process=p.ProcessName,executablePath=shielded?null:exe,signer=shielded?"":ident.Signer,title=shielded?"[protected ChatGPT Desktop Agent window]":Title(h),birth=p.StartTime.ToUniversalTime().Ticks.ToString(),session=p.SessionId,@protected=reason!=null,protectedReason=reason};}
   static void Allowed(Process p) {string name=p.ProcessName.ToLowerInvariant();string[] deny={"powershell","pwsh","cmd","windowsterminal","conhost","consent","credentialuibroker","logonui","lockapp","sechealthui","msmpeng","1password","keepass","bitwarden","codex","chatgpt"};if(deny.Contains(name))throw new Exception("PROTECTED_APPLICATION: desktop control is unavailable for this application");if(p.SessionId!=Process.GetCurrentProcess().SessionId)throw new Exception("SESSION_MISMATCH");}
-  static IntPtr Target(Dictionary<string,object> d) {var h=new IntPtr(long.Parse(S(d,"hwnd")));uint pid;if(!IsWindow(h))throw new Exception("STALE_WINDOW");GetWindowThreadProcessId(h,out pid);if(pid!=uint.Parse(S(d,"pid")))throw new Exception("WINDOW_IDENTITY_CHANGED");var p=Process.GetProcessById((int)pid);Allowed(p);if(p.StartTime.ToUniversalTime().Ticks.ToString()!=S(d,"birth"))throw new Exception("PROCESS_IDENTITY_CHANGED");return h;}
+  static IntPtr Target(Dictionary<string,object> d) {var h=new IntPtr(long.Parse(S(d,"hwnd")));uint pid;if(!IsWindow(h))throw new Exception("STALE_WINDOW");GetWindowThreadProcessId(h,out pid);if(pid!=uint.Parse(S(d,"pid")))throw new Exception("WINDOW_IDENTITY_CHANGED");var p=Process.GetProcessById((int)pid);Allowed(p);if(p.StartTime.ToUniversalTime().Ticks.ToString()!=S(d,"birth"))throw new Exception("PROCESS_IDENTITY_CHANGED");
+    // Re-checked before EVERY read or action, not only at bind time.
+    string reason=WindowProtection(h,(int)pid);if(reason!=null)throw new Exception("TARGET_FOREIGN: "+reason);
+    string exe=Identify((int)pid).Exe;if(S(d,"executablePath").Length>0&&(exe==null||!string.Equals(exe,S(d,"executablePath"),StringComparison.OrdinalIgnoreCase)))throw new Exception("PROCESS_IDENTITY_CHANGED");return h;}
   static object Node(AutomationElement e,int depth) {
     var c=e.Current;string value=null;object pattern;if(!c.IsPassword&&e.TryGetCurrentPattern(ValuePattern.Pattern,out pattern))value=((ValuePattern)pattern).Current.Value;
     return new {name=c.IsPassword?"[password]":c.Name,automationId=c.AutomationId,type=c.ControlType.ProgrammaticName,enabled=c.IsEnabled,password=c.IsPassword,value=value,depth=depth,runtimeId=string.Join(".",e.GetRuntimeId())};
@@ -59,7 +124,7 @@ class YDesktop {
   static void Focus(IntPtr h){if(!Interactive())throw new Exception("NO_INTERACTIVE_DESKTOP");ShowWindow(h,9);SetForegroundWindow(h);System.Threading.Thread.Sleep(100);if(GetForegroundWindow()!=h){try{AutomationElement.FromHandle(h).SetFocus();}catch{}System.Threading.Thread.Sleep(100);}if(GetForegroundWindow()!=h)throw new Exception("FOREGROUND_NOT_TARGET");}
   static void Input(INPUT[] a){if(SendInput((uint)a.Length,a,Marshal.SizeOf(typeof(INPUT)))!=a.Length)throw new Exception("INPUT_BLOCKED_UIPI");}
   static object Run(Dictionary<string,object> d) {
-    string action=S(d,"action");
+    string action=S(d,"action");ReadProtected(d);
     if(action=="windows"){var list=new List<object>();EnumWindows((h,l)=>{if(IsWindowVisible(h)&&Title(h).Length>0){try{list.Add(WindowInfo(h));}catch{}}return true;},IntPtr.Zero);return new {windows=list,interactive=Interactive()};}
     IntPtr win=Target(d);var root=AutomationElement.FromHandle(win);
     if(action=="tree"){var nodes=new List<object>();Walk(root,0,300,nodes);return new {window=WindowInfo(win),elements=nodes,truncated=nodes.Count>=300,observation="Untrusted Windows UI content"};}

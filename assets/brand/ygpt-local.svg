@@ -1,1 +1,56 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" role="img" aria-label="YGPT Local"><rect width="512" height="512" rx="112" fill="#153D34"/><path d="M144 148 256 256 368 148M256 256v124" fill="none" stroke="#9BE8C4" stroke-width="62" stroke-linecap="round" stroke-linejoin="round"/><circle cx="256" cy="256" r="17" fill="#F7FAF8"/></svg>
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
+  <!-- YGPT Local mark, "First Light". Master source for scripts/make-icons.mjs; keep to rect/polygon/circle/line,
+       round-capped stroked or filled path (M/L/H/V/C/S/Q/Z), and userSpaceOnUse gradients. -->
+  <!-- The sprout Y: a cursor opens into two leaf-shaped arms (growth), and the sun rises above where they divide.
+       Light sky at the leaf tips deepens toward the stem; the sun is the one warm thing. White tile, soft sky corner. -->
+  <!-- Tile #FFFFFF -> #EFF8FE, edge #D5E6F2; leaves #7DD3FC -> #38BDF8 -> #0284C7 (small cut #38BDF8 -> #0369A1);
+       sun #FFD9AE -> #FDBA74 -> #FB9A4B with its highlight up and to the left. -->
+  <!-- Two optical cuts. 32 px and up: the drawing. 31 px and below: thinner arms with a deeper notch, a darker leaf
+       gradient and a larger sun with more air around it, so the sprout and the sun stay apart at 16 px. -->
+  <defs>
+    <linearGradient id="tile" gradientUnits="userSpaceOnUse" x1="8" y1="8" x2="248" y2="248">
+      <stop offset="0" stop-color="#FFFFFF"/>
+      <stop offset="1" stop-color="#EFF8FE"/>
+    </linearGradient>
+    <linearGradient id="leaf-left" gradientUnits="userSpaceOnUse" x1="50" y1="84" x2="124" y2="210">
+      <stop offset="0" stop-color="#7DD3FC"/>
+      <stop offset="0.45" stop-color="#38BDF8"/>
+      <stop offset="1" stop-color="#0284C7"/>
+    </linearGradient>
+    <linearGradient id="leaf-right" gradientUnits="userSpaceOnUse" x1="210" y1="78" x2="128" y2="192">
+      <stop offset="0" stop-color="#7DD3FC"/>
+      <stop offset="0.45" stop-color="#38BDF8"/>
+      <stop offset="1" stop-color="#0284C7"/>
+    </linearGradient>
+    <radialGradient id="sun" gradientUnits="userSpaceOnUse" cx="124" cy="58" r="24">
+      <stop offset="0" stop-color="#FFD9AE"/>
+      <stop offset="0.55" stop-color="#FDBA74"/>
+      <stop offset="1" stop-color="#FB9A4B"/>
+    </radialGradient>
+    <linearGradient id="leaf-left-small" gradientUnits="userSpaceOnUse" x1="44" y1="94" x2="122" y2="220">
+      <stop offset="0" stop-color="#38BDF8"/>
+      <stop offset="1" stop-color="#0369A1"/>
+    </linearGradient>
+    <linearGradient id="leaf-right-small" gradientUnits="userSpaceOnUse" x1="212" y1="86" x2="126" y2="198">
+      <stop offset="0" stop-color="#38BDF8"/>
+      <stop offset="1" stop-color="#0369A1"/>
+    </linearGradient>
+    <radialGradient id="sun-small" gradientUnits="userSpaceOnUse" cx="122" cy="58" r="34">
+      <stop offset="0" stop-color="#FFD9AE"/>
+      <stop offset="0.55" stop-color="#FDBA74"/>
+      <stop offset="1" stop-color="#FB9A4B"/>
+    </radialGradient>
+  </defs>
+  <rect x="8" y="8" width="240" height="240" rx="60" fill="#D5E6F2"/>
+  <rect x="9" y="9" width="238" height="238" rx="59" fill="url(#tile)"/>
+  <!-- Large cut. Left leaf: tip up at the left, belly to the outside, running down into the stem with a rounded end. -->
+  <path id="leaf-left-path" d="M50,84 C88,88 130,116 131,162 C131,182 129,196 126,206 C124,212 120,212 119,206 C112,168 70,136 50,84 Z" fill="url(#leaf-left)" data-min-size="32"/>
+  <!-- Large cut. Right leaf: narrower, tip flicked up at the right, its base buried in the stem. -->
+  <path id="leaf-right-path" d="M210,78 C204,120 166,160 128,192 C126,148 156,94 210,78 Z" fill="url(#leaf-right)" data-min-size="32"/>
+  <circle cx="128" cy="64" r="20" fill="url(#sun)" data-min-size="32"/>
+  <!-- Small cut: hidden in browsers and design tools by display="none"; make-icons.mjs ignores display and picks a cut
+       by data-min-size/data-max-size. -->
+  <path d="M44,94 C84,96 120,124 126,164 C128,182 128,200 126,214 C124,222 116,222 114,214 C108,176 66,150 44,94 Z" fill="url(#leaf-left-small)" data-max-size="31" display="none"/>
+  <path d="M212,86 C206,128 170,166 126,198 C130,160 160,104 212,86 Z" fill="url(#leaf-right-small)" data-max-size="31" display="none"/>
+  <circle cx="128" cy="64" r="28" fill="url(#sun-small)" data-max-size="31" display="none"/>
+</svg>

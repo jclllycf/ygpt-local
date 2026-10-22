@@ -107,7 +107,8 @@ def submit(cx,request):
     for r in cx.execute("SELECT id FROM jobs WHERE owner=? AND state IN ('queued','running')",(OWNER,)).fetchall():inspect(cx,r['id'])
     # inspect may commit; acquire again for atomic concurrency counting/reservation.
     if not cx.in_transaction:cx.execute('BEGIN IMMEDIATE')
-    if cx.execute("SELECT count(*) FROM jobs WHERE owner=? AND state IN ('queued','running')",(OWNER,)).fetchone()[0]>=2:raise ValueError('Two concurrent jobs already active')
+    # Bridge-wide ceiling; the broker also limits each chat to a fair share.
+    if cx.execute("SELECT count(*) FROM jobs WHERE owner=? AND state IN ('queued','running')",(OWNER,)).fetchone()[0]>=6:raise ValueError('CONCURRENCY_LIMIT: six durable jobs are already active across chats; nothing was started')
     if sum(p.stat().st_size for p in ROOT.glob('*.dpapi-log'))>=MAX_STORAGE:raise ValueError('32 MiB retained job log quota reached; review/purge completed jobs')
     timeout=int(request.get('timeoutSeconds',21600))
     if not 1<=timeout<=86400:raise ValueError('Job timeout out of bounds')
@@ -120,6 +121,13 @@ def submit(cx,request):
         cx.execute("UPDATE jobs SET state='failed',reason='worker-launch-failed',ended_at=? WHERE owner=? AND id=?",(now(),OWNER,job_id));cx.commit();raise
     return {'job_id':job_id,'state':'queued'}
 
+def child_env(argv):
+    # Job programs never inherit the bridge's private state, config or ingress
+    # pointers: a test suite started as a job must not resolve the running
+    # bridge's state directory. Only the bundled download worker reads them.
+    trusted=len(argv)>=2 and Path(argv[1]).resolve()==Path(__file__).resolve().parent/'download-worker.mjs'
+    return {k:v for k,v in os.environ.items() if trusted or not k.upper().startswith('YGPT_')}
+
 def worker(id):
     cx=db();cx.execute('BEGIN IMMEDIATE');row=one(cx,id)
     if row['state']!='queued':cx.rollback();return
@@ -129,7 +137,8 @@ def worker(id):
     child=None;job=None;code=None;reason=None;written=0;errors=[]
     try:
         job=JobObject()
-        child=subprocess.Popen(json.loads(unseal(row['command'])),cwd=row['cwd'],stdin=subprocess.DEVNULL,stdout=subprocess.PIPE,stderr=subprocess.STDOUT,shell=False,close_fds=True,creationflags=subprocess.CREATE_NO_WINDOW)
+        argv=json.loads(unseal(row['command']))
+        child=subprocess.Popen(argv,cwd=row['cwd'],env=child_env(argv),stdin=subprocess.DEVNULL,stdout=subprocess.PIPE,stderr=subprocess.STDOUT,shell=False,close_fds=True,creationflags=subprocess.CREATE_NO_WINDOW)
         job.assign(child)
         cx.execute('UPDATE jobs SET child_pid=? WHERE id=?',(child.pid,id));cx.commit()
         log=ROOT/(id+'.dpapi-log')

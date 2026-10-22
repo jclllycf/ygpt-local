@@ -1,7 +1,7 @@
 import path from 'node:path';
 import {nativeWindows} from './windows-native.mjs';
 const cache=new Map();
-export const fileReadTools=new Set(['read_file','read_multiple_files','list_directory','get_file_info','start_search','verify_checksum','y_sqlite_read']);
+export const fileReadTools=new Set(['read_file','read_multiple_files','list_directory','get_file_info','start_search','y_verify_checksum','y_sqlite_read']);
 export function isReadOnlyCommand(command){
  if(typeof command!=='string'||!command.trim()||command.length>12000)return false;
  if(cache.has(command))return cache.get(command);

@@ -3,7 +3,8 @@ import path from 'node:path';
 import {createHash} from 'node:crypto';
 import {config,INSTALL,RUNTIME,currentPermissionMode} from './config.mjs';
 import {applyProfile} from './permission-profiles.mjs';
-import {fileReadTools,isReadOnlyCommand,isReadOnlyInvocation} from './read-only-policy.mjs';
+import {fileReadTools,isReadOnlyInvocation} from './read-only-policy.mjs';
+import {agentToolBoundary,agentProtectedRoots} from '../engine/src/agent-protection.mjs';
 const w=path.win32;
 const OS=process.env.SystemRoot??'C:/Windows';
 export const systemRoots=[OS,process.env.ProgramFiles??'C:/Program Files',process.env.ProgramData??'C:/ProgramData',config.stateDir,RUNTIME,config.configFile,...config.protectedRoots].map(v=>canonical(v));
@@ -13,6 +14,10 @@ const privateRoots=[config.stateDir,INSTALL,config.configFile,...config.protecte
 const ownWriteRoots=[INSTALL,config.stateDir,config.configFile,...config.protectedRoots].map(canonical);
 const sensitive=/(?:^|\\)(?:\.ssh|\.gnupg|\.aws|\.azure|\.kube|\.codex|\.agents|\.mcp-auth|\.git|\.env(?:\.[^\\]+)?|\.npmrc|\.netrc|credentials[^\\]*|cookies[^\\]*|login data|local state|id_rsa|id_ed25519|private\.key|authorized_keys|startup)(?:\\|$)|\\appdata\\|\.(?:pem|p12|pfx|kdbx|reg)$|\\(?:sam|security|system|ntuser\.dat)$/i;
 export const within=(p,r)=>p===r||p.startsWith(r+'\\');
+export const agentRoots=agentProtectedRoots(process.env,config.agentProtectedRoots);
+// Hard boundary: no YGPT mutation, process or job may target the ChatGPT
+// Desktop Agent's program/state folders or its processes (TARGET_FOREIGN).
+export const agentBoundary=(name,a={})=>agentToolBoundary(name,a,{canonical,roots:agentRoots});
 function sensitivePath(target){
   // AppData logs and Git metadata are ordinary files in owner blacklist mode.
   // Named secret stores (cookies, .env, .ssh, .codex, keys) still match below.
@@ -88,28 +93,6 @@ function workflow(a){
     }catch{return false;}
   });
 }
-export function commandRisk(a={}){
-  const command=String(a.command??'');
-  if(!command||command.length>12000)return deny('Empty/oversized command');
-  if(config.readOnlyAutoAllow&&isReadOnlyCommand(command))return allow('Owner-authorized read-only PowerShell pipeline; parsed without execution');
-  if(highRiskCommand(command))return gate('system-maintenance',JSON.stringify({command,cwd:a.cwd??a.workingDirectory}),
-    'Known destructive, privilege or protected configuration command requires verified human authorization');
-  const cwd=a.cwd??a.workingDirectory??config.projectRoots[0];
-  const target=route(cwd);
-  if(target.permission==='private'||target.permission==='vault')return deny('Protected process working directory');
-  const simple=new Map([
-    ['node --version',{exe:process.execPath,argv:['--version']}],['node.exe --version',{exe:process.execPath,argv:['--version']}],
-    ['whoami',{exe:w.join(OS,'System32','whoami.exe'),argv:[]}],['Get-Date',{local:'date'}],['Get-Location',{local:'cwd'}],['pwd',{local:'cwd'}],
-    ['python --version',{exe:config.python,argv:[...config.pythonArgs,'--version']}],
-    ['py --version',{exe:config.python,argv:[...config.pythonArgs,'--version']}],
-    ['Get-Disk',{local:'disks'}],['Get-Partition',{local:'disks'}],
-  ]);
-  if(config.executables.git&&fs.existsSync(config.executables.git))for(const words of [['--version'],['status','--short'],['status','-sb'],['branch','--show-current'],['rev-parse','--show-toplevel']])simple.set('git '+words.join(' '),{exe:config.executables.git,argv:['-c','core.fsmonitor=false','-c','core.hooksPath=NUL',...words]});
-  if(simple.has(command)&&Object.keys(a).every(k=>['command','cwd','workingDirectory','timeout_ms'].includes(k)))return {...allow('Known introspection executed without a shell or profile'),exec:simple.get(command),cwd};
-  if(target.permission==='project')return allow('Ordinary owner-project terminal; native Windows ACL applies; arbitrary script effects are not fully sandboxed');
-  if(config.blacklistDefaultAllow)return allow('Owner default-allow: no explicit command blacklist signal; current Windows permissions apply');
-  return gate('command',JSON.stringify({command,cwd,input:a.input??null},null,2),'Shell/scripts/unknown execution requires exact local consent',{cwd,targets:[target.target]});
-}
 // Recognize only a complete Node literal-print program, never arbitrary JS or
 // shell quoting. This fixes diagnostic words such as Clear-Disk being treated
 // as an actual disk command. All other programs retain the full signal scan.
@@ -145,15 +128,17 @@ export function highRiskCommand(command){
   if(/\b(?:rm|rmdir)\s+-(?:[a-z]*r[a-z]*f|[a-z]*f[a-z]*r)[a-z]*\b/i.test(value))return true;
   return /\b(?:format-volume|clear-disk|initialize-disk|new-partition|remove-partition|resize-partition|set-partition|diskpart(?:\.exe)?|format\.com|bcdedit|manage-bde|reagentc|ventoy2disk|remove-localuser|set-mppreference|set-executionpolicy|takeown(?:\.exe)?|icacls(?:\.exe)?|reg\s+(?:delete|add)|vssadmin\s+delete|wbadmin\s+delete)\b|(?:^|\s)-verb\s+["']?runas\b|\b(?:rm|rmdir|del|erase|remove-item)\b[^\r\n]{0,200}(?:-recurse|-force|\/s|\/q|[a-z]:[\\/])|\b(?:rmSync|rmdirSync|rmtree)\s*\([^\r\n]{0,250}(?:[a-z]:[\\/]|recursive\s*:\s*true)/i.test(value);
 }
-function authorizeImpl(name,a={},scope={}){
-  if(['y_review_approval','y_widget_credential','y_inline_decision','set_config_value','give_feedback_to_desktop_commander','get_recent_tool_calls'].includes(name))return deny('Legacy UI/config/history path is disabled');
+// Policy intents. Typed tools are translated into these by rc9Intents
+// (read_file, write_file, edit_block, move_file, create_directory,
+// list_directory, get_file_info, read_multiple_files, start_search, job_submit);
+// broker tools use their public y_ names. None of these is a public alias.
+const statusTools=['y_call_status','y_call_result','y_recent_calls','y_usage_report','y_resource_owner','y_ping','y_policy','y_pending_approvals'];
+function authorizeImpl(name,a={}){
   if(name==='y_dev_task'){
     try{const plan=planDevTask(a);return allow('Owner-opted trusted developer task: '+plan.task+' in '+plan.cwd+'; no shell, but project code runs as current Windows user');}
     catch(e){return deny(e.message);}
   }
-  if(name==='start_process')return commandRisk(a);
-  if(['interact_with_process','force_terminate','kill_process'].includes(name))return gate('process',JSON.stringify({tool:name,...a},null,2),'Process input/termination requires local consent');
-  if(name==='job_submit'||name==='run_trusted_workflow'){
+  if(name==='job_submit'){
     if(!Array.isArray(a.argv)||!a.argv.length||a.argv.length>100||a.argv.some(x=>typeof x!=='string'||x.length>12000||/[\r\n\x00]/.test(x)))return deny('Invalid job argv');
     const t=route(a.cwd);if(t.permission==='private'||t.permission==='vault')return deny('Protected job cwd');
     if(highRiskCommand(argvRiskText(a.argv)))return gate('system-maintenance',JSON.stringify({cwd:a.cwd,argv:a.argv}),'Known destructive or privilege-sensitive job requires verified human authorization');
@@ -162,20 +147,19 @@ function authorizeImpl(name,a={},scope={}){
     if(workflow(a))return {...allow('Owner-configured workflow matches cwd, argv and reviewed file hashes'),workflow:true};
     return gate('job',JSON.stringify({argv:a.argv,cwd:a.cwd,releaseOutput:true},null,2),'Start a durable job; its bounded logs/results will be readable by this private owner instance',{cwd:a.cwd,targets:[t.target]});
   }
-  if(name==='download_file')return route(a.destination).permission==='project'?allow('Bounded HTTPS official-source file download; never executes it'):deny('Download target must be inside ordinary owner-allowed folders');
-  if(name==='verify_checksum')return authorizeImpl('read_file',{path:a.path},scope);
-  if(name==='disk_inspect')return allow('Read-only fixed Windows disk inventory');
-  if(name==='inspect_download_status')return scope.ownsJob?allow('Scoped download progress only'):deny('Download output token not owned');
-  if(name==='job_cancel')return scope.ownsJob?allow('Cancels only this owner instance approved job'):deny('Job not owned by this deployment');
-  if(name==='job_recover')return gate('job-recovery',JSON.stringify({jobId:a.id},null,2),'Release a new output credential for this existing private-owner job; do not restart the process');
-  if(name==='job_tail')return scope.ownsJob?allow('Output scope from original job approval'):deny('No approved job output scope');
-  if(['job_status','job_list','call_status','call_result','recent_calls','y_ping','y_policy','y_pending_approvals','y_workstation_health'].includes(name))return allow('Private single-owner status');
-  if(['read_process_output','get_more_search_results','stop_search'].includes(name))return scope.ownsSession?allow('Output belongs to a request issued by this bridge process'):deny('Unscoped or stale process/search ID');
-  if(['get_config','list_sessions','list_processes','list_searches','get_usage_stats'].includes(name))return allow('Read-only metadata; sanitized upstream');
+  if(name==='y_download_file')return route(a.destination).permission==='project'?allow('Bounded HTTPS official-source file download; never executes it'):deny('Download target must be inside ordinary owner-allowed folders');
+  if(name==='y_verify_checksum')return authorizeImpl('read_file',{path:a.path});
+  if(name==='y_file_trash'){
+    const paths=Array.isArray(a.paths)?a.paths:[];if(!paths.length||paths.length>20)return deny('Choose 1 to 20 paths to move to the Recycle Bin');
+    const targets=paths.map(route);
+    if(targets.some(t=>ownWriteRoots.some(r=>within(t.target,r)||within(r,t.target))||t.permission==='private'||t.permission==='vault'))return deny('YGPT runtime, state, configuration and the G: vault cannot be trashed');
+    if(targets.some(t=>t.system||/^[a-z]:\\?$/.test(t.target)||projectRoots.includes(t.target)))return deny('System folders, drive roots and enrolled project roots themselves cannot be trashed');
+    return gate('filesystem-trash',JSON.stringify({tool:name,paths:targets.map(t=>t.target)}),'Moving files to the Recycle Bin requires a human decision; a protected snapshot is kept for restore',{targets:targets.map(t=>t.target)});
+  }
+  if(statusTools.includes(name))return allow('Private single-owner status');
   const read=['read_file','read_multiple_files','list_directory','get_file_info','start_search'].includes(name);
-  const write=['write_file','create_directory','edit_block','move_file','write_pdf'].includes(name);
+  const write=['write_file','create_directory','edit_block','move_file'].includes(name);
   if(read||write){
-    if(name==='write_pdf')return deny('PDF rendering disabled in RC: vulnerable optional document dependency chain');
     const paths=name==='read_multiple_files'?a.paths:name==='move_file'?[a.source,a.destination]:[name==='edit_block'?a.file_path:a.path];
     if(!Array.isArray(paths)||!paths.length)return deny('Missing paths');
     const targets=paths.map(route);
@@ -194,8 +178,9 @@ function authorizeImpl(name,a={},scope={}){
 // This removes human-approval interruptions, not hard-deny security boundaries.
 // Protected/system/outside-project operations that used to require consent
 // fail closed until a new review mechanism is implemented and tested.
-export function authorize(name,args={},scope={}){
+export function authorize(name,args={}){
  try{
+  const foreign=agentBoundary(name,args);if(foreign)return {...deny(foreign),code:'TARGET_FOREIGN'};
   if(config.readOnlyAutoAllow&&fileReadTools.has(name)){
    const paths=name==='read_multiple_files'?args.paths:[args.path];
    if(!Array.isArray(paths)||!paths.length)return deny('Missing read paths');
@@ -203,10 +188,9 @@ export function authorize(name,args={},scope={}){
    if(name==='start_search'&&(String(args.pattern??'').length>300||args.literalSearch===false))return deny('Only bounded literal searches are supported');
    return allow('Owner policy: all typed file, directory, search and database reads require no human approval; native ACL applies');
   }
-  if(config.readOnlyAutoAllow&&['job_submit','run_trusted_workflow'].includes(name)&&isReadOnlyInvocation({argv:args.argv}))return allow('Parsed read-only PowerShell invocation');
-  if(config.rc10Candidate&&name==='interact_with_process'&&highRiskCommand(args.input??''))return gate('process-input',JSON.stringify({pid:args.pid}),'Sensitive interactive process input requires verified human review');
-  if(config.rc9Candidate)return authorizeRc9(name,args,scope);
-  const baseline=authorizeImpl(name,args,scope);
+  if(config.readOnlyAutoAllow&&name==='job_submit'&&isReadOnlyInvocation({argv:args.argv}))return allow('Parsed read-only PowerShell invocation');
+  if(config.rc9Candidate)return authorizeRc9(name,args);
+  const baseline=authorizeImpl(name,args);
   if(config.localApprovalDisabled===true&&baseline.decision==='approve'){
    const routes=baseline.targets??[];
    const trustedProject=routes.length>0&&routes.every(t=>projectRoots.some(r=>within(t,r)));
@@ -214,9 +198,7 @@ export function authorize(name,args={},scope={}){
    // Safe project operations and explicitly scoped sessions run without any
    // application-owned approval queue, popup or in-chat iframe.
    if(ordinaryFile&&trustedProject)return allow('Owner mode: project file operation, no local prompt');
-   if(name==='start_process'&&trustedProject)return allow('Owner mode: project terminal command, no local prompt');
-   if(['job_submit','run_trusted_workflow'].includes(name)&&trustedProject)return allow('Owner mode: trusted-root durable job, no local prompt');
-   if(['interact_with_process','force_terminate','kill_process'].includes(name)&&scope.ownsSession)return allow('Owner mode: already scoped local process, no local prompt');
+   if(name==='job_submit'&&trustedProject)return allow('Owner mode: trusted-root durable job, no local prompt');
    return deny('No local approval mechanism is active; operation is outside the trusted development boundary');
   }
   return applyProfile(name,args,baseline,{mode:currentPermissionMode()});
@@ -226,21 +208,13 @@ export function authorize(name,args={},scope={}){
 // The RC9 pilot is private-owner only; review entries never execute while the
 // trusted ChatGPT click channel remains unverified. Parsing arbitrary scripts
 // cannot prove their effects, so only typed developer jobs auto-execute.
-function authorizeRc9(name,a={},scope={}){
-  const baseline=authorizeImpl(name,a,scope);
+function authorizeRc9(name,a={}){
+  const baseline=authorizeImpl(name,a);
   if(['y_backup_list','y_backup_diff','y_backup_restore','y_backup_accept'].includes(name)){
     if(name==='y_backup_accept')return gate('backup-cleanup',JSON.stringify({backupId:a.id}),'Only verified owner acceptance can permit backup cleanup');
     return allow('Protected backup inventory and conflict-aware restore');
   }
-  if(['download_file','job_submit','run_trusted_workflow','y_dev_task'].includes(name))return baseline;
-  if(name==='start_process'){
-    if(baseline.decision==='deny' && /Physical disk\/startup\/admin actions/.test(baseline.reason))
-      return gate('device',JSON.stringify({command:a.command,cwd:a.cwd??a.workingDirectory}),
-        'Device/boot/admin operation requires a device-specific plan and verified ChatGPT approval');
-    return baseline;
-  }
-  if(['interact_with_process','force_terminate','kill_process'].includes(name)&&scope.ownsSession)
-    return allow('Identity-checked process control for a YGPT-issued session');
+  if(['y_download_file','job_submit','y_dev_task'].includes(name))return baseline;
   if(baseline.decision==='deny')return baseline;
   if(['read_file','read_multiple_files','list_directory','get_file_info','start_search','write_file','edit_block','move_file','create_directory'].includes(name)){
     const isRead=['read_file','read_multiple_files','list_directory','get_file_info','start_search'].includes(name);

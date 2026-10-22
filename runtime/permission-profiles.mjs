@@ -12,7 +12,7 @@ export const descriptions=Object.freeze({
 });
 const projectWrites=new Set(['write_file','create_directory','edit_block','move_file']);
 const projectReads=new Set(['read_file','read_multiple_files','list_directory','get_file_info','start_search']);
-const alwaysSensitive=new Set(['start_process','interact_with_process','force_terminate','kill_process','job_submit','job_recover','run_trusted_workflow']);
+const alwaysSensitive=new Set(['job_submit']);
 export function applyProfile(name,args,baseline,options={}){
   const mode=normalizeMode(options.mode);
   if(!baseline||!['allow','approve','deny'].includes(baseline.decision))return {decision:'deny',reason:'Unclassified baseline decision'};

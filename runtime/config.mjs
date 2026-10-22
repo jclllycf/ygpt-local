@@ -7,7 +7,7 @@ const configFile=process.env.YGPT_CONFIG??path.join(INSTALL,'ygpt.config.json');
 const raw=fs.existsSync(configFile)?JSON.parse(fs.readFileSync(configFile,'utf8').replace(/^\uFEFF/,'')):{};
 const abs=v=>path.resolve(path.dirname(configFile),v);
 export const config={
-  version: '1.0.0-rc.3',
+  version: '1.0.0-rc.4',
   readOnlyAutoAllow:raw.rc11Patch3===true||raw.readOnlyAutoAllow===true,
   blacklistDefaultAllow:raw.blacklistDefaultAllow===true,
   chatAppConsent:raw.rc11Candidate===true&&raw.chatAppConsent===true,
@@ -16,7 +16,14 @@ export const config={
   engineRoot:raw.engineRoot?abs(raw.engineRoot):undefined,
   browser:raw.browser??{},
   desktopAllowedApps:raw.desktopAllowedApps??[],
-  stateDir:abs(process.env.YGPT_STATE_DIR??raw.stateDir??'state-rc'),
+  // Extra owner-listed ChatGPT Desktop Agent folders, beyond the built-in ones.
+  agentProtectedRoots:Array.isArray(raw.agentProtectedRoots)?raw.agentProtectedRoots:[],
+  // When true, only owner-enrolled executables (path + SHA-256) can be bound;
+  // otherwise any non-protected window can be bound after Allow once.
+  desktopRequireEnrollment:raw.desktopRequireEnrollment===true,
+  // The config file is authoritative. An inherited YGPT_STATE_DIR (set for
+  // YGPT's own workers) must never redirect another bridge to that state.
+  stateDir:abs(raw.stateDir??process.env.YGPT_STATE_DIR??'state-rc'),
   projectRoots:(raw.projectRoots??['..']).map(abs),
   protectedRoots:[...(raw.protectedRoots??[]),...(raw.toolCacheDir?[raw.toolCacheDir]:[])].map(abs),
   toolCacheDir:raw.toolCacheDir?abs(raw.toolCacheDir):null,

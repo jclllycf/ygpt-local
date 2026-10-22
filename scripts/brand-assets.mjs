@@ -1,3 +1,6 @@
+// NOTE (merge, 2026-10-22): the selected product brand is now the sprout mark in assets/icon.svg;
+// assets/brand/ygpt-local.* were regenerated from it during the merge. This generator is retained
+// only as the record of the earlier green candidates (A/B/C) — do not rerun it over the brand set.
 import fs from 'node:fs';
 import path from 'node:path';
 import {chromium} from 'playwright';

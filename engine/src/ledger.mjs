@@ -20,6 +20,5 @@ export class EngineLedger {
     const id=crypto.randomUUID();this.db.prepare("INSERT INTO calls(id,request_key,digest,tool,state,started) VALUES(?,?,?,?,'running',?)").run(id,key??null,digest,tool,Date.now());return {id,reused:false};
   }
   finish(id,result){this.db.prepare('UPDATE calls SET state=?,ended=?,result=? WHERE id=?').run(result.error?.outcomeUnknown?'unknown':result.ok?'succeeded':'failed',Date.now(),JSON.stringify(result),id);}
-  history(limit=30){return this.db.prepare('SELECT id,tool,state,started,ended FROM calls ORDER BY started DESC LIMIT ?').all(Math.min(100,Math.max(1,limit)));}
   close(){this.db.close();}
 }

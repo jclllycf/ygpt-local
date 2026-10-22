@@ -7,7 +7,7 @@ export function firstUseRecorder({data,key,transport,clientName=()=>''}){
  return (name,args,result)=>{
   // Only the dedicated, authenticated transport calls this hook. Local health
   // probes, tool arguments and claimed client metadata cannot enable it.
-  if(!['official-secure-tunnel','authenticated-oauth'].includes(transport)||!['y_file_read','y_local_read_file','yuki_file_read','yuki_local_read_file'].includes(name)||result?.isError)return;
+  if(!['official-secure-tunnel','authenticated-oauth'].includes(transport)||!['y_file_read','y_file_read_many'].includes(name)||result?.isError)return;
   try{
    const unlinked=p=>{for(let a=path.resolve(p);;a=path.dirname(a)){if(fs.lstatSync(a).isSymbolicLink())return false;if(path.dirname(a)===a)return true;}};
    const p=path.join(data,'first-use-challenge.json');if(!unlinked(p))return;

@@ -9,9 +9,15 @@ const commands={
   autostarts:'Get-CimInstance Win32_StartupCommand | Select-Object -First 150 Name,Location,User',
   events:"Get-WinEvent -FilterHashtable @{LogName='Application';StartTime=(Get-Date).AddDays(-3)} -MaxEvents 20 -ErrorAction Stop | Select-Object TimeCreated,Id,LevelDisplayName,ProviderName",
 };
+import {statfs} from 'node:fs/promises';
 export class YSystemEngine {
+  // physicalDisks: optional read-only disk/partition inventory supplied by the
+  // broker's native helper (never formats or writes); fixtures leave it unset.
+  constructor({stateDir,physicalDisks}={}){this.stateDir=stateDir;this.physicalDisks=physicalDisks;}
   async inspect(kind){
-    if(kind==='health')return {product:'YGPT Local',platform:process.platform,node:process.version,pid:process.pid,osRelease:os.release(),uptimeSeconds:os.uptime(),totalMemory:os.totalmem(),freeMemory:os.freemem(),readOnly:true};
+    if(kind==='health'){let freeDisk=null;try{const d=await statfs(path.parse(path.resolve(this.stateDir??'.')).root);freeDisk=d.bavail*d.bsize;}catch{}
+      return {product:'YGPT Local',platform:process.platform,node:process.version,pid:process.pid,osRelease:os.release(),uptimeSeconds:os.uptime(),cpuThreads:os.cpus().length,totalMemory:os.totalmem(),freeMemory:os.freemem(),freeDisk,readOnly:true};}
+    if(kind==='physical-disks'){if(typeof this.physicalDisks!=='function')throw new EngineError('DIAGNOSTIC_UNAVAILABLE','Physical disk inventory needs the Windows native helper');return {kind,readOnly:true,observedAt:new Date().toISOString(),data:await this.physicalDisks()};}
     const source=commands[kind];if(!source)throw new EngineError('BAD_DIAGNOSTIC','Choose health, processes, services, disks, events or autostarts');
     const exe=path.join(process.env.SystemRoot??'C:\\Windows','System32','WindowsPowerShell','v1.0','powershell.exe');
     const script="$ErrorActionPreference='Stop';[Console]::OutputEncoding=[System.Text.UTF8Encoding]::new($false);@("+source+") | ConvertTo-Json -Depth 4 -Compress";

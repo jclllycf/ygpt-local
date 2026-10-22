@@ -1,0 +1,87 @@
+{
+  "commit": "4f2a07d",
+  "branch": "upgrade/chat-only-isolation-20261022",
+  "environment": "Linux x64 cloud workspace, Node v24.20.0; not Windows, no DPAPI/WPF/UIA/Edge",
+  "at": "2026-10-22T09:05:01.903Z",
+  "checks": {
+    "setupCompile": "PASS",
+    "watchdogCompile": "PASS",
+    "ydesktopCompile": "PASS",
+    "nodeCheck": "PASS",
+    "csp": "PASS",
+    "publicAudit": "PASS",
+    "iconsDeterministic": "PASS",
+    "nativeWindowsCompile": "NOT RUN (needs Windows PowerShell GAC assembly; known environment limit)"
+  },
+  "npmTest": {
+    "summary": {
+      "tests": 16,
+      "pass": 3,
+      "fail": 12,
+      "skipped": 1
+    },
+    "tests": [
+      {
+        "name": "Cached pre-rename resource and App tools retain scoped approval, without advertising old names",
+        "result": "FAIL"
+      },
+      {
+        "name": "Renamed catalog, snapshots, conflict safety, approvals and continuation",
+        "result": "FAIL"
+      },
+      {
+        "name": "First-use proof requires the exact marker result on an authenticated transport; fixture is not real ChatGPT acceptance",
+        "result": "PASS"
+      },
+      {
+        "name": "Real authenticated HTTP: OAuth PKCE, consent, catalog, tool call and revocation",
+        "result": "FAIL"
+      },
+      {
+        "name": "Twelve concurrent real MCP HTTP handshakes share one ready broker",
+        "result": "FAIL"
+      },
+      {
+        "name": "DPAPI OAuth state survives restart; refresh rotates and replay revokes its family",
+        "result": "FAIL"
+      },
+      {
+        "name": "Owner pipe authenticates, exposes no tool execution and drains at most once per message",
+        "result": "PASS"
+      },
+      {
+        "name": "Actual broker preserves pending approvals during drain and records marker result; controlled transport fixture is NOT ChatGPT",
+        "result": "FAIL"
+      },
+      {
+        "name": "Owner approval page explains a wrong key, a foreign or expired request and rate limiting without leaking the key",
+        "result": "PASS"
+      },
+      {
+        "name": "Branded approval bundle executes with its real browser CSP; not a ChatGPT host test",
+        "result": "FAIL"
+      },
+      {
+        "name": "Browser fixtures handle old metadata and current metadata with the matching App tool names; not host attestation",
+        "result": "FAIL"
+      },
+      {
+        "name": "Native Windows checks preserve read-only AST boundaries without executing submitted text",
+        "result": "FAIL"
+      },
+      {
+        "name": "Native state ACL audit rejects a linked descendant and a drive root; never weakens private state",
+        "result": "FAIL"
+      },
+      {
+        "name": "Actual isolated Edge, native UIA fixture and durable job output",
+        "result": "FAIL"
+      },
+      {
+        "name": "Fixture decisions: Deny, bounded chat grant, context revocation; not human-host attestation",
+        "result": "FAIL"
+      }
+    ],
+    "interpretation": "Failures are Windows preconditions (Expected absolute local drive path, Native Windows checks unavailable, DPAPI). Identical on unmodified code; used only as a comparison baseline."
+  }
+}

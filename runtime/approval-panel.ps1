@@ -64,7 +64,7 @@ function RefreshQueue {
 function Decide([string]$choice){
  try{
   $controls.Allow.IsEnabled=$false;$controls.Always.IsEnabled=$false;$controls.Deny.IsEnabled=$false
-  $h=@{Authorization=$headers.Authorization;'X-Y-CSRF'=$script:csrf};$body=@{id=$script:selected;decision=$choice} | ConvertTo-Json -Compress
+  $h=@{Authorization=$headers.Authorization;'X-YGPT-CSRF'=$script:csrf};$body=@{id=$script:selected;decision=$choice} | ConvertTo-Json -Compress
   $null=Invoke-RestMethod -Uri ($auth.base+'/api/decision') -Method Post -ContentType 'application/json' -Headers $h -Body ([Text.Encoding]::UTF8.GetBytes($body)) -TimeoutSec 3 -UseBasicParsing
   $controls.Note.Text='决定已记录。需要时向 ChatGPT 发送“继续”以查询结果。';RefreshQueue
  }catch{$controls.Note.Text='请求已过期或已处理，请核对当前状态。';RefreshQueue}

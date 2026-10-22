@@ -1,0 +1,26 @@
+# YGPT Local chat-only upgrade — security audit note
+
+Scope: branch `upgrade/chat-only-isolation-20261022`, candidate 1.0.0-rc.4. Production stays 1.0.0-rc.2 until the owner switches it. This note states what the upgraded build does and does not guarantee, per the taskbook §5.3.
+
+## What is guaranteed by construction
+
+- **Chat-only ownership.** Every tab, UIA binding, process session and durable job is owned by the server-issued chat context that created it. Another chat presenting the same ID gets `SESSION_FOREIGN`; output tokens are additionally scoped per operation. `y_close_context` revokes the context, closes its browser context and releases its UIA bindings.
+- **Desktop Agent boundary.** Agent/Codex processes, windows, folders and browser state are refused as targets (`TARGET_FOREIGN`): path checks for writes/moves/trash/downloads, working-directory and command-text signals for jobs, window classification for UIA (Agent windows are never controllable, even when enrolled), and the browser is always YGPT's own Playwright Edge instance with a private context per chat — no CDP endpoint, user profile or Agent browser can be configured in.
+- **UIA human approval.** `y_desktop_windows` metadata is automatic; `bind` and every input/focus `action` require a human decision from the trusted approval surface. Approvals bind to the exact window identity (exe path + SHA-256 + pid + birth + hwnd) and are re-checked before execution; a changed target refuses. Model calls, MCP parameters and `clientInfo` never count as consent.
+- **Write safety.** Same-file writes from different chats serialize on short per-file locks with `expectedSha256` preimage checks (`STALE_PREIMAGE` on conflict, never a blind overwrite); every engine write takes a durable pre-write snapshot first. `unknown` outcomes are never replayed — recovery is read-only (`y_call_status`, `y_job_status`, `y_resource_owner`).
+- **One canonical API.** The legacy compat child process and the `y_local_*` / `yuki_*` / unprefixed surfaces are deleted. Retired names execute nothing and answer `NO_TOOL` with the replacement, so a stale cached chat fails loudly instead of silently driving a second API.
+- **Provenance honesty.** Call records carry the server-issued context label and the transport kind. Where the host does not attest its type, `y_usage_report` and `y_recent_calls` say `unverified`; nothing in the codebase guesses "Chat vs Agent" from model-supplied data.
+
+## What is NOT guaranteed (read before switching production)
+
+- **No OS sandbox for arbitrary code.** A job or process the owner approves runs as the current Windows user. The Agent boundary refuses known Agent targets, but arbitrary approved code could in principle reach any file the user can reach. This is stated in `y_policy` (`noOsSandbox: true`) and in the approval cards; it is not fixable by pattern scanning.
+- **Host identity is not attested.** The platform does not prove whether a caller is an ordinary chat or the Desktop Agent. Isolation therefore rests on separate credentials/configuration (the Agent environment does not hold YGPT's chat-only credentials) plus target-side refusal — not on caller claims.
+- **File races with external editors.** `expectedSha256` + snapshot + re-check-before-commit narrows the race to the final commit window; a process that rewrites a file in that exact window can still interleave. Conflicts surface as errors, not silent corruption of YGPT's own writes.
+- **Recycle Bin restore limits.** `y_file_trash` keeps a protected snapshot (restore via `y_backup_restore`) and records a trash manifest, but the Windows Recycle Bin copy itself follows normal Windows behaviour (size quotas can purge it). The snapshot is the reliable restore path.
+- **Linux verification limits.** This candidate was assembled and checked on Linux: C# compiles via Roslyn (including `NativeWindows.exe`, built against the official PowerShell 5.1 reference assemblies), portable Node tests, CSP and the public audit pass. UIA against real Windows applications, the installer lifecycle and ChatGPT host behaviour are **not** proven by those checks — they are the owner's on-device acceptance tests (see `docs/UPGRADE_TEST_RESULTS.md`).
+
+## Agent protection evidence
+
+- `engine/src/agent-protection.mjs`: protected-root path checks, command-signal scan, window classification; unit-covered in `tests/upgrade-portable.test.mjs` (Agent working directory refused with `TARGET_FOREIGN`, Agent browser profile refused at engine construction).
+- `runtime/ownership.mjs` + `runtime/durable.mjs`: context-scoped resource rows, foreign counts, token scoping; unit-covered.
+- Browser: `assertIsolatedBrowserConfig` rejects CDP/profile reuse at startup; per-chat contexts with idle sweep and `BROWSER_CONTEXT_CLOSED` semantics.
