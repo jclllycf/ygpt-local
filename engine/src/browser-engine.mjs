@@ -106,7 +106,7 @@ export class YExistingBrowser {
     const p=port??this.defaultPort,endpoint='http://127.0.0.1:'+p;
     let browser;
     try{browser=await chromium.connectOverCDP(endpoint,{timeout:8000});}
-    catch{throw new EngineError('BROWSER_ATTACH_FAILED','No existing browser answered on '+endpoint+'. Start Chrome or Edge with remote debugging enabled (for example: chrome.exe --remote-debugging-port='+p+') and try again. Nothing was changed.');}
+    catch{throw new EngineError('BROWSER_ATTACH_FAILED','No existing browser answered on '+endpoint+'. Remote debugging must be switched on when the browser starts, and since Chrome 136 the debugging port is ignored for the default profile folder — launch a dedicated debugging instance, for example: chrome.exe --remote-debugging-port='+p+' --user-data-dir="%LOCALAPPDATA%\\YGPTChromeDebug" (Edge works the same way). That instance is separate from your daily profile; taking over the daily profile itself is only possible through the browser extension route, which is not built in yet. Nothing was changed.');}
     this.browser=browser;this.endpoint=endpoint;
     browser.on('disconnected',()=>{if(this.browser===browser){this.browser=null;this.tabs.clear();}});
     for(const ctx of browser.contexts()){for(const pg of ctx.pages())this.track(pg);ctx.on('page',pg=>this.track(pg));}
