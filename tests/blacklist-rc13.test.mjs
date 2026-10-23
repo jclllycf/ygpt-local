@@ -1,8 +1,9 @@
 // rc.13 fundamental blacklist upgrade (portable policy tests): no hard
 // refusals remain in the access policy. ChatGPT Desktop Agent resources are
 // ordinary targets; YGPT's own state and the vault are human gates, not
-// denies; unclassified tools gate; developer tasks outside the trusted set
-// gate; protected job/download targets gate.
+// denies; unclassified tools gate; developer tasks
+// gate when their folder is missing or protected; protected job/download
+// targets gate.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
@@ -32,9 +33,10 @@ test('Access policy rc.13: nothing is hard-refused; risk becomes a human gate',a
   // Unclassified tools ask a human instead of being disabled.
   assert.equal(check('y_something_new',{}).decision,'approve');
 
-  // Structured developer task outside the trusted set: gate (the executor's
-  // plan no longer re-checks trust, so the approval is meaningful).
-  assert.equal(check('y_dev_task',{cwd:'D:\\work',task:'git-status'}).decision,'approve');
+  // Structured developer task: an existing ordinary folder runs by default in
+  // the owner default-allow model (like any job); a working directory that
+  // does not exist yet is a fact for the owner to judge, so it gates.
+  assert.equal(check('y_dev_task',{cwd:'D:\\ygpt-test-missing-'+process.pid+'-'+Date.now(),task:'git-status'}).decision,'approve');
   // An unknown task name is a malformed request, not a policy refusal.
   assert.equal(check('y_dev_task',{cwd:'D:\\work',task:'rm-everything'}).decision,'deny');
 

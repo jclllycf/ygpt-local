@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {createHash, randomUUID} from 'node:crypto';
 import {execFileSync} from 'node:child_process';
+import {AsyncLocalStorage} from 'node:async_hooks';
 import {vault} from './secure-state.mjs';
 import {config} from './config.mjs';
 import {canonical, route, within} from './access-policy.mjs';
@@ -21,8 +22,11 @@ const regular = p => {
   } catch(e) {if(e.code==='ENOENT')return null;throw e;}
 };
 const metaFile = (dir) => path.join(dir,'manifest.json');
-export function snapshotTargetAllowed(target){
+export function snapshotTargetAllowed(target,{reviewed=false}={}){
   const c=route(target);
+  // Policy gates belong to the broker. An exact human-approved operation may
+  // snapshot a protected target; storage/link/integrity limits still apply.
+  if(reviewed)return true;
   return (c.permission==='project'&&!c.system&&!c.sensitive)||(config.blacklistDefaultAllow&&!['private','vault'].includes(c.permission)&&!c.secretAdjacent&&(!c.sensitive||c.system));
 }
 
@@ -32,8 +36,12 @@ export class BackupManager {
   constructor({stateDir=config.stateDir,git=config.executables.git,sealer}={}){
     this.root=path.join(stateDir,'backups');this.git=git;
     this.sealer=sealer??vault(stateDir);
+    this.reviewScope=new AsyncLocalStorage();
     fs.mkdirSync(this.root,{recursive:true,mode:0o700});
   }
+  // Internal broker capability, never an MCP argument. Async-local scope keeps
+  // approval for one operation from widening another concurrent operation.
+  withReviewed(fn){return this.reviewScope.run(true,fn);}
   saveManifest(id,data,{initial=false}={}){
     const folder=path.join(this.root,id),dest=metaFile(folder),temp=path.join(folder,`manifest-${randomUUID()}.tmp`);
     try{
@@ -159,8 +167,8 @@ export class BackupManager {
     if(!unique.length || unique.length>100)throw Error('Unsupported snapshot target count');
     const entries=[];let size=0;
     for(const p of unique){
-      if(!snapshotTargetAllowed(p))
-        throw Error('Protected snapshots may change only explicitly enrolled project paths');
+      if(!snapshotTargetAllowed(p,{reviewed:this.reviewScope.getStore()===true}))
+        throw Error('Protected snapshot target requires a verified owner decision');
       const stat=regular(p);
       if(stat?.isDirectory() && operation==='move_file')throw Error('Directory move needs a reviewed tree-level recovery plan');
       if(stat?.isFile()){size+=stat.size;if(stat.size>MAX_FILE||size>MAX_BATCH)throw Error('Snapshot exceeds protected storage size limit');}
@@ -236,13 +244,15 @@ export class BackupManager {
     return raw;
   });}
   restore(id,{reviewed=false}={}){
+    if(reviewed&&this.reviewScope.getStore()!==true)return this.withReviewed(()=>this.restore(id));
+    reviewed=this.reviewScope.getStore()===true;
     const m=this.manifest(id);
     if(!['completed','failed-or-unknown'].includes(m.status))throw Error('Snapshot is not a restorable edit');
     const contents=this.savedContents(id,m.files); // decrypt and verify ALL before writing ANYTHING
     for(const e of m.files){
       const classification=route(e.path);
-      if((classification.permission!=='project'||classification.system||classification.sensitive)&&!(config.blacklistDefaultAllow&&!['private','vault'].includes(classification.permission)&&!classification.secretAdjacent&&(!classification.sensitive||reviewed&&classification.system)))
-        throw Error('Restore target is outside an enrolled project or protected');
+      if(!reviewed&&(classification.permission!=='project'||classification.system||classification.sensitive)&&!(config.blacklistDefaultAllow&&!['private','vault'].includes(classification.permission)&&!classification.secretAdjacent&&!classification.sensitive))
+        throw Error('Restore target requires a verified owner decision');
       const c=this.current(e.path);
       if(c.kind!==e.afterKind||c.digest!==e.afterHash)throw Object.assign(Error('Restore conflict: target changed since snapshot; no files restored. Review the diff; do not retry this restore.'),{code:'CONFLICT',effectStarted:false,filesRestored:0});
     }

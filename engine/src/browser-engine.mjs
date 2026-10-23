@@ -40,7 +40,7 @@ export class YBrowserEngine {
       const browser=await this.ensureBrowser();
       const context=await browser.newContext({acceptDownloads:false,viewport:{width:1100,height:760},serviceWorkers:'block'});
       context.setDefaultTimeout(10000);
-      await context.route('**/*',async route=>{try{this.validateUrl(route.request().url());await route.continue();}catch{await route.abort('blockedbyclient');}});
+      await context.route('**/*',async route=>{try{this.validateUrl(route.request().url());await route.fallback();}catch{await route.abort('blockedbyclient');}});
       context.on('page',p=>this.track(p,owner));entry.context=context;return context;
     })().catch(e=>{this.contexts.delete(owner);throw e;});
     return entry.ready;
@@ -88,13 +88,6 @@ export class YBrowserEngine {
   async close(){await this.shutdownBrowser();this.closedTabs.clear();}
 }
 
-// The owner's OWN existing browser (Chrome or Edge), taken over through its
-// Chrome DevTools Protocol endpoint. This is a separate mode from the
-// isolated browser above: the human enables remote debugging on their
-// browser (that opt-in is the consent), YGPT attaches, works in that
-// browser's real profile and disconnects without closing it. Which mode a
-// call uses is the caller's choice; the chat asks the owner for a preference
-// and defaults to the isolated browser when there is no answer.
 // The owner's REAL daily browser (Chrome or Edge, default profile, their
 // accounts and tabs), taken over through the YGPT browser extension. This is
 // the single take-over mode: the extension lives inside the daily browser,
@@ -113,9 +106,14 @@ export class YExtensionBrowser {
     this.relayReady=null;
     this.browser=null;this.tabs=new Map();this.identity=null;
   }
-  async ensureRelay(){if(!this.relayReady)this.relayReady=this.relay.start();await this.relayReady;}
+  async ensureRelay(){if(!this.relayReady)this.relayReady=this.relay.start().catch(e=>{this.relayReady=null;throw e;});await this.relayReady;}
   pairingUrl(){return this.relay.endpoint()+'/';}
   async attach({instance}={}){
+    if(this.attaching){await this.attaching;return this.attach({instance});}
+    this.attaching=this.attachBrowser({instance});
+    try{return await this.attaching;}finally{this.attaching=null;}
+  }
+  async attachBrowser({instance}={}){
     if(this.browser)return this.status();
     await this.ensureRelay();
     let candidates=this.relay.instancesList();
@@ -128,7 +126,7 @@ export class YExtensionBrowser {
     // attaching must never guess between accounts.
     if(candidates.length===1&&!instance){await new Promise(r=>setTimeout(r,700));candidates=this.relay.instancesList();}
     let chosen=null;
-    if(instance){const needle=String(instance).toLowerCase();chosen=candidates.find(c=>c.id===instance||(c.profileEmail??'').toLowerCase().includes(needle)||c.browser.toLowerCase()===needle)||null;if(!chosen)throw new EngineError('BROWSER_INSTANCE_UNKNOWN','No connected browser matches "'+instance+'". Connected: '+candidates.map(c=>c.browser+' ('+(c.profileEmail??'profile not signed in')+')').join('; '));}
+    if(instance){const needle=String(instance).toLowerCase();const exact=candidates.find(c=>c.id===instance);const matches=exact?[exact]:candidates.filter(c=>(c.profileEmail??'').toLowerCase().includes(needle)||c.browser.toLowerCase()===needle);if(matches.length>1)return {needsChoice:true,note:'That account/browser matches several paired profiles. Choose an exact instance id.',candidates:matches.map(c=>({instance:c.id,browser:c.browser,profileEmail:c.profileEmail,tabs:c.totalTabs}))};chosen=matches[0]??null;if(!chosen)throw new EngineError('BROWSER_INSTANCE_UNKNOWN','No connected browser matches "'+instance+'". Connected: '+candidates.map(c=>c.browser+' ('+(c.profileEmail??'profile not signed in')+')').join('; '));}
     else if(candidates.length>1)return {needsChoice:true,note:'Several browsers/profiles are paired. Ask the owner which account/browser to use, then attach again with its instance id or profile email — do not guess: accounts must not be mixed.',candidates:candidates.map(c=>({instance:c.id,browser:c.browser,profileEmail:c.profileEmail,tabs:c.totalTabs}))};
     else chosen=candidates[0];
     this.relay.bind(chosen.id);
@@ -139,14 +137,16 @@ export class YExtensionBrowser {
     this.identity={via:'YGPT browser extension',browser:chosen.browser,profileEmail:chosen.profileEmail,instance:chosen.id};
     browser.on('disconnected',()=>{if(this.browser===browser){this.browser=null;this.tabs.clear();}});
     let adopted=0;
-    for(const ctx of browser.contexts()){ctx.on('page',pg=>this.track(pg));for(const pg of ctx.pages()){this.track(pg);adopted++;}}
+    const owner=this.owner();
+    for(const ctx of browser.contexts()){ctx.on('page',pg=>{void pg.opener().then(opener=>{const parent=[...this.tabs.values()].find(t=>t.page===opener);this.track(pg,parent?.owner??owner);}).catch(()=>{});});for(const pg of ctx.pages()){this.track(pg,owner);adopted++;}}
     return {...this.status(),adopted};
   }
-  status(){return {attached:!!this.browser,identity:this.identity,group:this.browser?{name:this.groupName,tabs:this.tabs.size}:null,pairingUrl:this.pairingUrl(),tabs:[...this.tabs].map(([tabId,t])=>({tabId,url:t.page.url()}))};}
-  track(page){
-    for(const [,t] of this.tabs)if(t.page===page)return;
-    const id=crypto.randomUUID();this.tabs.set(id,{page,owner:this.owner()});
+  status(){const mine=[...this.tabs].filter(([,t])=>t.owner===this.owner());return {attached:!!this.browser,identity:this.identity,group:this.browser?{name:this.groupName,tabs:mine.length}:null,pairingUrl:this.pairingUrl(),tabs:mine.map(([tabId,t])=>({tabId,url:t.page.url()}))};}
+  track(page,owner=this.owner(),claim=false){
+    for(const [id,t] of this.tabs)if(t.page===page){if(claim)t.owner=owner;return id;}
+    const id=crypto.randomUUID();this.tabs.set(id,{page,owner});
     page.on('close',()=>{this.tabs.delete(id);});
+    return id;
   }
   has(id){return this.tabs.has(id);}
   page(id){
@@ -158,22 +158,13 @@ export class YExtensionBrowser {
   }
   async createGroupTab(url){
     const ctx=this.browser.contexts()[0];if(!ctx)throw new EngineError('BROWSER_ATTACH_FAILED','The daily browser exposed no usable context');
-    const before=new Set(ctx.pages());
-    const session=await this.browser.newBrowserCDPSession();
-    let targetId=null;
-    try{({targetId}=await session.send('Target.createTarget',{url,background:true}));}catch{}
-    if(targetId){
-      // The relay auto-attaches the new group tab, so Playwright surfaces it
-      // as a fresh page in the context. Match by set difference — probing
-      // each page with its own CDP session misfires against the emulated
-      // endpoint (sessions are shared) and can stall indefinitely.
-      for(let i=0;i<40;i++){
-        const fresh=ctx.pages().find(pg=>!before.has(pg)&&!pg.isClosed());
-        if(fresh)return fresh;
-        await new Promise(r=>setTimeout(r,200));
-      }
-    }
-    return ctx.newPage();
+    // Playwright associates newPage with its exact Target.createTarget reply.
+    // The relay always creates that target in the background YGPT group;
+    // set-difference matching races with concurrent opens and page popups.
+    const page=await ctx.newPage();
+    this.track(page,this.owner(),true);
+    await page.goto(url,{waitUntil:'domcontentloaded',timeout:15000});
+    return page;
   }
   async open(url){
     this.validateUrl(url);
@@ -205,8 +196,8 @@ export class YExtensionBrowser {
   }
   async closeTab(id){await this.page(id).close();return {closed:id};}
   owned(owner=this.owner()){return [...this.tabs].filter(([,t])=>t.owner===owner).map(([tabId,t])=>({tabId,url:t.page.url(),mode:'existing'}));}
-  async detach(){const b=this.browser;this.browser=null;this.tabs.clear();await b?.close().catch(()=>{});this.relay.unbind();return {detached:true,note:'Disconnected. The daily browser was left running, the extension stays paired, and the YGPT tab group was left in place for the next attach'};}
-  async close(){await this.detach().catch(()=>{});await this.relay.stop().catch(()=>{});}
+  async detach(){await this.attaching?.catch(()=>{});const b=this.browser;this.browser=null;this.tabs.clear();await b?.close().catch(()=>{});this.relay.unbind();return {detached:true,note:'Disconnected. The daily browser was left running, the extension stays paired, and the YGPT tab group was left in place for the next attach'};}
+  async close(){await this.detach().catch(()=>{});await this.relay.stop().catch(()=>{});this.relayReady=null;}
 }
 
 export class YBrowserFacade {
@@ -232,5 +223,5 @@ export class YBrowserFacade {
   async closeTab(id){return this.engineFor(id).closeTab(id);}
   async closeContext(owner){return this.isolated.closeContext(owner);}
   owned(owner){return [...this.isolated.owned(owner),...this.existing.owned(owner)];}
-  async close(){await Promise.allSettled([this.isolated.close(),this.existing.detach()]);}
+  async close(){await Promise.allSettled([this.isolated.close(),this.existing.close()]);}
 }

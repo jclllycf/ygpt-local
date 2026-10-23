@@ -17,16 +17,33 @@ export function withTransport(params={},clientId,sessionId){
 export async function startHttp({broker,port=17854,publicOrigin,ownerKey,localKey,tunnelKey,oauthState,connectionStatus=async()=>({connected:null}),redirectUris=['https://chatgpt.com/connector_platform_oauth_redirect'],onHostCall=()=>{}}){
  if(typeof localKey!=='string'||localKey.length<32||tunnelKey&&tunnelKey.length<32)throw Error('Strong independent local and tunnel keys are required');
  const oauth=new OwnerOAuth({origin:publicOrigin??'http://127.0.0.1:'+port,ownerKey,redirectUris,stateStore:oauthState}),sessions=new Map();
- let draining=false,activeCalls=0;
+ let draining=false,activeCalls=0,drainCheck=null;
+ const drain=()=>{
+  if(drainCheck)return drainCheck;
+  // Close the gateway before inventory awaits, so no new calls can race the
+  // check. Concurrent maintenance callers share one result and cannot reopen
+  // the gateway after another caller has been told it is safe to stop.
+  draining=true;
+  drainCheck=(async()=>{
+   let busy=activeCalls>0,checked=true;
+   const scan=value=>{if(value&&typeof value==='object'){if(['running','queued','starting','awaiting_user','pending','unknown'].includes(value.state))busy=true;for(const child of Object.values(value))scan(child);}};
+   try{for(const name of ['y_process_list','y_job_list','y_pending_approvals']){
+    const r=await broker.rpc('tools/call',{name,arguments:{}});if(r.isError)throw Error('Health inventory unavailable');
+    const v=r.structuredContent??JSON.parse(r.content[0].text);if(v?.ok===false)throw Error('Health inventory unavailable');scan(v);
+    if(Number(v?.result?.otherChatsActive??v?.otherChatsActive??0)>0||name==='y_pending_approvals'&&Number(v?.otherChats??0)>0)busy=true;
+   }}catch{checked=false;}
+   if(busy||!checked)draining=false;
+   return {safeToStop:checked&&!busy,draining,activeCalls,reason:!checked?'Cannot confirm owned task state':busy?'Finish active tasks and approvals before maintenance':null};
+  })().finally(()=>{drainCheck=null;});
+  return drainCheck;
+ };
  const server=http.createServer(async(req,res)=>{try{
   const host=req.headers.host,url=new URL(req.url,'http://'+host),allowed=new Set(['127.0.0.1:'+server.address().port,new URL(oauth.origin).host]);if(!allowed.has(host)){res.writeHead(403).end();return;}
   const origin=req.headers.origin;if(origin&&origin!==oauth.origin){res.writeHead(403).end();return;}
   const local=equal(req.headers.authorization,'Bearer '+localKey),tunnel=tunnelKey&&equal(req.headers.authorization,'Bearer '+tunnelKey),auth=local?{clientId:'local-operator'}:tunnel?{clientId:'secure-tunnel-transport'}:oauth.authenticate(req.headers.authorization);
   if(url.pathname==='/maintenance/drain'){
-   if(!local||req.method!=='POST'){res.writeHead(403).end();return;}draining=true;
-   let busy=activeCalls>0,checked=true;const scan=value=>{if(value&&typeof value==='object'){if(['running','queued','starting','awaiting_user','pending','unknown'].includes(value.state))busy=true;for(const child of Object.values(value))scan(child);}};
-   try{for(const name of ['y_process_list','y_job_list','y_task_list','y_local_list_sessions','y_pending_approvals']){const r=await broker.rpc('tools/call',{name,arguments:{}});if(r.isError)throw Error('Health inventory unavailable');const v=r.structuredContent??JSON.parse(r.content[0].text);scan(v);if(Number(v?.result?.otherChatsActive??v?.otherChatsActive??0)>0)busy=true;}}catch{checked=false;}
-   if(busy||!checked)draining=false;res.writeHead(busy||!checked?409:200,{'Content-Type':'application/json','Cache-Control':'no-store'});res.end(JSON.stringify({safeToStop:checked&&!busy,draining,activeCalls,reason:!checked?'Cannot confirm owned task state':busy?'Finish active tasks and approvals before maintenance':null}));return;
+   if(!local||req.method!=='POST'){res.writeHead(403).end();return;}
+   const result=await drain();res.writeHead(result.safeToStop?200:409,{'Content-Type':'application/json','Cache-Control':'no-store'});res.end(JSON.stringify(result));return;
   }
   if(url.pathname==='/healthz'){if(!local){res.writeHead(401).end();return;}const tools=await broker.rpc('tools/list');const app=tools.tools.filter(t=>t._meta?.ui?.visibility?.includes('app')).length;res.writeHead(200,{'Content-Type':'application/json','Cache-Control':'no-store'});res.end(JSON.stringify({product:'YGPT Local',version:'1.0.0-rc.15',localReady:!broker.exited,tools:tools.tools.length,publicTools:tools.tools.length-app,appOnly:app,connection:await connectionStatus(),hostLinked:server.hostLinked??false,lastHostRead:server.lastHostRead??null,hostCatalogVerified:server.hostCatalogVerified??false}));return;}
   let body='';for await(const chunk of req){body+=chunk;if(Buffer.byteLength(body)>1024*1024){res.writeHead(413).end();return;}}

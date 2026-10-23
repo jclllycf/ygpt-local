@@ -27,13 +27,15 @@ public class UpdateWindow:Window{
  readonly Button updateButton=new Button{Content="Update now",MinWidth=140,MinHeight=42,HorizontalAlignment=HorizontalAlignment.Left};
  readonly ComboBox installChoice=new ComboBox{MinHeight=36,Margin=new Thickness(0,0,0,10)};
  readonly StackPanel pickerHost=new StackPanel();
+ readonly StackPanel summary=new StackPanel();
  string install="",data="",brandIcon="plugin-icon-256.png",approvalStyle="current";
  readonly List<Border> iconTiles=new List<Border>();
  Border previewHost;
- bool busy=false;
+ bool busy=false,idleWait=false,closed=false;
  static SolidColorBrush B(string s){return (SolidColorBrush)new BrushConverter().ConvertFromString(s);}
- public UpdateWindow(){
-  installs=DiscoverInstalls();
+ public UpdateWindow():this(DiscoverInstalls()){}
+ internal UpdateWindow(List<string[]> availableInstalls){
+  installs=availableInstalls;
   Title="YGPT Local — Update";Width=760;Height=760;MinWidth=680;MinHeight=620;WindowStartupLocation=WindowStartupLocation.CenterScreen;FontFamily=new FontFamily("Segoe UI");FontSize=14;Background=B(Cream);Foreground=B(Ink);
   var root=new DockPanel{Margin=new Thickness(28,22,28,22)};Content=root;
   var head=new StackPanel{Orientation=Orientation.Horizontal,Margin=new Thickness(0,0,0,14)};DockPanel.SetDock(head,Dock.Top);root.Children.Add(head);
@@ -47,7 +49,9 @@ public class UpdateWindow:Window{
    return;
   }
   if(installs.Count>1){Text("Choose the installation to update",14,true);foreach(var entry in installs)installChoice.Items.Add(entry[2]+"  —  "+entry[0]);installChoice.SelectedIndex=0;installChoice.SelectionChanged+=(s,e)=>SelectInstall(installChoice.SelectedIndex);body.Children.Add(installChoice);}
+  body.Children.Add(summary);body.Children.Add(pickerHost);
   SelectInstall(0);
+  Closing+=(s,e)=>{if(busy&&!idleWait){e.Cancel=true;Log("Please wait for the update to finish before closing this window.");}};Closed+=(s,e)=>closed=true;
   updateButton.Click+=async(s,e)=>await RunUpdate();
   AutomationProperties.SetAutomationId(updateButton,"update-now");
   body.Children.Add(updateButton);body.Children.Add(log);
@@ -102,21 +106,19 @@ public class UpdateWindow:Window{
   return found;
  }
  void SelectInstall(int index){
-  if(index<0||index>=installs.Count)return;
+  if(busy||index<0||index>=installs.Count)return;
   install=installs[index][0];data=installs[index][1];
+  brandIcon="plugin-icon-256.png";approvalStyle="current";
   try{var c=YGPTApp.Read(Path.Combine(data,"ygpt.config.json"));string saved=HostCore.S(c,"brandIcon");if(Array.IndexOf(BrandIconFiles,saved)>=0)brandIcon=saved;approvalStyle=HostCore.S(c,"approvalStyle")=="legacy"?"legacy":"current";}catch{}
   // Rebuild the summary + picker for this target.
-  while(body.Children.Count>0&&(installs.Count>1?body.Children[0]!=installChoice:true))body.Children.RemoveAt(installs.Count>1?1:0);
-  var summary=new StackPanel();
+  summary.Children.Clear();
   summary.Children.Add(new TextBlock{Text="Installed: "+installs[index][2]+"   →   This update: "+HostCore.Version,FontSize=14,FontWeight=FontWeights.SemiBold,TextWrapping=TextWrapping.Wrap,Margin=new Thickness(0,0,0,4)});
   summary.Children.Add(new TextBlock{Text=install,FontSize=12,Foreground=B(Muted),TextWrapping=TextWrapping.Wrap,Margin=new Thickness(0,0,0,4)});
   summary.Children.Add(new TextBlock{Text="Kept as-is: settings, encrypted keys, connection identity, snapshots and your ChatGPT plugin.",FontSize=13,Foreground=B(Muted),TextWrapping=TextWrapping.Wrap,Margin=new Thickness(0,0,0,12)});
-  if(installs.Count>1)body.Children.Insert(1,summary);else body.Children.Insert(0,summary);
   pickerHost.Children.Clear();BuildPicker(pickerHost);
-  if(!body.Children.Contains(pickerHost))body.Children.Insert(installs.Count>1?2:1,pickerHost);
  }
  BitmapSource BrandBitmap(int i){
-  string file=Path.Combine(install,"assets","brand",BrandIconFiles[i]);if(File.Exists(file)){try{return new BitmapImage(new Uri(file));}catch{}}
+  string file=Path.Combine(install,"assets","brand",BrandIconFiles[i]);if(File.Exists(file)){try{using(var stream=File.OpenRead(file)){var b=new BitmapImage();b.BeginInit();b.CacheOption=BitmapCacheOption.OnLoad;b.StreamSource=stream;b.EndInit();b.Freeze();return b;}}catch{}}
   using(var stream=Assembly.GetExecutingAssembly().GetManifestResourceStream(BrandIconResources[i])){if(stream==null)return null;var b=new BitmapImage();b.BeginInit();b.CacheOption=BitmapCacheOption.OnLoad;b.StreamSource=stream;b.EndInit();return b;}
  }
  void RefreshIconTiles(){for(int i=0;i<iconTiles.Count;i++)iconTiles[i].BorderBrush=B(BrandIconFiles[i]==brandIcon?Mint:Line);}
@@ -140,37 +142,55 @@ public class UpdateWindow:Window{
  }
  void Log(string line){log.Text=log.Text.Length==0?line:log.Text+"\n"+line;}
  async Task RunUpdate(){
-  if(busy)return;busy=true;updateButton.IsEnabled=false;log.Text="";
+  if(busy)return;busy=true;updateButton.IsEnabled=false;installChoice.IsEnabled=false;pickerHost.IsEnabled=false;log.Text="";
+  // Bind every asynchronous step to the installation selected at the click.
+  string targetInstall=install,targetData=data,selectedIcon=brandIcon,selectedStyle=approvalStyle;
+  bool wasPaused=File.Exists(Path.Combine(targetData,"paused")),restarted=false;
+  Exception failed=null;
+  try{
   try{
    Log("Pausing the current connection…");
-   bool pausedOk=File.Exists(Path.Combine(install,".ygpt-install.json"))?false:true;
+   bool pausedOk=false;
    for(int attempt=0;attempt<120&&!pausedOk;attempt++){
     Exception failure=null;
-    try{await Task.Run(()=>HostCore.PrepareOwnedRepair(install,data));pausedOk=true;}
+    try{await Task.Run(()=>{YGPTApp.ValidateInstallTarget(targetInstall);if(!File.Exists(Path.Combine(targetInstall,".ygpt-install.json")))throw new Exception("The selected installation is no longer present. Reopen the updater to discover it again.");HostCore.PrepareOwnedRepair(targetInstall,targetData);});pausedOk=true;}
     catch(Exception ex){failure=ex;}
     if(pausedOk)break;
     if(!failure.Message.Contains("Finish active work"))throw failure;
-    if(attempt==0)Log("Waiting — something in ChatGPT is still active: a request waiting for your Allow/Deny, or a running task. Nothing has been changed yet. I'll continue automatically as soon as it clears; deciding that request now is the fastest way.");
-    await Task.Delay(5000);
+    if(attempt==0)Log("Waiting — something in ChatGPT is still active: a request waiting for your Allow/Deny, or a running task. Nothing has been changed yet. I'll continue automatically as soon as it clears; deciding that request now is the fastest way. You can close this window to cancel.");
+    // Nothing is paused or replaced between attempts (Pause removes its own
+    // barrier when it refuses), so the owner may close the window to cancel.
+    idleWait=true;try{await Task.Delay(5000);}finally{idleWait=false;}
+    if(closed)return;
    }
    if(!pausedOk){Log("Stopped after waiting 10 minutes: the connection stayed busy, so nothing was changed. Finish the pending request in ChatGPT, then run the update again.");return;}
    Log("Replacing application files (your data folder is not touched)…");
-   await Task.Run(()=>YGPTApp.InstallPayload(install));
+   await Task.Run(()=>YGPTApp.InstallPayload(targetInstall));
    Log("Saving your icon and strip style…");
-   try{await Task.Run(()=>{string cfgPath=Path.Combine(data,"ygpt.config.json");var cfg=YGPTApp.Read(cfgPath);cfg["brandIcon"]=brandIcon;cfg["approvalStyle"]=approvalStyle;HostCore.Save(cfgPath,cfg);});}
+   try{await Task.Run(()=>{string cfgPath=Path.Combine(targetData,"ygpt.config.json");var cfg=YGPTApp.Read(cfgPath);cfg["brandIcon"]=selectedIcon;cfg["approvalStyle"]=selectedStyle;HostCore.Save(cfgPath,cfg);});}
    catch(Exception ex){Log("Note: the icon choice could not be saved ("+ex.Message+"). Cosmetic choices never block a core update — you can pick it again later via Setup → Repair.");}
    YGPTApp.RefreshIconCache();
    Log("Restarting the connection…");
-   await Task.Run(()=>HostCore.Start(install,data));
+   await Task.Run(()=>HostCore.Start(targetInstall,targetData));restarted=true;
    bool live=false;
    for(int i=0;i<25&&!live;i++){
     await Task.Delay(1000);
-    try{var h=HostCore.Read(Path.Combine(data,"watchdog-health.json"));live=HostCore.S(h,"ownerId")==HostCore.OwnerId(data)&&(DateTime.UtcNow-DateTime.Parse(HostCore.S(h,"at")).ToUniversalTime()).TotalSeconds<25;}catch{}
+    try{var h=HostCore.Read(Path.Combine(targetData,"watchdog-health.json"));live=HostCore.S(h,"ownerId")==HostCore.OwnerId(targetData)&&HostCore.S(h,"version")==HostCore.Version&&!HostCore.B(h,"stopped")&&(DateTime.UtcNow-DateTime.Parse(HostCore.S(h,"at")).ToUniversalTime()).TotalSeconds<25;}catch{}
    }
    Log(live?"Update complete — now running "+HostCore.Version+". Your ChatGPT plugin, settings and keys were kept; nothing to re-add.":"Update complete — now running "+HostCore.Version+". The connection is still starting; it reconnects automatically. Your plugin, settings and keys were kept.");
-  }catch(Exception ex){
-   Log("Update stopped: "+ex.Message);
+  }catch(Exception ex){failed=ex;}
+  // C# 5 (the .NET Framework csc used by the Windows build) cannot await
+  // inside a catch block, so recovery runs after it.
+  if(failed!=null){
+   Log("Update stopped: "+failed.Message);
+   // Resume only a pause this run created (including a pause that timed out
+   // before the service reported stopped); an owner's earlier pause is kept.
+   if(!wasPaused&&!restarted&&File.Exists(Path.Combine(targetData,"paused"))){
+    try{await Task.Run(()=>{YGPTApp.ValidateInstallTarget(targetInstall);if(!File.Exists(Path.Combine(targetInstall,".ygpt-install.json"))||!File.Exists(Path.Combine(targetInstall,"YGPTWatchdog.exe")))throw new Exception("The previous application could not be restored to its original folder; use the full Setup package to repair it.");HostCore.Start(targetInstall,targetData);});Log("The retained installation was restarted after the failed update.");}
+    catch(Exception restartError){Log("The connection remains paused: "+restartError.Message);}
+   }
    Log("Nothing was uninstalled. Your previous version was left in place where possible; running the full Setup package as Repair also works.");
-  }finally{busy=false;updateButton.IsEnabled=true;}
+  }
+  }finally{busy=false;idleWait=false;updateButton.IsEnabled=true;installChoice.IsEnabled=true;pickerHost.IsEnabled=true;}
  }
 }

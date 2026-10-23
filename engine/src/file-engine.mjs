@@ -72,9 +72,8 @@ export class YFileEngine {
   }
   async read(input, { offset = 0, lines = 100, maxBytes = 1_048_576 } = {}) {
     if (!Number.isInteger(offset) || offset < 0 || !Number.isInteger(lines) || lines < 1 || lines > 2000) throw new EngineError('BAD_RANGE', 'Invalid read range');
-    const target = await this.resolve(input); const info = await fs.stat(target);
-    if (!info.isFile() || info.size > maxBytes) throw new EngineError('READ_LIMIT', 'File is not a regular bounded text file');
-    const data = await fs.readFile(target);
+    const target = await this.resolve(input);
+    const data = await this.boundedBytes(target,maxBytes);
     const all = new TextDecoder('utf-8', { fatal: true }).decode(data).split(/\r?\n/);
     return { path: target, content: all.slice(offset, offset + lines).join('\n'), totalLines: all.length,
       remainingLines: Math.max(0, all.length - offset - lines), sha256: sha256(data) };
@@ -105,12 +104,13 @@ export class YFileEngine {
   }
   async replaceExact(input, oldText, newText, { expectedSha256 } = {}) {
     if (typeof oldText !== 'string' || !oldText.length) throw new EngineError('BAD_REPLACE', 'Nonempty old text is required');
-    const target = await this.resolve(input); const original = new TextDecoder('utf-8',{fatal:true}).decode(await this.boundedBytes(target,8*1024*1024));
+    const target = await this.resolve(input), data=await this.boundedBytes(target,8*1024*1024);
+    const original = new TextDecoder('utf-8',{fatal:true,ignoreBOM:true}).decode(data);
     const occurrences = original.split(oldText).length - 1;
     if (occurrences !== 1) throw new EngineError('AMBIGUOUS_EDIT', 'Exact replacement must match once, found ' + occurrences);
-    const actual=sha256(Buffer.from(original));
+    const actual=sha256(data);
     if(expectedSha256!==undefined&&expectedSha256!==actual)throw new EngineError('STALE_PREIMAGE','Target changed since inspection');
-    return this.atomicWrite(input, original.replace(oldText, String(newText)), { expectedSha256:actual });
+    return this.atomicWrite(input, original.replace(oldText, () => String(newText)), { expectedSha256:actual });
   }
   async readBytes(input,{offset=0,length=65536}={}) {
     if(!Number.isSafeInteger(offset)||offset<0||!Number.isInteger(length)||length<1||length>1048576)throw new EngineError('BAD_RANGE','Invalid byte range');

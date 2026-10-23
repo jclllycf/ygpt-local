@@ -22,3 +22,5 @@ export const config={
   desktopAllowedApps:[],agentProtectedRoots:undefined,
 };
 export function currentPermissionMode(){return config.permissionMode;}
+// Imports of secure-state need this export even when tests inject a sealer.
+export function cleanEnv(){return {};}

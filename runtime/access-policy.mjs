@@ -113,6 +113,7 @@ export function highRiskCommand(command){
   // stores cannot use the ordinary project shell exception. This is a signal
   // guard, not a claim that arbitrary trusted code is an OS sandbox.
   if([config.stateDir,config.configFile,INSTALL,...config.protectedRoots].some(p=>normalized.includes(canonical(p))))return true;
+  if(/(?:^|[\s'"(=,])g:[\\/]/i.test(value))return true;
   if(/(?:^|[\\/\s'"(])(?:\.ssh|\.aws|\.azure|\.kube|\.codex|\.mcp-auth|\.env(?:\.[\w-]+)?)(?:[\\/\s'";)]|$)|\b(?:auth\.json|id_rsa|id_ed25519|login data|credentials\.json)\b/i.test(value))return true;
   if(/\b(?:stop-process|taskkill(?:\.exe)?|stop-service|restart-service|set-service|new-service|remove-service|register-scheduledtask|unregister-scheduledtask|bcdboot|bootsect|mountvol|fsutil|runas(?:\.exe)?)\b|\bsc(?:\.exe)?\s+(?:create|config|delete|start|stop)\b|\bschtasks(?:\.exe)?\s+\/(?:create|delete|change|run|end)\b|\bnet(?:\.exe)?\s+(?:user|localgroup|start|stop)\b/i.test(value))return true;
   if(/(?:-enc(?:odedcommand)?\b|\bfrombase64string\b|\binvoke-expression\b|\biex\s*\()/i.test(value))return true; // opaque code cannot be reviewed by a name-only check
@@ -141,7 +142,9 @@ function authorizeImpl(name,a={}){
       // directory is still missing when the task actually runs).
       if(/does not exist/.test(e.message))return gate('developer-task',JSON.stringify({task:a.task,cwd:a.cwd}),e.message+' — a verified owner decision is required');
       return deny(e.message);}
-    const trusted=config.autoDevTasks===true&&(Array.isArray(config.trustedDeveloperRoots)?config.trustedDeveloperRoots:[]).some(r=>{try{return within(plan.cwd,canonical(r));}catch{return false;}})&&route(plan.cwd).permission==='project';
+    const target=route(plan.cwd);
+    if(config.blacklistDefaultAllow&&!target.sensitive)return allow('Ordinary structured developer task in the owner default-allow model; project code runs as the current Windows user');
+    const trusted=config.autoDevTasks===true&&(Array.isArray(config.trustedDeveloperRoots)?config.trustedDeveloperRoots:[]).some(r=>{try{return within(plan.cwd,canonical(r));}catch{return false;}})&&target.permission==='project';
     if(trusted)return allow('Owner-opted trusted developer task: '+plan.task+' in '+plan.cwd+'; no shell, but project code runs as current Windows user');
     return gate('developer-task',JSON.stringify({task:plan.task,cwd:plan.cwd}),'Structured developer task outside the owner-trusted set: a verified owner decision substitutes for trust enrollment. No shell; project code runs as the current Windows user');
   }
@@ -154,7 +157,7 @@ function authorizeImpl(name,a={}){
     if(workflow(a))return {...allow('Owner-configured workflow matches cwd, argv and reviewed file hashes'),workflow:true};
     return gate('job',JSON.stringify({argv:a.argv,cwd:a.cwd,releaseOutput:true},null,2),'Start a durable job; its bounded logs/results will be readable by this private owner instance',{cwd:a.cwd,targets:[t.target]});
   }
-  if(name==='y_download_file'){const r=route(a.destination);if(r.permission==='private'||r.permission==='vault'||ownWriteRoots.some(o=>within(r.target,o)))return gate('filesystem',JSON.stringify({tool:name,destination:r.target}),'Download target is inside YGPT protected state or the vault: a verified owner decision is required; the file is never executed automatically',{targets:[r.target]});if(r.permission==='project')return allow('Bounded HTTPS official-source file download; never executes it');return gate('filesystem',JSON.stringify({tool:name,destination:r.target}),'Download outside enrolled project folders requires a verified owner decision; the file is never executed automatically',{targets:[r.target]});}
+  if(name==='y_download_file')return authorizeImpl('write_file',{path:a.destination});
   if(name==='y_verify_checksum')return authorizeImpl('read_file',{path:a.path});
   if(name==='y_file_trash'){
     const paths=Array.isArray(a.paths)?a.paths:[];if(!paths.length||paths.length>20)return deny('Choose 1 to 20 paths to move to the Recycle Bin');
@@ -188,12 +191,14 @@ function authorizeImpl(name,a={}){
   }
   return gate('unclassified',JSON.stringify({tool:name}),'Unclassified tool: instead of a blanket refusal, a verified owner decision is required');
 }
-// Owner-selected interim operation mode: do not enqueue any local consent UI.
-// This removes human-approval interruptions, not hard-deny security boundaries.
-// Protected/system/outside-project operations that used to require consent
-// fail closed until a new review mechanism is implemented and tested.
+// Owner policy (since the rc.2 baseline; docs/UPGRADE_SECURITY_NOTE.md):
+// typed reads and parsed read-only PowerShell need no human decision, YGPT's
+// own folders and the vault included (the owner reported read approvals on
+// the install folder as a defect). Writes, deletes and other commands that
+// touch YGPT state or the vault stay gated below.
 export function authorize(name,args={}){
  try{
+  if(name==='y_download_file')return authorize('write_file',{path:args.destination});
   if(config.readOnlyAutoAllow&&fileReadTools.has(name)){
    const paths=name==='read_multiple_files'?args.paths:[args.path];
    if(!Array.isArray(paths)||!paths.length)return deny('Missing read paths');
@@ -236,7 +241,7 @@ function authorizeRc9(name,a={}){
     const paths=name==='read_multiple_files'?a.paths:name==='move_file'?[a.source,a.destination]:[name==='edit_block'?a.file_path:a.path];
     if(!Array.isArray(paths)||!paths.length)return deny('Missing target paths');
     const targets=paths.map(route);
-    const allClean=targets.every((t,i)=>t.permission!=='vault'&&t.permission!=='private'&&!sensitivePath(canonical(paths[i]))&&!t.system);
+    const allClean=targets.every((t,i)=>t.permission!=='vault'&&t.permission!=='private'&&!sensitivePath(canonical(paths[i]))&&!t.system&&(isRead||!ownWriteRoots.some(r=>within(t.target,r)||within(r,t.target))));
     // Ordinary OS diagnostic reads are useful, but broad recursive searches and
     // paths naming known secret stores remain gated.
     if(isRead&&name!=='start_search'&&targets.every((t,i)=>t.permission!=='private'&&t.permission!=='vault'&&!sensitivePath(canonical(paths[i]))))

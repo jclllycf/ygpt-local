@@ -288,20 +288,22 @@ test('An unknown operation is never replayed: the same request key after a resta
   reopened.close();
 });
 
-// Real headless Chromium when available (PLAYWRIGHT_BROWSERS_PATH); production
-// launches channel msedge. This checks YGPT's isolation logic, not Edge itself.
-const testLaunch=async()=>{const {chromium}=await import('playwright');return chromium.launch(process.platform==='win32'?{channel:'msedge',headless:true}:{headless:true});};
+// YGPT_TEST_CHROMIUM can select a portable fixture executable. This checks
+// isolation in real Chromium; production defaults to the owner's Chrome.
+const testLaunch=async()=>{const {chromium}=await import('playwright');return chromium.launch(process.env.YGPT_TEST_CHROMIUM?{executablePath:process.env.YGPT_TEST_CHROMIUM,headless:true,args:['--no-sandbox']}:process.platform==='win32'?{channel:'chrome',headless:true}:{headless:true});};
 async function chromiumAvailable(){try{const b=await testLaunch();await b.close();return true;}catch{return false;}}
 const haveChromium=await chromiumAvailable();
 test('Browser: one lazy instance, a private context per chat; tabs, cookies and closing never cross chats',{skip:haveChromium?false:'no Playwright Chromium in this environment'},async()=>{
   const {YBrowserEngine}=await import('../engine/src/browser-engine.mjs');
-  const http=await import('node:http');
-  const server=http.createServer((req,res)=>{
-    if(req.url==='/set'){res.writeHead(200,{'Set-Cookie':'session=chat-a-secret; Path=/','Content-Type':'text/html'});res.end('<title>set</title><p>cookie set</p>');return;}
-    res.writeHead(200,{'Content-Type':'text/html'});res.end('<title>show</title><p id="c">cookie='+(req.headers.cookie??'none')+'</p><a href="/show" target="_blank">popup</a>');
-  });await new Promise(r=>server.listen(0,'127.0.0.1',r));const base='http://127.0.0.1:'+server.address().port;
+  const base='https://fixture.invalid';
   const launches=[];let owner='ctx-a';
-  const browser=new YBrowserEngine({stateDir:tmp(),currentOwner:()=>owner,launch:async o=>{launches.push(o);return testLaunch();}});
+  const browser=new YBrowserEngine({stateDir:tmp(),currentOwner:()=>owner,launch:async o=>{
+    launches.push(o);const instance=await testLaunch(),create=instance.newContext.bind(instance);
+    instance.newContext=async options=>{const context=await create(options);await context.route(base+'/**',route=>{
+      const setting=new URL(route.request().url()).pathname==='/set';
+      return route.fulfill({contentType:'text/html',headers:setting?{'Set-Cookie':'session=chat-a-secret; Path=/; Secure'}:{},body:setting?'<title>set</title><p>cookie set</p>':'<title>show</title><p id="c">cookie='+(route.request().headers().cookie??'none')+'</p><a href="/show" target="_blank">popup</a>'});
+    });return context;};return instance;
+  }});
   try{
     assert.equal(launches.length,0,'nothing launches before a browser task');
     const a=await browser.open(base+'/set');await browser.navigate(a.tabId,base+'/show');
@@ -311,7 +313,7 @@ test('Browser: one lazy instance, a private context per chat; tabs, cookies and 
     assert.deepEqual((await browser.list()).tabs.map(t=>t.tabId),[b.tabId]);assert.equal((await browser.list()).otherChatTabs,1);
     for(const attempt of [()=>browser.snapshot(a.tabId),()=>browser.navigate(a.tabId,base+'/show'),()=>browser.act(a.tabId,'click',{role:'link',name:'popup'}),()=>browser.screenshot(a.tabId),()=>browser.closeTab(a.tabId)])
       await assert.rejects(attempt(),e=>e.code==='SESSION_FOREIGN');
-    assert.equal(launches.length,1,'chats share one YGPT browser instance');assert.deepEqual(launches[0],{channel:'msedge',headless:true},'production launch options: Edge channel, no profile, no CDP');
+    assert.equal(launches.length,1,'chats share one YGPT browser instance');assert.deepEqual(launches[0],{channel:'chrome',headless:true},'production launch options: Chrome channel, no profile, no CDP');
     owner='ctx-a';await browser.act(a.tabId,'click',{role:'link',name:'popup'});
     await new Promise(r=>setTimeout(r,500));const mine=(await browser.list()).tabs;assert.equal(mine.length,2,'a popup belongs to the chat that opened it');
     await browser.closeContext('ctx-a');
@@ -320,5 +322,5 @@ test('Browser: one lazy instance, a private context per chat; tabs, cookies and 
     await assert.rejects(browser.snapshot(a.tabId),e=>e.code==='NO_TAB','chat B learns nothing about chat A closed tabs');
     await browser.sweep(Date.now()+YBrowserEngine.IDLE_MS+1);assert.equal(browser.browser,null,'idle contexts close and the browser with the last one');
     await assert.rejects(browser.snapshot(b.tabId),e=>e.code==='BROWSER_CONTEXT_CLOSED');
-  }finally{await browser.close();await new Promise(r=>server.close(r));}
+  }finally{await browser.close();}
 });

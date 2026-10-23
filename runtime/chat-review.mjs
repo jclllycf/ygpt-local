@@ -4,7 +4,7 @@ import {createHash} from 'node:crypto';
 import {chatScope} from './chat-scope.mjs';
 import {stable,digest,scrub} from './durable.mjs';
 import {config,INSTALL} from './config.mjs';
-import {argvRiskText} from './access-policy.mjs';
+import {argvRiskText,canonical} from './access-policy.mjs';
 export function describeEnglish(name,args={}){
  const read=/^y_(?:file_read|file_read_many|file_info|file_list|search_|project_inspect|verify_checksum)/.test(name)||name==='y_file_patch'&&args.dryRun===true;
  const file=!read&&/^y_file_/.test(name);
@@ -16,8 +16,8 @@ export function describeEnglish(name,args={}){
 export function reviewScope(name,args){
  // A conversation grant is never a blanket OS permission. Keep physical disks,
  // credentials, Windows security and the live connector itself once-only.
- const raw=args.executable?argvRiskText([args.executable,...(args.args??[])]):args.argv?argvRiskText(args.argv):JSON.stringify(args),normalized=JSON.stringify(args).replaceAll('\\\\','\\').toLowerCase();
- const protectedNames=[config.stateDir,config.configFile,INSTALL,...config.protectedRoots].map(p=>path.resolve(p).toLowerCase());
+ const raw=args.executable?argvRiskText([args.executable,...(args.args??[])]):args.argv?argvRiskText(args.argv):JSON.stringify(args),normalized=JSON.stringify(args).replaceAll('\\\\','\\').replaceAll('/','\\').toLowerCase();
+ const protectedNames=[config.stateDir,config.configFile,INSTALL,...config.protectedRoots].map(canonical);
  const restricted=/clear-disk|format-volume|diskpart|remove-partition|bcdedit|set-acl|icacls|takeown|mppreference|executionpolicy|localuser|localgroupmember|credentials|id_rsa|id_ed25519|auth\.json|\.ssh|\.codex/i.test(raw)||protectedNames.some(p=>normalized.includes(p));
  const existing=chatScope(name,args);
  if(!restricted&&existing.eligible)return {...existing,explanation:'Only this exact reviewed action and file/script hashes, for this chat capability, up to two hours. Revoke with y_close_context.'};

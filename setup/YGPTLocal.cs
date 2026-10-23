@@ -70,20 +70,55 @@ public static class YGPTApp {
     throw new InvalidOperationException("This folder belongs to a different installation. Select the original YGPT Local path for Repair or choose a separate empty folder.");
   }
  }
- public static void InstallPayload(string install){CheckPath(install);if(Directory.Exists(install)&&Directory.GetFileSystemEntries(install).Length>0&&!File.Exists(Path.Combine(install,".ygpt-install.json")))throw new Exception("Choose an empty directory. Unrelated applications will not be replaced.");if(File.Exists(Path.Combine(install,".ygpt-install.json"))){var old=Read(Path.Combine(install,".ygpt-install.json"));if((string)old["product"]!="YGPT Local"||!String.Equals(Path.GetFullPath((string)old["installRoot"]),Path.GetFullPath(install),StringComparison.OrdinalIgnoreCase))throw new Exception("Existing installation identity does not match");}
-  using(var payload=Assembly.GetExecutingAssembly().GetManifestResourceStream("YGPT.Payload")){if(payload==null){if(!String.Equals(HostCore.Full(Assembly.GetExecutingAssembly().Location),Path.Combine(HostCore.Full(install),"YGPTLocal.exe"),StringComparison.OrdinalIgnoreCase)||!File.Exists(Path.Combine(install,".ygpt-install.json")))throw new Exception("Use the complete Setup package to install or upgrade. Installed Settings can reconfigure its own verified runtime.");var existing=Read(Path.Combine(install,"manifest.json"));foreach(object item in (System.Collections.IEnumerable)existing["files"]){var f=(Dictionary<string,object>)item;string file=Path.GetFullPath(Path.Combine(install,(string)f["path"]));HostCore.CheckPath(file);if(!HostCore.Within(file,install)||!File.Exists(file)||Hash(file)!=(string)f["sha256"])throw new Exception("Runtime integrity needs repair using the full Setup package.");}return;}string stage=install+".staging-"+Guid.NewGuid().ToString("N");Directory.CreateDirectory(stage);CheckPath(stage);long total=0;using(var zip=new ZipArchive(payload,ZipArchiveMode.Read)){foreach(var e in zip.Entries){if(e.FullName.EndsWith("/")||e.FullName.EndsWith("\\"))continue;string rel=e.FullName.Replace('/','\\');string target=Path.GetFullPath(Path.Combine(stage,rel));if(!target.StartsWith(Path.GetFullPath(stage)+"\\",StringComparison.OrdinalIgnoreCase)||rel.Contains(":")||(e.ExternalAttributes>>16&0xF000)==0xA000)throw new Exception("Unsafe archive entry");total+=e.Length;if(total>1024L*1024*1024)throw new Exception("Payload exceeds expected bounds");Directory.CreateDirectory(Path.GetDirectoryName(target));using(var input=e.Open())using(var output=new FileStream(target,FileMode.CreateNew))input.CopyTo(output);}}
-   var manifest=Read(Path.Combine(stage,"manifest.json"));foreach(object record in (System.Collections.IEnumerable)manifest["files"]){var f=(Dictionary<string,object>)record;string rel=(string)f["path"],p=Path.GetFullPath(Path.Combine(stage,rel));if(!p.StartsWith(Path.GetFullPath(stage)+"\\",StringComparison.OrdinalIgnoreCase)||Hash(p)!=(string)f["sha256"])throw new Exception("Installation payload integrity failed");}
-   string previous=null;bool swapped=false;
+ public static void InstallPayload(string install){
+  using(var payload=Assembly.GetExecutingAssembly().GetManifestResourceStream("YGPT.Payload"))InstallPayload(install,payload);
+ }
+ // A separate stream entrypoint lets disposable native fixtures exercise the
+ // actual archive validation and directory transaction without an installer.
+ internal static void InstallPayload(string install,Stream payload){
+  ValidateInstallTarget(install);
+  if(payload==null){
+   if(!String.Equals(HostCore.Full(Assembly.GetExecutingAssembly().Location),Path.Combine(HostCore.Full(install),"YGPTLocal.exe"),StringComparison.OrdinalIgnoreCase)||!File.Exists(Path.Combine(install,".ygpt-install.json")))throw new Exception("Use the complete Setup package to install or upgrade. Installed Settings can reconfigure its own verified runtime.");
+   var existing=Read(Path.Combine(install,"manifest.json"));
+   foreach(object item in (System.Collections.IEnumerable)existing["files"]){var f=(Dictionary<string,object>)item;string file=Path.GetFullPath(Path.Combine(install,(string)f["path"]));HostCore.CheckPath(file);if(!HostCore.Within(file,install)||!File.Exists(file)||Hash(file)!=(string)f["sha256"])throw new Exception("Runtime integrity needs repair using the full Setup package.");}
+   return;
+  }
+  string stage=install+".staging-"+Guid.NewGuid().ToString("N");
+  try{
+   CheckPath(stage);Directory.CreateDirectory(stage);long total=0;
+   using(var zip=new ZipArchive(payload,ZipArchiveMode.Read,true)){
+    foreach(var e in zip.Entries){
+     if(e.FullName.EndsWith("/")||e.FullName.EndsWith("\\"))continue;
+     string rel=e.FullName.Replace('/','\\'),target=Path.GetFullPath(Path.Combine(stage,rel));
+     if(!target.StartsWith(Path.GetFullPath(stage)+"\\",StringComparison.OrdinalIgnoreCase)||rel.Contains(":")||(e.ExternalAttributes>>16&0xF000)==0xA000)throw new Exception("Unsafe archive entry");
+     total+=e.Length;if(total>1024L*1024*1024)throw new Exception("Payload exceeds expected bounds");
+     Directory.CreateDirectory(Path.GetDirectoryName(target));using(var input=e.Open())using(var output=new FileStream(target,FileMode.CreateNew))input.CopyTo(output);
+    }
+   }
+   var manifest=Read(Path.Combine(stage,"manifest.json"));
+   if(HostCore.S(manifest,"product")!="YGPT Local"||HostCore.S(manifest,"version")!=Version)throw new Exception("Installation payload version or product does not match this setup");
+   foreach(object record in (System.Collections.IEnumerable)manifest["files"]){var f=(Dictionary<string,object>)record;string rel=(string)f["path"],p=Path.GetFullPath(Path.Combine(stage,rel));if(!p.StartsWith(Path.GetFullPath(stage)+"\\",StringComparison.OrdinalIgnoreCase)||Hash(p)!=(string)f["sha256"])throw new Exception("Installation payload integrity failed");}
+   // Commit the ownership marker before moving the current installation. A
+   // failed marker write must leave the existing application repairable.
+   HostCore.Save(Path.Combine(stage,".ygpt-install.json"),new{product="YGPT Local",version=Version,installRoot=Path.GetFullPath(install)});
+   string previous=null;
    try{
     if(Directory.Exists(install)){if(Directory.GetFileSystemEntries(install).Length>0){previous=install+".previous-"+DateTime.UtcNow.Ticks;MoveDirectoryWithRetry(install,previous);}else DeleteEmptyDirectoryWithRetry(install);}
-    MoveDirectoryWithRetry(stage,install);swapped=true;
+    MoveDirectoryWithRetry(stage,install);
    }catch(Exception swapError){
-    if(previous!=null&&!Directory.Exists(install)){try{Directory.Move(previous,install);}catch{}}
-    if(!swapped){try{if(Directory.Exists(stage))Directory.Delete(stage,true);}catch{}}
-    if(swapError is UnauthorizedAccessException||swapError is IOException)throw new Exception("The existing YGPT Local folder is still in use, so Setup could not replace it. The previous version may still be running: exit YGPT Local from the system tray, or restart the PC, then run Setup again. No application files were changed and your private data is untouched.");
+    if(previous!=null&&Directory.Exists(previous)&&!Directory.Exists(install)){
+     try{MoveDirectoryWithRetry(previous,install);}
+     catch(Exception rollbackError){throw new IOException("Setup could not restore the previous application to its original folder. It is retained at "+previous+". Private data is unchanged. Close this installation's processes and use the full Setup package to repair it.",new AggregateException(swapError,rollbackError));}
+    }
+    if(swapError is UnauthorizedAccessException||swapError is IOException)throw new IOException("The YGPT Local folder is still in use, so Setup could not replace it. The previous application was retained and your private data is unchanged. Close this installation's windows or restart the PC, then retry.",swapError);
     throw;
    }
-   File.WriteAllText(Path.Combine(install,".ygpt-install.json"),Json.Serialize(new{product="YGPT Local",version=Version,installRoot=Path.GetFullPath(install)}));}}
+  }finally{
+   // Corrupt archives and failed verification must not leak a payload-sized
+   // directory. Only this invocation's unique staging directory is eligible.
+   try{if(Directory.Exists(stage)){CheckPath(stage);Directory.Delete(stage,true);}}catch{}
+  }
+ }
  // Directory moves over a live previous install can lose a brief race with the
  // outgoing processes and with antivirus scans; retry for a few seconds
  // before bothering the owner (added after the rc.9-over-rc.8 field report).

@@ -14,7 +14,7 @@ export class YTerminalEngine {
     this.owner=()=>currentOwner()??'local';
     if(!path.isAbsolute(root??''))throw new EngineError('BAD_ROOT','An absolute project root is required');
     this.root=path.resolve(root);this.stateDir=stateDir;this.allowed=new Set((allowedExecutables??[]).map(p=>path.resolve(p).toLowerCase()));this.maxOutputBytes=maxOutputBytes;this.sessions=new Map();
-    this.authorizeExecutable=authorizeExecutable;
+    this.authorizeExecutable=authorizeExecutable;this.starting=new Map();this.closing=false;
   }
   async validate({executable,args=[],cwd=this.root,timeoutMs=10000}) {
     if(!path.isAbsolute(executable??''))throw new EngineError('EXE_NOT_ALLOWED','Executable must use an absolute local path');
@@ -29,11 +29,17 @@ export class YTerminalEngine {
     return {executable,args,cwd:full,timeoutMs};
   }
   async start(input={}) {
-    const owner=this.owner(),running=[...this.sessions.values()].filter(s=>s.state==='running');
+    if(this.closing)throw new EngineError('ENGINE_CLOSED','Process engine is closing');
+    const owner=this.owner(),running=[...this.sessions.values()].filter(s=>s.state==='running').concat([...this.starting.values()]);
     // Fair share: one chat cannot occupy every slot and starve the others.
     if(running.filter(s=>s.owner===owner).length>=YTerminalEngine.MAX_ACTIVE_PER_OWNER)throw new EngineError('CONCURRENCY_LIMIT','This chat already has '+YTerminalEngine.MAX_ACTIVE_PER_OWNER+' running processes; wait for or cancel one. Nothing was started.');
     if(running.length>=YTerminalEngine.MAX_ACTIVE)throw new EngineError('CONCURRENCY_LIMIT','Eight processes are running across all chats; retry when one finishes. Nothing was started.');
-    const spec=await this.validate(input),id=crypto.randomUUID(),env=await cleanEnvironment(this.stateDir);
+    // Reserve synchronously before validation/environment awaits so parallel
+    // starts count against the same fair-share and bridge-wide limits.
+    const id=crypto.randomUUID();this.starting.set(id,{owner});
+    try{
+    const spec=await this.validate(input),env=await cleanEnvironment(this.stateDir);
+    if(this.closing)throw new EngineError('ENGINE_CLOSED','Process engine is closing');
     const child=spawn(spec.executable,spec.args,{cwd:spec.cwd,env,shell:false,windowsHide:true,stdio:['pipe','pipe','pipe']});
     const s={id,owner,child,state:'running',stdout:'',stderr:'',bytes:0,truncated:false,timedOut:false,exitCode:null,startedAt:new Date().toISOString()};this.sessions.set(id,s);
     child.stdin.on('error',()=>{}); // write callback reports EPIPE without crashing the MCP server
@@ -42,7 +48,9 @@ export class YTerminalEngine {
     s.timer=setTimeout(()=>{s.timedOut=true;void terminateProcessTree(child);},spec.timeoutMs);
     child.once('error',e=>{s.error=e.message;s.state='failed';clearTimeout(s.timer);s.resolve();});
     child.once('close',(code,signal)=>{clearTimeout(s.timer);s.stdout+=decoders.stdout.end();s.stderr+=decoders.stderr.end();s.exitCode=code;s.signal=signal;s.endedAt=new Date().toISOString();s.state=s.cancelled?'cancelled':s.timedOut?'timed_out':code===0?'succeeded':'failed';s.resolve();});
+    this.starting.delete(id);
     await new Promise((resolve,reject)=>{child.once('spawn',resolve);child.once('error',reject);});return this.poll(id);
+    }finally{this.starting.delete(id);}
   }
   get(id){const s=this.sessions.get(id);if(!s)throw new EngineError('NO_SESSION','No process owned by this engine session');if(s.owner!==this.owner())throw new EngineError('SESSION_FOREIGN','SESSION_FOREIGN: this process session belongs to another chat context');return s;}
   // Broker-internal state read (snapshot finalization); not an MCP path.
@@ -51,7 +59,7 @@ export class YTerminalEngine {
     if(!Number.isInteger(offset)||offset<0||!Number.isInteger(limit)||limit<1||limit>65536)throw new EngineError('BAD_RANGE','Invalid output range');
     return this.view(this.get(id),{offset,limit});
   }
-  view(s,{offset,limit}){const id=s.id;return {sessionId:id,state:s.state,ownedPid:s.child.pid,stdout:s.stdout.slice(offset,offset+limit),stderr:s.stderr.slice(offset,offset+limit),nextOffset:Math.max(s.stdout.length,s.stderr.length),exitCode:s.exitCode,signal:s.signal??null,truncated:s.truncated,timedOut:s.timedOut,error:s.error,startedAt:s.startedAt,endedAt:s.endedAt,interactive:'pipes; not a PTY'};
+  view(s,{offset,limit}){const id=s.id;return {sessionId:id,state:s.state,ownedPid:s.child.pid,stdout:s.stdout.slice(offset,offset+limit),stderr:s.stderr.slice(offset,offset+limit),nextOffset:Math.max(offset,Math.min(offset+limit,Math.max(s.stdout.length,s.stderr.length))),exitCode:s.exitCode,signal:s.signal??null,truncated:s.truncated,timedOut:s.timedOut,error:s.error,startedAt:s.startedAt,endedAt:s.endedAt,interactive:'pipes; not a PTY'};
   }
   async input(id,text,{end=false}={}){const s=this.get(id);if(s.state!=='running'||typeof text!=='string'||Buffer.byteLength(text)>65536)throw new EngineError('BAD_INPUT','Session closed or input too large');await new Promise((resolve,reject)=>s.child.stdin.write(text,e=>e?reject(e):resolve()));if(end)s.child.stdin.end();return {sessionId:id,bytes:Buffer.byteLength(text)};}
   async cancel(id){const s=this.get(id);return this.stop(s);}
@@ -60,5 +68,5 @@ export class YTerminalEngine {
     return {sessions:mine.map(s=>this.view(s,{offset:0,limit:1})).map(({stdout,stderr,...s})=>s),otherChats:all.length-mine.length,otherChatsActive:all.filter(s=>s.owner!==owner&&s.state==='running').length};}
   owned(owner=this.owner()){return [...this.sessions.values()].filter(s=>s.owner===owner).map(s=>({sessionId:s.id,state:s.state,ownedPid:s.child.pid,startedAt:s.startedAt}));}
   async run(input={}){const p=await this.start(input);await this.get(p.sessionId).done;return this.poll(p.sessionId);}
-  async close(){await Promise.all([...this.sessions.values()].filter(s=>s.state==='running').map(s=>this.stop(s)));}
+  async close(){this.closing=true;await Promise.all([...this.sessions.values()].filter(s=>s.state==='running').map(s=>this.stop(s)));}
 }

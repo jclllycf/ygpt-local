@@ -45,16 +45,16 @@ const additions=[
  ['y_pending_approvals','List THIS chat\'s pending approval request IDs and states (other chats are only counted); never grants approval.',obj()],
  ['y_wait_approval','Wait for an already displayed approval and return the original result, keeping the task in progress. Never executes or replays the action. Continue waiting while pending; do not produce a final report above the card.',obj({requestId:str,resultToken:str,waitMs:{type:'integer',minimum:100,maximum:25000}},['requestId','resultToken'])],
  ['y_policy','Project roots, protections, the active permission mode (autonomous, balanced or secure) and what needs a human. Read-only: the mode is changed by the owner in Windows, never by a tool call.',obj()],
- ['y_dev_task','Run predefined git, Node, npm or Python project tasks in an owner-trusted Windows project without a shell. Requires explicit owner opt-in and can run project scripts; returns durable job ID and output token.',obj({cwd:str,task:{type:'string',enum:developerTasks},timeoutSeconds:{type:'integer',minimum:1,maximum:1800}},['cwd','task'])],
+ ['y_dev_task','Run predefined git, Node, npm or Python project tasks without a shell. Ordinary project tasks run by default; protected working directories require a human decision. Can run project scripts; returns durable job ID and output token.',obj({cwd:str,task:{type:'string',enum:developerTasks},timeoutSeconds:{type:'integer',minimum:1,maximum:1800}},['cwd','task'])],
  ['y_close_context','Revoke this chat-held context: its narrow grants end, its browser context closes and its UIA bindings are released. Running processes and jobs keep running but can no longer be controlled from this chat; cancel them first if needed.',obj({contextToken:str},['contextToken'])],
- ['y_download_file','Download from fixed official HTTPS sources into an owner-allowed folder. Never executes downloaded code or changes a physical disk. Returns a durable job ID and scoped output token; follow progress with y_job_status.',obj({url:str,destination:str,sha256:{type:'string',pattern:'^[a-fA-F0-9]{64}$'},maxBytes:{type:'integer',minimum:1,maximum:10737418240}},['url','destination'])],
+ ['y_download_file','Download an HTTPS file with bounded size and optional SHA-256 verification. Protected destinations require a human decision. Never executes downloaded code. Returns a durable job ID and scoped output token; follow progress with y_job_status.',obj({url:str,destination:str,sha256:{type:'string',pattern:'^[a-fA-F0-9]{64}$'},maxBytes:{type:'integer',minimum:1,maximum:10737418240}},['url','destination'])],
  ['y_verify_checksum','Read an ordinary project file (any size) and compute/compare SHA-256 without modifying it.',obj({path:str,sha256:{type:'string',pattern:'^[a-fA-F0-9]{64}$'}},['path'])],
  ['y_call_status','Get durable operation/call state by ID. A pending ChatGPT generation is not kept open.',obj({id},['id'])],
  ['y_call_result','Recover a bounded encrypted result with the resultToken returned to the original caller. Never repeat an unknown operation.',obj({id,resultToken:str},['id','resultToken'])],
  ['y_recent_calls','Recent call IDs and states with tool name, time, a short chat label and transport; no arguments, results or tokens.',obj({limit:integer})],
  ['y_usage_report','Usage statistics for this instance over a bounded window (1 hour to 30 days, default 7 days): totals by state, per-tool counts, error codes, latency percentiles and per-chat/transport counts. Chat labels are server-issued; host type is never guessed. No arguments, results or secrets are included.',obj({windowHours:{type:'integer',minimum:1,maximum:720}})],
  ['y_resource_owner','Read-only ownership view: the resources (jobs, browser tabs, process sessions, UIA bindings) that belong to THIS chat, and how many belong to other chats. Listing never grants control over any resource.',obj()],
- ['y_file_trash','Move 1 to 20 files or folders to the Windows Recycle Bin. A single ordinary file is deleted by default: a verified protected snapshot is taken first (its snapshotId restores it with y_backup_restore) and the Recycle Bin keeps its own copy; if the snapshot fails nothing is deleted. Batch deletes (more than one path), directories, project roots themselves and system paths require a human decision first. YGPT runtime/state and the vault are refused.',obj({paths:{type:'array',minItems:1,maxItems:20,items:str}},['paths'])],
+ ['y_file_trash','Move 1 to 20 files or folders to the Windows Recycle Bin. A single ordinary file is deleted by default: a verified protected snapshot is taken first (its snapshotId restores it with y_backup_restore) and the Recycle Bin keeps its own copy; if the snapshot fails nothing is deleted. Batch deletes, directories, project roots, system paths, YGPT runtime/state and the vault require a human decision first.',obj({paths:{type:'array',minItems:1,maxItems:20,items:str}},['paths'])],
  ,['y_backup_list','List protected pre-write snapshots; contents and credentials are not included.',obj({limit:integer})]
  ,['y_backup_diff','Get path/hash differences and Git checkpoint status for a snapshot.',obj({id},['id'])]
  ,['y_backup_restore','Conflict-checked restore of a completed file snapshot; creates its own undo snapshot.',obj({id},['id'])]
@@ -176,7 +176,7 @@ async function initializeEngine(){
 }
 async function jobControl(action,args){
   return new Promise((resolve,reject)=>{
-    const p=spawn(config.python,[...config.pythonArgs,path.join(RUNTIME,'y_jobs.py')],{cwd:config.stateDir,env:cleanEnv({YGPT_INGRESS_ID:config.ingressId,YGPT_PROJECT_ROOTS:JSON.stringify(config.projectRoots)}),windowsHide:true,stdio:['pipe','pipe','ignore']});
+    const p=spawn(config.python,[...config.pythonArgs,path.join(RUNTIME,'y_jobs.py')],{cwd:config.stateDir,env:cleanEnv({YGPT_INGRESS_ID:config.ingressId,YGPT_PROJECT_ROOTS:JSON.stringify(action==='submit'?[args.cwd]:config.projectRoots)}),windowsHide:true,stdio:['pipe','pipe','ignore']});
     let data='';const timer=setTimeout(()=>{p.kill();reject(Error('Job control deadline; query status by operation ID'));},12000);
     p.stdout.on('data',b=>{data+=b;if(Buffer.byteLength(data)>262144){p.kill();reject(Error('Job response too large'));}});
     p.once('error',e=>{clearTimeout(timer);reject(e);});
@@ -202,6 +202,13 @@ async function jobShare(existingId=null){
   if(active>=JOBS_PER_CHAT)throw Object.assign(Error('CONCURRENCY_LIMIT: this chat already has '+active+' active durable jobs; wait for or cancel one. Nothing was started.'),{code:'CONCURRENCY_LIMIT',effectStarted:false});
 }
 async function dispatch(name,args,operationId,reviewed=false){
+  // Only broker-claimed decisions or exact saved chat grants set reviewed.
+  // Snapshot authorization follows this async call, never a model argument or
+  // a mutable process-global flag shared with concurrent unreviewed calls.
+  if(reviewed){await ensureBackups();return backups.withReviewed(()=>dispatchScoped(name,args,operationId,true));}
+  return dispatchScoped(name,args,operationId,false);
+}
+async function dispatchScoped(name,args,operationId,reviewed=false){
   if(name==='y_sqlite_read'){canonical(args.path);const value=sqliteRead(args);return {content:[{type:'text',text:JSON.stringify(value)}],structuredContent:value};}
   if(name==='y_desktop_fixture'&&nativeExtension){const result=await nativeExtension.launchFixture();return {content:[{type:'text',text:JSON.stringify(result)}],structuredContent:result};}
   if(nativeExtension?.tools().some(t=>t.name===name)){
@@ -248,7 +255,7 @@ async function dispatch(name,args,operationId,reviewed=false){
     result.outputToken=ledger.grant('job',result.job_id);
     return {structuredContent:result,content:[{type:'text',text:JSON.stringify({job_id:result.job_id,state:result.state,task:task.task,outputToken:result.outputToken})}]};
   }
-  if(name==='y_verify_checksum'){const r=await checksum(args.path,args.sha256);return {content:[{type:'text',text:JSON.stringify(r)}],structuredContent:r};}
+  if(name==='y_verify_checksum'){const r=await checksum(args.path,args.sha256,{reviewed});return {content:[{type:'text',text:JSON.stringify(r)}],structuredContent:r};}
   if(name==='y_usage_report'){
     const hours=Math.min(720,Math.max(1,args.windowHours??168)),since=Date.now()-hours*3600000,rows=ledger.usageRows(since);
     const byState={},byTool={},byError={},bySource={},durations=[];
@@ -283,9 +290,9 @@ async function dispatch(name,args,operationId,reviewed=false){
     return {content:[{type:'text',text:JSON.stringify(value)}],structuredContent:value};
   }
   if(name==='y_download_file'){
-    validateSource(args.url);validateDestination(args.destination);await jobShare();fs.mkdirSync(path.dirname(args.destination),{recursive:true});
+    validateSource(args.url);validateDestination(args.destination,{reviewed});await jobShare();fs.mkdirSync(path.dirname(args.destination),{recursive:true});
     const jobId=operationId??randomUUID();const descriptor=path.join(config.stateDir,'jobs','download-'+jobId+'.dpapi');
-    fs.writeFileSync(descriptor,protectForWindows(JSON.stringify(args)));
+    fs.writeFileSync(descriptor,protectForWindows(JSON.stringify({...args,reviewed})));
     const r=await protectedJobSubmit('download',path.dirname(args.destination),jobId,()=>jobControl('submit',{id:jobId,cwd:path.dirname(args.destination),argv:[process.execPath,path.join(RUNTIME,'download-worker.mjs'),descriptor],timeoutSeconds:86400}),[args.destination]);r.outputToken=ledger.grant('job',r.job_id);
     return {content:[{type:'text',text:JSON.stringify(r)}],structuredContent:r};
   }
@@ -417,8 +424,8 @@ async function callTool({id,msg,host,nativeCall,name,args,contextToken,rawArgs,i
     hostApprovalClickVerified:false,approvalSecurity:config.chatAppConsent?'app-only tools + hidden metadata capability + exact request + TTL; physical human identity is not attested':'disabled',
     catalog:catalogSummary(),pid:process.pid,tunnelReadiness:config.deployment==='production'?'existing-production-ingress; probe watchdog for tunnel health':'isolated; no tunnel created',quota:'none',singleOwner:true,aclProtected:acl.protected,localPopups:false});
   if(name==='y_policy')return response(id,{projectRoots,systemRoots,...profileSummary(currentPermissionMode()),defaultAllow:config.blacklistDefaultAllow,readOnlyAutoAllow:config.readOnlyAutoAllow,autoDevTasks:config.autoDevTasks,trustedDeveloperRoots:config.trustedDeveloperRoots,
-    humanApproval:['Desktop UIA bind and every UIA action','batch, directory or system-path deletes (y_file_trash)','destructive, privileged or system-changing commands','protected, credential-adjacent or system file changes','developer tasks outside the owner-trusted set','writes into YGPT runtime/state or the vault'],hardDenied:[],hardDeniedNote:'Owner blacklist model (rc.13): there are no hard-denied targets. ChatGPT Desktop Agent resources and YGPT\'s own state are gated by human approval when a risk signal matches, never refused outright. Per-chat resource ownership (SESSION_FOREIGN) is not a policy denial: a chat can only operate resources it created.',
-    desktopRequireEnrollment:config.desktopRequireEnrollment,scope:'private single-owner; resources belong to the chat context that created them',noOsSandbox:true});
+    humanApproval:['Desktop UIA bind and every UIA action','batch, directory or system-path deletes (y_file_trash)','destructive, privileged or system-changing commands','protected, credential-adjacent or system file changes','developer tasks targeting protected directories','writes into YGPT runtime/state or the vault'],hardDenied:[],hardDeniedNote:'Owner blacklist model (rc.13): there are no hard-denied targets. ChatGPT Desktop Agent resources and YGPT\'s own state are gated by human approval when a risk signal matches, never refused outright. Per-chat resource ownership (SESSION_FOREIGN) is not a policy denial: a chat can only operate resources it created.',
+    desktopRequireEnrollment:false,scope:'private single-owner; resources belong to the chat context that created them',noOsSandbox:true});
   if(name==='y_pending_approvals'){const mine=callScope.getStore().context?.hash??null,waiting=ledger.pending().filter(o=>o.state==='awaiting_user');
     return response(id,{operations:waiting.filter(o=>mine&&o.contextHash===mine).map(r=>({id:r.id,state:r.state,title:r.presentation?.title,expiresAt:r.expiresAt})),otherChats:waiting.filter(o=>!mine||o.contextHash!==mine).length});}
   if(name==='y_recent_calls')return response(id,{calls:ledger.calls(args.limit)});

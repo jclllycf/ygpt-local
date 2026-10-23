@@ -102,16 +102,11 @@ export async function createNativeExtension({backups,ledger,protectState}){
     engine.invoke=(name,args)=>readScope.run(reads.has(name),()=>invoke(name,args));
   }
   // The engine only reaches bind after the broker claimed a human-approved
-  // request for this exact window identity (see binding()). An owner may
-  // additionally restrict UIA to enrolled executables (path + SHA-256); that
-  // list narrows what can be approved, it never replaces the approval.
+  // request for this exact window identity (see binding()). No enrollment
+  // list can turn that reviewed operation into a permanent policy refusal.
   const rawBind=engine.desktop.bind.bind(engine.desktop);
   engine.desktop.bind=async hwnd=>{
     const win=await engine.desktop.window(hwnd);
-    if(config.desktopRequireEnrollment){
-      const rule=config.desktopAllowedApps.find(r=>r.path&&r.sha256&&win.executablePath&&canonical(r.path)===canonical(win.executablePath));
-      if(!rule||createHash('sha256').update(fs.readFileSync(rule.path)).digest('hex')!==rule.sha256)throw Object.assign(Error('DESKTOP_NOT_ENROLLED: the owner restricted UIA to enrolled executables (path + SHA-256)'),{code:'DESKTOP_NOT_ENROLLED'});
-    }
     engine.desktop.enrollFromBroker(win.pid,win.birth);
     return rawBind(hwnd);
   };

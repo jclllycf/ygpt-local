@@ -81,7 +81,9 @@ export class DurableLedger {
   public(r){if(!r)return null;const p=JSON.parse(this.vault.open(r.preview));return {id:r.id,tool:r.tool,...p,state:r.state,createdAt:new Date(r.created).toISOString(),updatedAt:new Date(r.updated).toISOString(),expiresAt:new Date(r.expires).toISOString(),reason:r.reason??p.reason,resultRef:r.result_ref??undefined};}
   get(id){this.prune();return this.public(this.row(id));}
   args(id){const r=this.row(id);return r?JSON.parse(this.vault.open(r.args)):null;}
-  pending(){this.prune();return this.db.prepare("SELECT * FROM operations WHERE owner=? ORDER BY created DESC LIMIT 60").all(this.owner).map(r=>this.public(r));}
+  // Completed traffic must never push a live approval out of the queue or out
+  // of the owner's maintenance inventory. History has its own bounded APIs.
+  pending(){this.prune();return this.db.prepare("SELECT * FROM operations WHERE owner=? AND state IN ('awaiting_user','approved','running','unknown') ORDER BY created DESC").all(this.owner).map(r=>this.public(r));}
   decideLocal(id,choice,channel='local-panel'){
     if(!['once','chat','deny'].includes(choice))return {ok:false,reason:'Invalid decision'};
     return this.tx(()=>{const r=this.row(id);if(!r)return {ok:false,reason:'Missing request'};

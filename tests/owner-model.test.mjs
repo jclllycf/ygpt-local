@@ -50,11 +50,55 @@ test('Access policy: trash tiers, downloads and document writes follow the owner
   assert.equal(authorize('write_file',{path:'C:\\Users\\Example\\AppData\\Roaming\\io.github.clash-verge-rev.clash-verge-rev\\profiles\\node.yaml',content:'y'}).decision,'allow');
   // A credential-adjacent write still gates.
   assert.equal(authorize('write_file',{path:'C:\\Users\\Example\\.ssh\\config',content:'y'}).decision,'approve');
-  // Downloads outside project folders gate instead of refusing.
-  assert.equal(authorize('y_download_file',{url:'https://example.com/f.zip',destination:loose}).decision,'approve');
+  // Ordinary downloads outside project folders need no enrollment.
+  assert.equal(authorize('y_download_file',{url:'https://example.com/f.zip',destination:loose}).decision,'allow');
   assert.equal(authorize('y_download_file',{url:'https://example.com/f.zip',destination:'D:\\AI\\Projects\\f.zip'}).decision,'allow');
   // Bulk-delete command shapes are high risk (human-gated upstream).
   assert.equal(highRiskCommand('Get-ChildItem -Recurse | Remove-Item'),true);
   assert.equal(highRiskCommand('Remove-Item .\\*.tmp'),true);
   assert.equal(highRiskCommand('Remove-Item .\\one.txt'),false);
+});
+
+test('Owner read policy: typed reads are automatic everywhere; writes and commands into state or the vault gate',async()=>{
+  const {authorize}=await import('../runtime/access-policy.mjs');
+  // Owner policy since the rc.2 baseline: no human decision for typed reads,
+  // YGPT's own folders, credential-adjacent files and the vault included
+  // (CHATGPT_PROBLEMS.md A.2 reports read approvals on the install folder as
+  // a defect). A read-only fast path is never a write permission.
+  const protectedPaths=['C:\\YGPT\\data\\state\\operations.sqlite3','C:\\YGPT\\data\\ygpt.config.json','C:\\YGPT\\install\\runtime\\config.mjs','G:\\vault\\notes.txt','C:\\Users\\Example\\.ssh\\id_ed25519','C:\\Users\\Example\\.env'];
+  for(const target of protectedPaths){
+    for(const tool of ['read_file','get_file_info','list_directory','start_search','y_verify_checksum','y_sqlite_read'])
+      assert.equal(authorize(tool,{path:target,pattern:'hello',sql:'SELECT 1'}).decision,'allow',tool+' '+target);
+    assert.equal(authorize('read_multiple_files',{paths:['D:\\work\\ordinary.txt',target]}).decision,'allow');
+    assert.equal(authorize('write_file',{path:target,content:'x'}).decision,'approve','write '+target);
+  }
+  // A directory move must not conceal a protected descendant.
+  assert.equal(authorize('move_file',{source:'C:\\YGPT',destination:'D:\\backup'}).decision,'approve');
+  // Commands that are not parse-provably read-only and name state or the vault gate.
+  const ps='C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe';
+  for(const target of ['C:\\YGPT\\data\\state\\x.txt','G:\\vault\\x.txt'])
+    assert.equal(authorize('job_submit',{cwd:'D:\\work',argv:[ps,'-NoProfile','-Command','Set-Content "'+target+'" y']}).decision,'approve',target);
+});
+
+test('Connector-state review is once-only; ordinary HTTPS downloads and reviewed destinations work',async t=>{
+  const {reviewScope}=await import('../runtime/chat-review.mjs');
+  const {validateSource,validateDestination,checksum}=await import('../runtime/safe-actions.mjs');
+  // The live connector's own state never gets a conversation-wide grant.
+  assert.equal(reviewScope('y_file_write',{path:'C:\\YGPT\\data\\state\\ops.sqlite3',content:'x'}).eligible,false);
+  assert.equal(reviewScope('y_file_write',{path:'C:/YGPT/data/state/ops.sqlite3',content:'x'}).eligible,false,'forward slashes do not hide the state path');
+  // An ordinary reviewed write may be granted for this exact action in this chat.
+  assert.equal(reviewScope('y_file_write',{path:'C:\\Users\\Example\\.ssh\\config',content:'x'}).eligible,false,'credential names stay once-only');
+  assert.equal(reviewScope('y_file_write',{path:'C:\\Windows\\Temp\\x.txt',content:'x'}).eligible,true);
+  for(const target of ['G:\\vault\\notes.txt','C:\\YGPT\\data\\state\\ops.sqlite3']){
+    assert.throws(()=>validateDestination(target),e=>e.code==='APPROVAL_REQUIRED');
+    assert.equal(validateDestination(target,{reviewed:true}),target.toLowerCase());
+  }
+  assert.equal(validateSource('https://downloads.example.com/ordinary.zip').hostname,'downloads.example.com');
+  assert.throws(()=>validateSource('https://user:secret@example.com/f'),/embedded credentials/);
+  assert.equal(validateDestination('C:\\Users\\Example\\Downloads\\ordinary.zip'),'c:\\users\\example\\downloads\\ordinary.zip');
+  // Checksums are reads: automatic, the vault included.
+  const {Readable}=await import('node:stream');let reads=0;
+  t.mock.method(fs,'createReadStream',()=>{reads++;return Readable.from([Buffer.from('approved')]);});
+  assert.match((await checksum('G:\\vault\\notes.txt')).actual,/^[a-f0-9]{64}$/);
+  assert.equal(reads,1);
 });

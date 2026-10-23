@@ -27,6 +27,7 @@ export class ExtensionRelay {
                                // never be exposed as targetIds.
     this.boundId=null;         // instance chosen by the engine (one at a time)
     this.cdpClients=new Set(); // {ws,sessions:Map,sessionsByTab:Map,autoAttach}
+    this.tabOrder=new Map();   // tabId -> tail of the in-order dispatch chain
     this.reqSeq=0;
   }
   async pairing(){
@@ -37,28 +38,45 @@ export class ExtensionRelay {
     return {token:this.token,port:this.port};
   }
   async start(){
-    if(this.server)return;
+    if(this.starting)return this.starting;
+    if(this.server?.listening)return;
+    this.starting=this.startServer().finally(()=>{this.starting=null;});
+    return this.starting;
+  }
+  async startServer(){
     await this.pairing();
     this.server=http.createServer((req,res)=>{void this.http(req,res);});
     this.wssExt=new WebSocketServer({noServer:true});
     this.wssCdp=new WebSocketServer({noServer:true});
     this.server.on('upgrade',(req,socket,head)=>{
+      if(!this.localRequest(req)){socket.destroy();return;}
       const url=new URL(req.url,'http://127.0.0.1');
-      if(url.pathname==='/ext'){if(url.searchParams.get('token')!==this.token){socket.destroy();return;}this.wssExt.handleUpgrade(req,socket,head,ws=>this.onExtension(ws));}
-      else if(url.pathname.startsWith('/devtools/browser')){this.wssCdp.handleUpgrade(req,socket,head,ws=>this.onCdpClient(ws));}
+      if(url.pathname==='/ext'){if(url.searchParams.get('token')!==this.token||req.headers.origin&&!/^chrome-extension:\/\/[a-p]{32}$/.test(req.headers.origin)){socket.destroy();return;}this.wssExt.handleUpgrade(req,socket,head,ws=>this.onExtension(ws));}
+      else if(url.pathname==='/devtools/browser/ygpt'&&!req.headers.origin){this.wssCdp.handleUpgrade(req,socket,head,ws=>this.onCdpClient(ws));}
       else socket.destroy();
     });
-    await new Promise((resolve,reject)=>{this.server.once('error',reject);this.server.listen(this.port,'127.0.0.1',resolve);});
+    try{await new Promise((resolve,reject)=>{const fail=e=>reject(e);this.server.once('error',fail);this.server.listen(this.port,'127.0.0.1',()=>{this.server.off('error',fail);resolve();});});}
+    catch(e){this.server=null;this.wssExt.close();this.wssCdp.close();throw e;}
+    this.port=this.server.address().port;
     this.log('extension relay listening on 127.0.0.1:'+this.port);
   }
   async stop(){
-    for(const inst of this.instances.values()){try{inst.ws.close();}catch{}}
-    for(const c of this.cdpClients){try{c.ws.close();}catch{}}
+    await this.starting?.catch(()=>{});
+    this.unbind();
+    for(const inst of this.instances.values()){for(const p of inst.pending.values())p.reject(new Error('relay stopped'));inst.pending.clear();inst.ws.terminate();}
+    for(const ws of this.wssExt?.clients??[])ws.terminate();
+    for(const ws of this.wssCdp?.clients??[])ws.terminate();
+    this.instances.clear();this.cdpClients.clear();
     await new Promise(r=>{if(this.server)this.server.close(()=>r());else r();});
+    this.wssExt?.close();this.wssCdp?.close();
     this.server=null;
   }
   endpoint(){return 'http://127.0.0.1:'+this.port;}
+  localRequest(req){return ['127.0.0.1:'+this.port,'localhost:'+this.port].includes(req.headers.host);}
   async http(req,res){
+    if(!this.localRequest(req)||req.headers.origin&&req.headers.origin!==this.endpoint()&&req.headers.origin!=='http://localhost:'+this.port){res.writeHead(403);res.end();return;}
+    res.setHeader('Cache-Control','no-store');
+    res.setHeader('Content-Security-Policy',"default-src 'none'; style-src 'unsafe-inline'; frame-ancestors 'none'");
     const url=new URL(req.url,'http://127.0.0.1');
     let pathname=url.pathname;if(pathname.length>1&&pathname.endsWith('/'))pathname=pathname.slice(0,-1); // Playwright asks for /json/version/ with a trailing slash
     if(pathname==='/json/version'){return json(res,{Browser:'YGPT Extension Relay',ProtocolVersion:'1.3','Protocol-Version':'1.3',webSocketDebuggerUrl:'ws://127.0.0.1:'+this.port+'/devtools/browser/ygpt',UserAgent:'YGPT-Relay'});}
@@ -72,18 +90,21 @@ export class ExtensionRelay {
     ws.on('message',async raw=>{
       let msg;try{msg=JSON.parse(raw.toString());}catch{return;}
       if(msg.type==='hello'){
+        if(inst)return;
         inst={id:String(msg.id||crypto.randomUUID()),browser:msg.browser??'Chromium',version:msg.version??'',profileEmail:msg.profile?.email??null,profileId:msg.profile?.id??null,ws,pending:new Map(),totalTabs:msg.totalTabs??0,connectedAt:Date.now()};
+        const previous=this.instances.get(inst.id);
+        if(previous){if(this.boundId===inst.id)this.unbind();for(const p of previous.pending.values())p.reject(new Error('extension reconnected'));previous.pending.clear();previous.ws.terminate();}
         this.instances.set(inst.id,inst);
         this.log('extension instance connected: '+inst.id+' '+(inst.profileEmail??''));
         return;
       }
-      if(!inst)return;
+      if(!inst||this.instances.get(inst.id)!==inst)return;
       if(msg.type==='res'){const p=inst.pending.get(msg.reqId);if(p){inst.pending.delete(msg.reqId);msg.ok?p.resolve(msg.result):p.reject(new Error(msg.error??'extension error'));}}
       else if(msg.type==='event'&&msg.kind==='cdp'){this.forwardCdpEvent(inst,msg.tabId,msg.method,msg.params);}
       else if(msg.type==='event'&&msg.kind==='tabsChanged'){if(typeof msg.totalTabs==='number')inst.totalTabs=msg.totalTabs;this.emitTargetChanges();}
       else if(msg.type==='event'&&msg.kind==='tabRemoved'){this.onTabRemoved(inst,msg.tabId);}
     });
-    const cleanup=()=>{if(inst){this.instances.delete(inst.id);if(this.boundId===inst.id)this.boundId=null;for(const p of inst.pending.values())p.reject(new Error('extension disconnected'));inst.pending.clear();this.emitTargetChanges();}};
+    const cleanup=()=>{if(inst){if(this.instances.get(inst.id)===inst){this.instances.delete(inst.id);if(this.boundId===inst.id)this.unbind();}for(const p of inst.pending.values())p.reject(new Error('extension disconnected'));inst.pending.clear();}};
     ws.on('close',cleanup);ws.on('error',cleanup);
   }
   callExtension(inst,method,params={},timeoutMs=20000){
@@ -91,14 +112,15 @@ export class ExtensionRelay {
       if(inst.ws.readyState!==WebSocket.OPEN)return reject(new Error('extension not connected'));
       const reqId=++this.reqSeq,timer=setTimeout(()=>{inst.pending.delete(reqId);reject(new Error('extension timed out on '+method));},timeoutMs);
       inst.pending.set(reqId,{resolve:v=>{clearTimeout(timer);resolve(v);},reject:e=>{clearTimeout(timer);reject(e);}});
-      inst.ws.send(JSON.stringify({type:'req',reqId,method,params}));
+      try{inst.ws.send(JSON.stringify({type:'req',reqId,method,params}),e=>{if(e){const p=inst.pending.get(reqId);inst.pending.delete(reqId);p?.reject(e);}});}catch(e){inst.pending.delete(reqId);clearTimeout(timer);reject(e);}
     });
   }
   instancesList(){return [...this.instances.values()].map(i=>({id:i.id,browser:i.browser,version:i.version,profileEmail:i.profileEmail,totalTabs:i.totalTabs,connectedAt:i.connectedAt}));}
-  bind(id){const inst=this.instances.get(id);if(!inst)throw new Error('extension instance is not connected');this.boundId=id;return inst;}
+  bind(id){const inst=this.instances.get(id);if(!inst)throw new Error('extension instance is not connected');if(this.boundId!==id)this.unbind();this.boundId=id;return inst;}
   bound(){return this.boundId?this.instances.get(this.boundId)??null:null;}
-  unbind(){this.boundId=null;}
-  async boundGroupTabs(){const inst=this.bound();if(!inst)return [];const {tabs}=await this.callExtension(inst,'tabs.list',{groupName:this.groupName});inst.totalTabs=tabs.length===0?inst.totalTabs:inst.totalTabs;return tabs.filter(t=>t.inGroup);}
+  unbind(){this.boundId=null;this.frameIds.clear();for(const c of this.cdpClients)c.ws.terminate();}
+  async boundGroupTabs(){const inst=this.bound();if(!inst)return [];const {tabs,totalTabs}=await this.callExtension(inst,'tabs.list',{groupName:this.groupName});if(this.bound()!==inst)throw new Error('extension instance changed');if(typeof totalTabs==='number')inst.totalTabs=totalTabs;return tabs.filter(t=>t.inGroup);}
+  async requireGroupTab(inst,tabId){const tabs=await this.boundGroupTabs();if(this.bound()!==inst||!tabs.some(t=>t.tabId===tabId))throw new Error('Tab is no longer in the YGPT group');}
   async boundTotalTabs(){const inst=this.bound();if(!inst)return 0;const {tabs,totalTabs}=await this.callExtension(inst,'tabs.list',{groupName:this.groupName});if(typeof totalTabs==='number')inst.totalTabs=totalTabs;return inst.totalTabs;}
   targetInfo(tab){return {targetId:this.frameIds.get(tab.tabId)??String(tab.tabId),type:'page',title:tab.title??'',url:tab.url??'',attached:false,browserContextId:'ygpt',canAccessOpener:false};}
   async frameIdFor(inst,tabId){
@@ -113,15 +135,25 @@ export class ExtensionRelay {
   tabIdForTarget(targetId){const id=String(targetId);for(const [tabId,fid] of this.frameIds)if(fid===id)return tabId;const n=Number(id);return Number.isInteger(n)&&String(n)===id?n:null;}
   // ---------- CDP client side (Playwright) ----------
   onCdpClient(ws){
-    const client={ws,sessions:new Map(),byTab:new Map(),autoAttach:false};
+    const client={ws,sessions:new Map(),byTab:new Map(),attaching:new Map(),autoAttach:false,instance:this.bound(),closed:false};
     this.cdpClients.add(client);
     ws.on('message',async raw=>{let msg;try{msg=JSON.parse(raw.toString());}catch{return;}await this.onCdpMessage(client,msg);});
-    const cleanup=async()=>{this.cdpClients.delete(client);const inst=this.bound();for(const [,s] of client.sessions){if(s.tabId!=null&&inst)await this.callExtension(inst,'debugger.detach',{tabId:s.tabId}).catch(()=>{});}client.sessions.clear();client.byTab.clear();};
+    const cleanup=()=>{if(client.closed)return;client.closed=true;this.cdpClients.delete(client);const inst=client.instance;for(const [,s] of client.sessions){if(s.tabId!=null&&inst&&![...this.cdpClients].some(c=>c.instance===inst&&c.byTab.has(s.tabId)))void this.callExtension(inst,'debugger.detach',{tabId:s.tabId}).catch(()=>{});}client.sessions.clear();client.byTab.clear();};
     ws.on('close',cleanup);ws.on('error',cleanup);
   }
   send(client,obj){try{client.ws.send(JSON.stringify(obj));}catch{}}
   reply(client,msg,result){this.send(client,{id:msg.id,...(msg.sessionId?{sessionId:msg.sessionId}:{}),result:result??{}});}
-  replyError(client,msg,message){this.send(client,{id:msg.id,...(msg.sessionId?{sessionId:msg.sessionId}:{}),error:{code:-32000,message:String(message??'error')}});}
+  replyError(client,msg,message,code=-32000){this.send(client,{id:msg.id,...(msg.sessionId?{sessionId:msg.sessionId}:{}),error:{code,message:String(message??'error')}});}
+  // The group check before each tab command is a round trip to the extension.
+  // Run check + dispatch in arrival order per tab, so two commands (mouse
+  // pressed/released, key down/up) can never overtake each other; responses
+  // still complete in parallel.
+  inTabOrder(tabId,step){
+    const run=(this.tabOrder.get(tabId)??Promise.resolve()).then(step);
+    const settled=run.then(()=>{},()=>{});this.tabOrder.set(tabId,settled);
+    void settled.then(()=>{if(this.tabOrder.get(tabId)===settled)this.tabOrder.delete(tabId);});
+    return run;
+  }
   emit(client,method,params,sessionId){this.send(client,{method,params,...(sessionId?{sessionId}:{})});}
   async groupTargets(client){
     const tabs=await this.boundGroupTabs().catch(()=>[]);
@@ -131,6 +163,7 @@ export class ExtensionRelay {
   async onCdpMessage(client,msg){
     const {method,params={}}=msg,sessionId=msg.sessionId;
     try{
+      if(client.closed||client.instance!==this.bound())throw new Error('extension instance disconnected');
       // Browser-level and browser-control-session commands.
       if(!sessionId||client.sessions.get(sessionId)?.browserControl){
         if(method==='Browser.getVersion')return this.reply(client,msg,{protocolVersion:'1.3',product:'Chrome/YGPT-Extension',revision:'ygpt',userAgent:'YGPT Relay',jsVersion:'0'});
@@ -154,12 +187,15 @@ export class ExtensionRelay {
           // targetId) for the browser's own target info — and waits for it
           // before it will run anything in a page. Answer in kind; a real
           // targetId for one of the group tabs gets that tab's info.
-          if(params.targetId){const tabs=await this.boundGroupTabs().catch(()=>[]);const tab=tabs.find(t=>String(t.tabId)===String(params.targetId));if(tab)return this.reply(client,msg,{targetInfo:this.targetInfo(tab)});}
+          if(params.targetId){const tabs=await this.boundGroupTabs().catch(()=>[]);const tab=tabs.find(t=>t.tabId===this.tabIdForTarget(params.targetId));if(tab)return this.reply(client,msg,{targetInfo:this.targetInfo(tab)});}
           return this.reply(client,msg,{targetInfo:{targetId:'ygpt-browser',type:'browser',title:'',url:'',attached:true,canAccessOpener:false}});
         }
         if(!sessionId)return this.reply(client,msg,{});
       }
       const session=sessionId?client.sessions.get(sessionId):null;
+      // Like Chrome: a command for a detached/unknown session is an error, not
+      // an empty result Playwright would misread as a successful reply.
+      if(sessionId&&!session&&method!=='Target.detachFromTarget')return this.replyError(client,msg,'Session with given id not found.',-32001);
       if(!session||session.tabId==null){
         if(method==='Target.detachFromTarget'){if(sessionId){client.sessions.delete(sessionId);}return this.reply(client,msg,{});}
         return this.reply(client,msg,{});
@@ -170,8 +206,13 @@ export class ExtensionRelay {
       if(method==='Page.close'){await this.closeTarget(client,session.tabId);return this.reply(client,msg,{});}
       // Everything else is a real CDP command for the tab's debugger.
       const inst=this.bound();if(!inst)throw new Error('extension instance disconnected');
-      const result=await this.callExtension(inst,'debugger.send',{tabId:session.tabId,method,params});
-      return this.reply(client,msg,result??{});
+      const {sent}=await this.inTabOrder(session.tabId,async()=>{
+        await this.requireGroupTab(inst,session.tabId);
+        if(/^(?:Target|Browser)\./.test(method))throw new Error('Unsupported browser-wide command');
+        const sent=this.callExtension(inst,'debugger.send',{tabId:session.tabId,method,params});sent.catch(()=>{});
+        return {sent};
+      });
+      return this.reply(client,msg,(await sent)??{});
     }catch(e){return this.replyError(client,msg,e.message);}
   }
   async autoAttachAll(client,params={}){
@@ -184,9 +225,16 @@ export class ExtensionRelay {
   }
   async attachSession(client,tabId){
     const existing=client.byTab.get(tabId);if(existing)return existing;
+    if(client.attaching.has(tabId))return client.attaching.get(tabId);
+    const pending=this.attachTabSession(client,tabId).finally(()=>client.attaching.delete(tabId));
+    client.attaching.set(tabId,pending);return pending;
+  }
+  async attachTabSession(client,tabId){
     const inst=this.bound();if(!inst)throw new Error('no extension instance is bound');
+    await this.requireGroupTab(inst,tabId);
     await this.callExtension(inst,'debugger.attach',{tabId});
     await this.frameIdFor(inst,tabId).catch(()=>{});
+    if(client.closed||client.instance!==this.bound())throw new Error('extension instance disconnected');
     const sid='ygpt-session-'+(++this.reqSeq);
     client.sessions.set(sid,{tabId});client.byTab.set(tabId,sid);
     return sid;
@@ -207,7 +255,8 @@ export class ExtensionRelay {
   }
   async closeTarget(client,tabId){
     const inst=this.bound();if(!inst)return false;
-    await this.callExtension(inst,'tabs.close',{tabId}).catch(()=>{});
+    await this.requireGroupTab(inst,tabId);
+    await this.callExtension(inst,'tabs.close',{tabId});
     this.onTabRemoved(inst,tabId);
     return true;
   }
@@ -221,7 +270,7 @@ export class ExtensionRelay {
       this.emit(c,'Target.targetDestroyed',{targetId});
     }
   }
-  emitTargetChanges(){void (async()=>{for(const c of this.cdpClients){for(const t of await this.groupTargets(c).catch(()=>[]))this.emit(c,'Target.targetInfoChanged',{targetInfo:t});}})();}
+  emitTargetChanges(){void (async()=>{const inst=this.bound();if(!inst)return;const tabs=await this.boundGroupTabs();for(const c of this.cdpClients){for(const tabId of c.byTab.keys())if(!tabs.some(t=>t.tabId===tabId))this.onTabRemoved(inst,tabId);for(const t of tabs)this.emit(c,'Target.targetInfoChanged',{targetInfo:this.targetInfo(t)});if(c.autoAttach)await this.autoAttachAll(c);}})().catch(()=>{});}
   forwardCdpEvent(inst,tabId,method,params){
     if(this.boundId!==inst.id)return;
     for(const c of this.cdpClients){const sid=c.byTab.get(tabId);if(sid)this.emit(c,method,params,sid);}

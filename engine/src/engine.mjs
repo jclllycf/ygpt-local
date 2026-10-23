@@ -62,7 +62,7 @@ export async function createEngine(config,{authorize,backupManager,ledger:outerL
   add('y_file_patch',{path:str,expectedSha256:z.string().regex(/^[a-f0-9]{64}$/),hunks:z.array(z.object({oldText:z.string().min(1).max(1048576),newText:z.string().max(1048576),count:z.number().int().min(1).max(1000).optional()}).strict()).min(1).max(50),dryRun:z.boolean().default(false)},async a=>{
     const target=await file.resolve(a.path);const data=await file.boundedBytes(target,8*1024*1024);
     const before=sha256(data);if(before!==a.expectedSha256)throw new EngineError('STALE_PREIMAGE','Target changed since inspection');
-    let content=new TextDecoder('utf-8',{fatal:true}).decode(data);
+    let content=new TextDecoder('utf-8',{fatal:true,ignoreBOM:true}).decode(data);
     for(const [i,h] of a.hunks.entries()){const occurrences=content.split(h.oldText).length-1;
       if(occurrences===0)throw new EngineError('PATCH_NOT_FOUND','Hunk '+(i+1)+' text not found');
       if(h.count!==undefined&&occurrences!==h.count)throw new EngineError('PATCH_MISMATCH','Hunk '+(i+1)+' expected '+h.count+' occurrence(s), found '+occurrences);

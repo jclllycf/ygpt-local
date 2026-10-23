@@ -12,6 +12,12 @@
 const DEFAULTS={host:'127.0.0.1',port:19341,token:'',groupName:'YGPT'};
 let settings={...DEFAULTS};
 let ws=null,wsState='closed',backoff=2000,instanceId=null,attached=new Set();
+const attaching=new Map(),commandOrder=new Map();
+let connecting=null,reconnectTimer=null,keepaliveTimer=null;
+// Chrome stops an idle MV3 service worker after about 30 s; WebSocket traffic
+// resets that timer (Chrome 116+). Without it the socket closes between chat
+// turns, the relay drops the binding and the chat loses its YGPT tabs.
+const KEEPALIVE_MS=20000;
 
 async function loadSettings(){
   const saved=await chrome.storage.local.get(['ygptSettings','ygptInstanceId']);
@@ -26,23 +32,48 @@ async function totalTabs(){try{return (await chrome.tabs.query({})).length;}catc
 function browserKind(){const ua=navigator.userAgent;return ua.includes('Edg/')?'Edge':'Chrome';}
 
 async function connect(){
-  if(ws&&(ws.readyState===WebSocket.OPEN||ws.readyState===WebSocket.CONNECTING))return;
-  if(!settings.token){wsState='needs-token';return;}
-  await loadSettings();
-  const url='ws://'+settings.host+':'+settings.port+'/ext?token='+encodeURIComponent(settings.token);
-  try{ws=new WebSocket(url);}catch{wsState='error';scheduleReconnect();return;}
-  wsState='connecting';
-  ws.onopen=async()=>{
-    wsState='open';backoff=2000;
-    const profile=await profileInfo();
-    send({type:'hello',id:instanceId,browser:browserKind(),version:(navigator.userAgent.match(/(?:Chrome|Edg)\/([\d.]+)/)||[])[1]||'',profile,totalTabs:await totalTabs()});
-  };
-  ws.onmessage=ev=>{void onRequest(ev.data);};
-  ws.onclose=()=>{wsState='closed';ws=null;attached.clear();scheduleReconnect();};
-  ws.onerror=()=>{try{ws.close();}catch{}};
+  if(connecting)return connecting;
+  connecting=connectOnce().finally(()=>{connecting=null;});
+  return connecting;
 }
-function scheduleReconnect(){setTimeout(()=>{void connect();},backoff);backoff=Math.min(backoff*2,30000);}
-function send(obj){if(ws&&ws.readyState===WebSocket.OPEN)ws.send(JSON.stringify(obj));}
+async function connectOnce(){
+  if(ws&&(ws.readyState===WebSocket.OPEN||ws.readyState===WebSocket.CONNECTING))return;
+  await loadSettings();
+  if(!settings.token){wsState='needs-token';return;}
+  const url='ws://'+settings.host+':'+settings.port+'/ext?token='+encodeURIComponent(settings.token);
+  let socket;
+  try{socket=new WebSocket(url);ws=socket;}catch{wsState='error';scheduleReconnect();return;}
+  wsState='connecting';
+  socket.onopen=async()=>{
+    if(ws!==socket)return;
+    wsState='open';backoff=2000;
+    startKeepalive(socket);
+    const profile=await profileInfo();
+    const count=await totalTabs();
+    send({type:'hello',id:instanceId,browser:browserKind(),version:(navigator.userAgent.match(/(?:Chrome|Edg)\/([\d.]+)/)||[])[1]||'',profile,totalTabs:count},socket);
+  };
+  socket.onmessage=ev=>{if(ws===socket)void onRequest(ev.data,socket);};
+  socket.onclose=()=>{if(ws!==socket)return;stopKeepalive();wsState='closed';ws=null;void detachAll().then(scheduleReconnect);};
+  socket.onerror=()=>{try{socket.close();}catch{}};
+}
+function startKeepalive(socket){stopKeepalive();keepaliveTimer=setInterval(()=>{if(ws!==socket){stopKeepalive();return;}send({type:'ping'},socket);},KEEPALIVE_MS);}
+function stopKeepalive(){clearInterval(keepaliveTimer);keepaliveTimer=null;}
+// Commands for one tab reach chrome.debugger in the order the relay sent
+// them, although the group check before each one is asynchronous. Only the
+// check and the dispatch are ordered; responses still complete in parallel.
+function inTabOrder(tabId,step){
+  const run=(commandOrder.get(tabId)??Promise.resolve()).then(step);
+  const settled=run.then(()=>{},()=>{});commandOrder.set(tabId,settled);
+  void settled.then(()=>{if(commandOrder.get(tabId)===settled)commandOrder.delete(tabId);});
+  return run;
+}
+function scheduleReconnect(){clearTimeout(reconnectTimer);reconnectTimer=setTimeout(()=>{void connect();},backoff);backoff=Math.min(backoff*2,30000);}
+function send(obj,socket=ws){if(socket&&socket===ws&&socket.readyState===WebSocket.OPEN)socket.send(JSON.stringify(obj));}
+async function detachTab(tabId){
+  await attaching.get(tabId)?.catch(()=>{});
+  if(attached.delete(tabId))await chrome.debugger.detach({tabId}).catch(()=>{});
+}
+async function detachAll(){await Promise.all([...new Set([...attached,...attaching.keys()])].map(detachTab));}
 
 // ---------- tab group helpers ----------
 async function ygGroupIds(windowId){
@@ -52,12 +83,27 @@ async function ygGroupIds(windowId){
 async function listTabs(){
   const tabs=await chrome.tabs.query({});
   const groupIdSet=new Set(await ygGroupIds());
-  return {totalTabs:tabs.length,tabs:tabs.map(t=>({tabId:t.id,url:t.url||'',title:t.title||'',windowId:t.windowId,groupId:t.groupId,active:!!t.active,inGroup:groupIdSet.has(t.groupId)}))};
+  return {totalTabs:tabs.length,tabs:tabs.filter(t=>groupIdSet.has(t.groupId)).map(t=>({tabId:t.id,url:t.url||'',title:t.title||'',windowId:t.windowId,groupId:t.groupId,active:!!t.active,inGroup:true}))};
+}
+async function requireGroupTab(tabId){
+  const tab=await chrome.tabs.get(tabId);
+  if(!(await ygGroupIds(tab.windowId)).includes(tab.groupId)){
+    await detachTab(tabId);
+    throw new Error('Tab is no longer in the YGPT group');
+  }
+  return tab;
+}
+async function attachTab(tabId){
+  await requireGroupTab(tabId);
+  if(attached.has(tabId))return;
+  if(!attaching.has(tabId))attaching.set(tabId,chrome.debugger.attach({tabId},'1.3').then(()=>{attached.add(tabId);}).finally(()=>{attaching.delete(tabId);}));
+  await attaching.get(tabId);
 }
 async function createGroupTab(url){
   const win=await chrome.windows.getLastFocused().catch(()=>null);
   const windowId=win?.id;
   const tab=await chrome.tabs.create({windowId,url,active:false});
+  try{
   const existing=await ygGroupIds(windowId);
   let groupId;
   if(existing.length){groupId=await chrome.tabs.group({groupId:existing[0],tabIds:[tab.id]});}
@@ -66,13 +112,14 @@ async function createGroupTab(url){
     await chrome.tabGroups.update(groupId,{title:settings.groupName,color:'blue',collapsed:false});
   }
   return {tabId:tab.id,url:tab.url||url,title:tab.title||'',windowId:tab.windowId,groupId};
+  }catch(e){await chrome.tabs.remove(tab.id).catch(()=>{});throw e;}
 }
 
 // ---------- service requests ----------
-async function onRequest(raw){
+async function onRequest(raw,socket=ws){
   let msg;try{msg=JSON.parse(raw);}catch{return;}
   if(msg.type!=='req')return;
-  const reply=(ok,payload)=>send({type:'res',reqId:msg.reqId,ok,...(ok?{result:payload}:{error:String(payload?.message??payload)})});
+  const reply=(ok,payload)=>send({type:'res',reqId:msg.reqId,ok,...(ok?{result:payload}:{error:String(payload?.message??payload)})},socket);
   try{
     const p=msg.params||{};
     if(p.groupName)settings.groupName=p.groupName;
@@ -80,19 +127,23 @@ async function onRequest(raw){
       case 'ping':return reply(true,{});
       case 'tabs.list':return reply(true,await listTabs());
       case 'tabs.create':return reply(true,await createGroupTab(p.url||'about:blank'));
-      case 'tabs.close':await chrome.tabs.remove(p.tabId);return reply(true,{});
+      case 'tabs.close':await requireGroupTab(p.tabId);await chrome.tabs.remove(p.tabId);return reply(true,{});
       case 'debugger.attach':{
-        if(!attached.has(p.tabId)){await chrome.debugger.attach({tabId:p.tabId},'1.3');attached.add(p.tabId);}
+        await attachTab(p.tabId);
         return reply(true,{});
       }
       case 'debugger.detach':{
-        if(attached.has(p.tabId)){await chrome.debugger.detach({tabId:p.tabId}).catch(()=>{});attached.delete(p.tabId);}
+        await detachTab(p.tabId);
         return reply(true,{});
       }
       case 'debugger.send':{
-        if(!attached.has(p.tabId)){await chrome.debugger.attach({tabId:p.tabId},'1.3');attached.add(p.tabId);}
-        const result=await chrome.debugger.sendCommand({tabId:p.tabId},p.method,p.params||{});
-        return reply(true,result??{});
+        const {sent}=await inTabOrder(p.tabId,async()=>{
+          await attachTab(p.tabId);
+          if(/^(?:Target|Browser)\./.test(p.method))throw new Error('Browser-wide commands must use the group relay');
+          const sent=chrome.debugger.sendCommand({tabId:p.tabId},p.method,p.params||{});sent.catch(()=>{});
+          return {sent};
+        });
+        return reply(true,(await sent)??{});
       }
       default:return reply(false,new Error('unknown method '+msg.method));
     }
@@ -103,14 +154,22 @@ async function onRequest(raw){
 let tabsChangedTimer=null;
 function notifyTabsChanged(){
   clearTimeout(tabsChangedTimer);
-  tabsChangedTimer=setTimeout(async()=>{send({type:'event',kind:'tabsChanged',totalTabs:await totalTabs()});},150);
+  tabsChangedTimer=setTimeout(async()=>{
+    for(const tabId of attached)await requireGroupTab(tabId).catch(()=>detachTab(tabId));
+    send({type:'event',kind:'tabsChanged',totalTabs:await totalTabs()});
+  },150);
 }
 chrome.tabs.onCreated.addListener(notifyTabsChanged);
 chrome.tabs.onUpdated.addListener(notifyTabsChanged);
 chrome.tabs.onRemoved.addListener(tabId=>{send({type:'event',kind:'tabRemoved',tabId});notifyTabsChanged();});
 chrome.tabGroups.onCreated.addListener(notifyTabsChanged);
 chrome.tabGroups.onRemoved.addListener(notifyTabsChanged);
-chrome.debugger.onEvent.addListener((source,method,params)=>{send({type:'event',kind:'cdp',tabId:source.tabId,method,params});});
+chrome.tabGroups.onUpdated.addListener(notifyTabsChanged);
+// Forward synchronously, in Chrome's order: an asynchronous check here would
+// let a command's response overtake the events that preceded it. Only tabs
+// attached through attachTab (group members when attached) produce events,
+// and notifyTabsChanged detaches tabs that leave the group.
+chrome.debugger.onEvent.addListener((source,method,params)=>{if(attached.has(source.tabId))send({type:'event',kind:'cdp',tabId:source.tabId,method,params});});
 chrome.debugger.onDetach.addListener(source=>{if(source.tabId!=null)attached.delete(source.tabId);});
 chrome.alarms.create('ygpt-keepalive',{periodInMinutes:0.5});
 chrome.alarms.onAlarm.addListener(()=>{if(!ws)void connect();});
@@ -119,7 +178,7 @@ chrome.runtime.onStartup.addListener(()=>{void loadSettings().then(connect);});
 chrome.runtime.onMessage.addListener((msg,sender,respond)=>{
   if(msg?.kind==='save-settings'){
     settings={...DEFAULTS,...msg.settings};
-    void chrome.storage.local.set({ygptSettings:settings}).then(()=>{try{ws?.close();}catch{}ws=null;void connect();respond({ok:true});});
+    void chrome.storage.local.set({ygptSettings:settings}).then(async()=>{const old=ws;ws=null;try{old?.close();}catch{}await detachAll();await connect();respond({ok:true});});
     return true;
   }
   if(msg?.kind==='status'){

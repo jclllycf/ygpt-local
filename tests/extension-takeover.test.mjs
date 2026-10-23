@@ -11,6 +11,7 @@ import os from 'node:os';
 import path from 'node:path';
 import http from 'node:http';
 import {WebSocket} from 'ws';
+import {AsyncLocalStorage} from 'node:async_hooks';
 
 const CHROME=process.env.YGPT_TEST_CHROMIUM??'/opt/meta-chromium/chrome';
 const available=fs.existsSync(CHROME);
@@ -86,7 +87,8 @@ test('Extension takeover: pairing, choice, group discipline, detach',{skip:!avai
   const {chromium}=await import('playwright');
   const base='https://fixture.invalid';
   const port=await freePort();
-  const engine=new YExtensionBrowser({stateDir:tmp(),port});
+  const scope=new AsyncLocalStorage();
+  const engine=new YExtensionBrowser({stateDir:tmp(),port,currentOwner:()=>scope.getStore()??'local'});
   const browserA=await chromium.launch({executablePath:CHROME,args:['--no-sandbox']});
   const browserB=await chromium.launch({executablePath:CHROME,args:['--no-sandbox']});
   try{
@@ -111,6 +113,14 @@ test('Extension takeover: pairing, choice, group discipline, detach',{skip:!avai
     assert.ok(acted.aria.includes('1'),'click through the extension debugger path updated the page');
     const listing=await engine.list();
     assert.equal(listing.ownerTabsNotTouched,1,'exactly the one user tab is counted as untouched');
+    const [chatA,chatB]=await Promise.all([
+      scope.run('chat-a',()=>engine.open(base+'/work')),
+      scope.run('chat-b',()=>engine.open(base+'/previous')),
+    ]);
+    assert.notEqual(chatA.tabId,chatB.tabId,'parallel opens receive their exact created page');
+    assert.equal(chatA.url,base+'/work');assert.equal(chatB.url,base+'/previous');
+    assert.deepEqual(scope.run('chat-a',()=>engine.status()).tabs.map(t=>t.tabId),[chatA.tabId]);
+    await assert.rejects(scope.run('chat-a',()=>engine.snapshot(chatB.tabId)),{code:'SESSION_FOREIGN'});
     // Second profile pairs: a fresh attach must not guess between accounts.
     await engine.detach();
     const fakeB=new FakeExtension(null,engine.relay.endpoint(),token,{id:'inst-b',email:'second@example.com'});
@@ -119,6 +129,7 @@ test('Extension takeover: pairing, choice, group discipline, detach',{skip:!avai
     assert.equal(choice.needsChoice,true);assert.equal(choice.candidates.length,2);
     const designated=await engine.attach({instance:'second@example.com'});
     assert.equal(designated.identity.profileEmail,'second@example.com');
+    assert.match((await engine.snapshot(designated.tabs[0].tabId)).aria,/earlier/,'profile switch resolves fresh frame IDs even when tab IDs are reused');
     await engine.detach();
     // Detach survival: browsers and extension connections live on.
     assert.ok(browserA.isConnected()&&browserB.isConnected(),'both daily browsers still running after detach');
