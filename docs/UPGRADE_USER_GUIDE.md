@@ -1,6 +1,6 @@
 # Upgrading and using YGPT Local
 
-[中文升级说明](UPGRADE_USER_GUIDE.zh-CN.md) · [Setup](SETUP_GUIDE.md) · [Release notes](RELEASE_1.0.0.md)
+[中文升级说明](UPGRADE_USER_GUIDE.zh-CN.md) · [Setup](SETUP_GUIDE.md) · [Release notes](RELEASE_1.0.1.md)
 
 ## Update in place
 

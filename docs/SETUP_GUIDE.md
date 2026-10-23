@@ -1,12 +1,12 @@
 # Windows setup guide
 
-[中文安装说明](SETUP_GUIDE.zh-CN.md) · [Release notes](RELEASE_1.0.0.md) · [Upgrade guide](UPGRADE_USER_GUIDE.md)
+[中文安装说明](SETUP_GUIDE.zh-CN.md) · [Release notes](RELEASE_1.0.1.md) · [Upgrade guide](UPGRADE_USER_GUIDE.md)
 
 The application is English-only. The next action stays at the bottom of the native window; optional settings expand when needed.
 
 ## Before you start
 
-Run **YGPTLocal-Setup-1.0.0-win-x64.exe** for your first installation, or **YGPTLocal-Update-1.0.0-win-x64.exe** to update in place. Compare the download's SHA-256 with `SHA256SUMS.txt` from the same release. Installers are unsigned.
+Run **YGPTLocal-Setup-1.0.1-win-x64.exe** for your first installation, or **YGPTLocal-Update-1.0.1-win-x64.exe** to update in place. Compare the download's SHA-256 with `SHA256SUMS.txt` from the same release. Installers are unsigned.
 
 ## 1. Choose folders
 
@@ -74,6 +74,10 @@ You may close setup after copying the prompt; the connection stays active. Eligi
 Installation and authenticated file-read verification have separate completion banners. Connection checks may report **Connection checks complete** while the first ChatGPT task is still pending. An installed update whose connection is starting is shown separately from **Update complete**; failures offer **Try update again**. The window prevents closing during file replacement.
 
 Uninstall stops this installation and removes unchanged application files. Its result window lists deleted, already absent, changed and blocked files separately. Private settings, encrypted credentials, snapshots, recovery records and unregistered user files remain intentionally. **Open retained folder** and **Copy details** help review them. The private receipt is `data/uninstall-report.json`. The contained `.updates` folder retains recovery records and the uninstall helper; no helper process remains after closing the result window. Changed or locked files are reported instead of being silently forced away.
+
+## Installation leftovers
+
+Open **Advanced maintenance → Review installation leftovers** to inspect cache and registration cleanup. After current payload integrity and connection health are verified, the automatic policy retains one complete rollback and removes surplus verified program copies and redundant contained installers. Old YGPT registrations are backed up before removal. Unknown, changed, linked, shared or referenced files remain with reasons. Private data, snapshots, migration/recovery records and developer directories remain untouched. The updater's optional download checkbox authorizes only that exact external file; Downloads is never swept.
 
 ## Optional: your daily browser
 

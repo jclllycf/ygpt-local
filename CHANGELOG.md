@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.0.1 — verified installation housekeeping
+
+- Recognize transaction-based rollback folders, retain one verified rollback and prune surplus owned program copies only after current integrity and health checks.
+- Verify contained installer caches against recorded hashes and live references; preserve unknown/changed files and recovery data. Cache unchanged results to avoid repeated full payload scans.
+- Back up and remove only obsolete current-user YGPT uninstall registrations, preserving the active installation and other live profiles. Never invoke old uninstall commands.
+- Add an installation-leftover review/result window and explicit exact-file cleanup consent for external updater downloads. New ownership manifests invalidate old Complete receipts.
+- Preserve development trees, migration records, credentials, databases and file snapshots. See the 1.0.1 release notes and verification record.
+
 ## 1.0.0 — stable release, clean light blue
 
 - Lighten the sprout mark's lower stem and blue arms while preserving its shape and golden sun. Regenerate full-color application PNGs, seven Windows ICO frames, the extension icon and the dedicated plugin upload icon (under 10 KB).

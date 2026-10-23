@@ -1,0 +1,75 @@
+{
+  "version": "1.0.1",
+  "at": "2026-10-23T16:04:32.036Z",
+  "tests": {
+    "total": 119,
+    "passed": 114,
+    "failed": 0,
+    "skipped": 5
+  },
+  "finalTargetedChecks": {
+    "total": 5,
+    "passed": 5,
+    "failed": 0,
+    "scope": "rollback/cache retention, no-rollback repair-cache preservation, current/foreign registration guards, obsolete uninstall data guard, updater outcomes, payload and private-file retention"
+  },
+  "fieldCleanup": {
+    "at": "2026-10-23T15:47:07.991Z",
+    "cleanupCompleted": true,
+    "removedFiles": 11692,
+    "bytesReclaimed": 692337314,
+    "removedRollbackCopies": 2,
+    "verifiedRollbackCopiesRetained": 1,
+    "obsoleteRegistrationsBackedUpAndRemoved": 3,
+    "remainingUpdatesFiles": 5863,
+    "remainingUpdatesBytes": 256752960,
+    "privateIdentityAndPairingUnchanged": true,
+    "developerGitCommonDirectoryPreserved": true,
+    "snapshotsSwept": false
+  },
+  "nativeUi": {
+    "compiledWpfRendered": true,
+    "fixtureOnly": true,
+    "englishOnly": true
+  },
+  "limits": {
+    "realChatGPTHumanApproval": "not verified",
+    "windowsSignInAndCleanWindows": "not verified",
+    "packageSigning": "unsigned"
+  },
+  "package": {
+    "manifestFiles": 5862,
+    "manifestMismatches": 0,
+    "forbiddenPrivateStateMembers": 0,
+    "currentRuntimeServiceExtensionMatch": true,
+    "currentNativeBinariesMatch": true,
+    "artifacts": [
+      {
+        "file": "YGPTLocal-Setup-1.0.1-win-x64.exe",
+        "bytes": 93846528,
+        "sha256": "ce24793a147f84e10cbb4c5b0b1b6f7f04f4134b4ca094efb0c2036d00bebd54"
+      },
+      {
+        "file": "YGPTLocal-Update-1.0.1-win-x64.exe",
+        "bytes": 93846528,
+        "sha256": "d7c47402262514eb0b04ea323d8f7d833977ab222efb171c968b8864e9d8b451"
+      },
+      {
+        "file": "ygpt-local-portable-1.0.1-win-x64.zip",
+        "bytes": 92889801,
+        "sha256": "daa06d285224348af37b53ad65d09a037e34957300e79fa85fd7f3ec9e72689e"
+      }
+    ]
+  },
+  "sourceAudit": {
+    "passed": true,
+    "sourceFiles": 263,
+    "dependencyPackages": 106,
+    "findings": 0
+  },
+  "maintenanceSafety": {
+    "liveUpdateAttempt": "refused while an unexpired human approval was pending",
+    "programFilesReplacedByRefusedAttempt": false,
+    "approvalDecisionsChangedByAgent": false
+  }
+}

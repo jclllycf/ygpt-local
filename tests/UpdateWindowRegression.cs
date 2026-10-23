@@ -14,11 +14,12 @@ using System.Windows.Threading;
 // Backends deliberately have no process, registry, credential or network effects.
 // Only UpdateWindow.cs is production code in this isolated WPF regression.
 public static class HostCore {
- public const string Version="1.0.0";
+ public const string Version="1.0.1";
  public static readonly JavaScriptSerializer Json=new JavaScriptSerializer();
  public static readonly ManualResetEvent AllowPause=new ManualResetEvent(true),PauseEntered=new ManualResetEvent(false);
  public static readonly ConcurrentQueue<string> Calls=new ConcurrentQueue<string>();
  public static string Full(string p){return Path.GetFullPath(p);}
+ public static bool Within(string p,string root){return Full(p).StartsWith(Full(root)+"\\",StringComparison.OrdinalIgnoreCase);}
  public static string DefaultInstallDir(){throw new Exception("Real discovery is forbidden in the fixture");}
  public static string DefaultDataDir(){throw new Exception("Real discovery is forbidden in the fixture");}
  public static string OwnerId(string data){return Path.GetFileName(data);}
@@ -38,6 +39,8 @@ public static class YGPTApp {
  public static string UpgradeData(string install,string data){return data;}
  public static void RefreshIconCache(){}
 }
+public static class InstallationHousekeeping {public static Dictionary<string,object> Run(string install,string data,bool apply){return new Dictionary<string,object>{{"state","complete"},{"removedFiles",0},{"bytesReclaimed",0}};}}
+public static class InstallCleanup {public static void RecordUpdateSource(string data,string install,string source){}}
 public static class UpdateWindowRegression {
  const BindingFlags Private=BindingFlags.Instance|BindingFlags.NonPublic;
  static T Field<T>(object o,string name){return (T)o.GetType().GetField(name,Private).GetValue(o);}

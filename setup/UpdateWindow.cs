@@ -25,6 +25,7 @@ public class UpdateWindow:Window{
  readonly StackPanel body=new StackPanel();
  readonly TextBlock log=new TextBlock{TextWrapping=TextWrapping.Wrap,FontSize=13,Foreground=B(Muted),Margin=new Thickness(0,12,0,0)};
  readonly Button updateButton=new Button{Content="Update now",MinWidth=140,MinHeight=42,HorizontalAlignment=HorizontalAlignment.Left};
+ readonly CheckBox sourceCleanup=new CheckBox{Content="Remove this exact downloaded updater after it closes (after verified first use)",Margin=new Thickness(0,8,0,12),IsChecked=false};
  readonly ComboBox installChoice=new ComboBox{MinHeight=36,Margin=new Thickness(0,0,0,10)};
  readonly StackPanel pickerHost=new StackPanel();
  readonly StackPanel summary=new StackPanel();
@@ -50,7 +51,7 @@ public class UpdateWindow:Window{
    return;
   }
   if(installs.Count>1){Text("Choose the installation to update",14,true);foreach(var entry in installs)installChoice.Items.Add(entry[2]+"  —  "+entry[0]);installChoice.SelectedIndex=0;installChoice.SelectionChanged+=(s,e)=>SelectInstall(installChoice.SelectedIndex);body.Children.Add(installChoice);}
-  body.Children.Add(summary);body.Children.Add(pickerHost);
+  body.Children.Add(summary);body.Children.Add(pickerHost);string source=Assembly.GetExecutingAssembly().Location;if(Assembly.GetExecutingAssembly().GetManifestResourceNames().Contains("YGPT.Payload")&&!HostCore.Within(source,installs[0][0])){sourceCleanup.ToolTip=source;body.Children.Add(sourceCleanup);}
   SelectInstall(0);
   Closing+=(s,e)=>{if(busy&&!idleWait){e.Cancel=true;Log("Please wait for the update to finish before closing this window.");}};Closed+=(s,e)=>closed=true;
   updateButton.Click+=async(s,e)=>{if(completed){Close();return;}await RunUpdate();};
@@ -151,30 +152,6 @@ public class UpdateWindow:Window{
  // after a verified update, remove them from BOTH places. A folder is
  // deleted only when its own manifest or install marker identifies it as
  // a YGPT Local program copy — anything else is left untouched.
- List<string> CleanupUpdateBackups(string target){
-  var removed=new List<string>();
-  string full=HostCore.Full(target),parent=Path.GetDirectoryName(full),name=Path.GetFileName(full);
-  var candidates=new List<string>();
-  try{candidates.AddRange(Directory.GetDirectories(full,".previous-*"));}catch{}
-  if(!String.IsNullOrEmpty(parent)){
-   try{candidates.AddRange(Directory.GetDirectories(parent,name+".previous-*"));}catch{}
-   try{candidates.AddRange(Directory.GetDirectories(parent,name+".staging-*"));}catch{}
-  }
-  foreach(string candidate in candidates){
-   try{
-    if(String.Equals(HostCore.Full(candidate),full,StringComparison.OrdinalIgnoreCase))continue;
-    if((File.GetAttributes(candidate)&FileAttributes.ReparsePoint)!=0)continue;
-    if(!IsYGPTProgramCopy(candidate))continue;
-    Directory.Delete(candidate,true);removed.Add(Path.GetFileName(candidate));
-   }catch{}
-  }
-  return removed;
- }
- bool IsYGPTProgramCopy(string dir){
-  try{string manifest=Path.Combine(dir,"manifest.json");if(File.Exists(manifest)&&HostCore.S(YGPTApp.Read(manifest),"product")=="YGPT Local")return true;}catch{}
-  try{string marker=Path.Combine(dir,".ygpt-install.json");if(File.Exists(marker)&&HostCore.S(YGPTApp.Read(marker),"product")=="YGPT Local")return true;}catch{}
-  return false;
- }
  async Task RunUpdate(){
   if(busy||completed)return;busy=true;Feedback("Updating YGPT Local","Please keep this window open while files are replaced. Your private data and connection identity are preserved.","info");updateButton.IsEnabled=false;installChoice.IsEnabled=false;pickerHost.IsEnabled=false;log.Text="";
   // Bind every asynchronous step to the installation selected at the click.
@@ -205,6 +182,7 @@ public class UpdateWindow:Window{
    Log("Saving your icon and strip style…");
    try{await Task.Run(()=>{string cfgPath=Path.Combine(targetData,"ygpt.config.json");var cfg=YGPTApp.Read(cfgPath);cfg["brandIcon"]=selectedIcon;cfg["approvalStyle"]=selectedStyle;HostCore.Save(cfgPath,cfg);YGPTApp.Shortcut(targetInstall,targetData);});}
    catch(Exception ex){Log("Note: the icon choice could not be saved ("+ex.Message+"). Cosmetic choices never block a core update — you can pick it again later via Setup → Repair.");}
+   if(sourceCleanup.IsChecked==true)try{await Task.Run(()=>InstallCleanup.RecordUpdateSource(targetData,targetInstall,Assembly.GetExecutingAssembly().Location));Log("Downloaded updater scheduled for exact-file cleanup after verification and this window exits.");}catch(Exception sourceError){Log("Downloaded updater kept: "+sourceError.Message);}
    YGPTApp.RefreshIconCache();
    Log("Restarting the connection…");
    await Task.Run(()=>HostCore.Start(targetInstall,targetData));restarted=true;
@@ -217,9 +195,8 @@ public class UpdateWindow:Window{
    completed=true;updateButton.Content="Close updater";Feedback(live?"Update complete":"Update installed — connection starting",live?"YGPT Local "+HostCore.Version+" is running. Your settings, keys and ChatGPT plugin were kept.":"The application files are updated. The connection is still starting; open Settings to check its status.",live?"success":"warning");
    if(live){
     try{
-     var removed=await Task.Run(()=>CleanupUpdateBackups(targetInstall));
-     if(removed.Count>0)Log("Cleaned up "+removed.Count+" old update backup folder(s): "+String.Join(", ",removed.ToArray())+".");
-    }catch(Exception cleanupError){Log("Note: old update backups could not be cleaned ("+cleanupError.Message+"). They sit in or next to the application folder and can be deleted manually.");}
+     var result=await Task.Run(()=>InstallationHousekeeping.Run(targetInstall,targetData,true));string summaryText="Installation cleanup: "+HostCore.S(result,"state")+"; "+HostCore.S(result,"removedFiles","0")+" files, "+(Convert.ToInt64(result.ContainsKey("bytesReclaimed")?result["bytesReclaimed"]:0)/1048576.0).ToString("F1")+" MiB reclaimed. "+(HostCore.S(result,"retainedRollback")!=""?"One verified rollback is retained.":"No verified rollback is available; review retained files.");Log(summaryText);outcomeDetail.Text+="\n"+summaryText;
+    }catch(Exception cleanupError){Log("Note: old update backups could not be cleaned ("+cleanupError.Message+"). Review retained paths in Settings → Installation leftovers.");}
    }
   }catch(Exception ex){failed=ex;}
   // C# 5 (the .NET Framework csc used by the Windows build) cannot await

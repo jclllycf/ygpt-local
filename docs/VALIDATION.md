@@ -1,6 +1,6 @@
-# Current validation: 1.0.0
+# Current validation: 1.0.1
 
-The current stable release is 1.0.0. See the [release handoff](RELEASE_1.0.0.md) and [machine-readable verification](../evidence/stable-1.0.0-verification.json). The rc.18 field repair provides the preceding host evidence; the records below describe RC3 only and are retained as history. Stable release status does not claim real ChatGPT human-click, clean-Windows or Windows sign-in acceptance.
+The current stable release is 1.0.1. See the [release handoff](RELEASE_1.0.1.md) and [machine-readable verification](../evidence/housekeeping-1.0.1-verification.json). The 1.0.0 and rc.18 records preserve preceding evidence. The records below describe RC3 only and are retained as history. Stable release status does not claim real ChatGPT human-click, clean-Windows or Windows sign-in acceptance.
 
 ## Historical RC3 validation and owner handoff
 

@@ -10,6 +10,7 @@ using System.Runtime.InteropServices;
 using Microsoft.Win32.SafeHandles;
 
 public static class YGPTWatchdog {
+ static DateTime nextHousekeeping=DateTime.MinValue;
  static string install=AppDomain.CurrentDomain.BaseDirectory,data;static Process child;static int restarts=0;static bool authFailure=false;static string phase="starting",lastError="";static int lastExitCode=-1,retryInSeconds=0;static DateTime started=DateTime.UtcNow;static IntPtr job=IntPtr.Zero;
  [DllImport("kernel32.dll",CharSet=CharSet.Unicode)] static extern IntPtr CreateJobObject(IntPtr attributes,string name);
  [DllImport("kernel32.dll",SetLastError=true)] static extern bool SetInformationJobObject(IntPtr job,int cls,IntPtr info,uint length);
@@ -90,7 +91,7 @@ public static class YGPTWatchdog {
       bool local=false;try{local=HostCore.B(HostCore.Control(data,"status"),"localReady");}catch{}
       bool connected=HostCore.S(connection,"mode")=="secure-tunnel"&&Connected();if(connected&&!authFailure){lastError="";failures=0;}phase=authFailure?"credentials-required":local?(connected?"connected":"local-ready-awaiting-remote"):connected?"tunnel-ready-awaiting-first-mcp-call":"starting";Health(local,connected);
       if(authFailure){StopChild();Health(false,false);return 0;}
-      if(local){failures=0;if(connected||HostCore.S(connection,"mode")!="secure-tunnel")lastError="";try{string receipt=Path.Combine(data,"post-install-cleanup-receipt.json");if((HostCore.S(connection,"mode")!="secure-tunnel"||connected)&&!File.Exists(receipt))InstallCleanup.Run(data,install);}catch{lastError="CLEANUP_SKIPPED_CONNECTION_RETAINED";}}
+      if(local){failures=0;if(connected||HostCore.S(connection,"mode")!="secure-tunnel")lastError="";try{string receipt=Path.Combine(data,"post-install-cleanup-receipt.json");if((HostCore.S(connection,"mode")!="secure-tunnel"||connected)&&DateTime.UtcNow>=nextHousekeeping){nextHousekeeping=DateTime.UtcNow.AddMinutes(5);System.Threading.ThreadPool.QueueUserWorkItem(_=>{try{if(InstallCleanup.Due(data))InstallCleanup.Run(data,install);InstallationHousekeeping.RunIfNeeded(install,data);}catch{}});}}catch{lastError="CLEANUP_SKIPPED_CONNECTION_RETAINED";}}
       // The official client can wait for the first remote handshake before it
       // creates a stdio server. Absence of a broker is not a tunnel failure.
       if(child.HasExited||HostCore.S(connection,"mode")!="secure-tunnel"&&!local&&(DateTime.UtcNow-started).TotalSeconds>90){StopChild();restarts++;failures++;phase="reconnecting";Health(false,false);int seconds=Math.Min(120,2*(1<<Math.Min(failures,6)));WaitRetry(seconds);continue;}

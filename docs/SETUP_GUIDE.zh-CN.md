@@ -1,6 +1,6 @@
 # Windows 安装说明
 
-[English setup guide](SETUP_GUIDE.md) · [正式版说明](RELEASE_1.0.0_ZH.md)
+[English setup guide](SETUP_GUIDE.md) · [正式版说明](RELEASE_1.0.1_ZH.md)
 
 界面全部使用英文，中文说明单独提供。首次安装用 Setup，已安装用 Update，核对同一 Release 的 `SHA256SUMS.txt`。安装包未签名。
 
@@ -20,3 +20,5 @@
 实际 ChatGPT 展示、真人批准、所有登录账户任务、注销/重启恢复和干净 Windows 安装仍需使用者验收；本地 fixture 不能替代这些结果。
 
 安装、首次文件读取验证和更新都有独立完成提示。文件已更新但连接仍在启动时，会明确显示仍在连接；失败可重试，替换文件期间禁止直接关闭窗口。卸载结果分别列出已删除、已不存在、被修改和无法删除的文件；私人数据、未知文件与 `.updates` 恢复资料主动保留，并可打开残余目录、复制详情。结果写入本机 `data/uninstall-report.json`。卸载辅助程序也位于内部 `.updates`，关闭结果窗口后没有辅助后台进程。
+
+Advanced maintenance → Review installation leftovers 提供完整残留审计和清理结果。验证连接与当前程序完整性后，保留一个可信回滚点、淘汰多余的已验证程序副本；旧登记备份后再移除。未知、修改、联接、共享或被引用的文件逐项说明保留原因。私人数据、快照、迁移恢复资料和开发目录不动。
