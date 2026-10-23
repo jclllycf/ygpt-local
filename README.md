@@ -4,7 +4,7 @@
 
 Connect ChatGPT to files and tools on your own Windows PC, with protected snapshots, conflict-aware recovery and scoped approval.
 
-**1.0.3 is the current stable release, with English-only UI.** Download from [GitHub Releases](https://github.com/jclllycf/ygpt-local/releases/tag/v1.0.3). The repository remains private. See the [release handoff](docs/RELEASE_1.0.3.md) for verification and owner acceptance still outstanding.
+**1.0.3 is the current stable release, with English-only UI.** Download from [GitHub Releases](https://github.com/jclllycf/ygpt-local/releases/tag/v1.0.3). The source code and release downloads are public. See the [release handoff](docs/RELEASE_1.0.3.md) for verification and owner acceptance still outstanding.
 
 [Setup guide](docs/SETUP_GUIDE.md) · [Upgrade guide](docs/UPGRADE_USER_GUIDE.md) · [Changelog](CHANGELOG.md) · [Validation](docs/VALIDATION.md) · [Security](docs/SECURITY.md) · [中文说明](README.zh-CN.md)
 

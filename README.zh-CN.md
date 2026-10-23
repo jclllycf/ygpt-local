@@ -4,7 +4,7 @@
 
 从 ChatGPT 使用你自己的 Windows 文件和工具，保留写前快照、恢复冲突保护和高风险审批。
 
-**1.0.3 是当前正式版，界面仅英文。** 安装包见 [GitHub Releases](https://github.com/jclllycf/ygpt-local/releases/tag/v1.0.3)，仓库保持私有。实测范围和仍需用户验收的项目见 [正式版交付说明](docs/RELEASE_1.0.3_ZH.md)。另见 [English README](README.md)、[CHANGELOG](CHANGELOG.md)、[中文升级指南](docs/UPGRADE_USER_GUIDE.zh-CN.md)、[中文安装教程](docs/SETUP_GUIDE.zh-CN.md)、[验收状态](docs/VALIDATION.md)、[安全边界](docs/SECURITY.md)。
+**1.0.3 是当前正式版，界面仅英文。** 安装包见 [GitHub Releases](https://github.com/jclllycf/ygpt-local/releases/tag/v1.0.3)，源码和发行包现已公开。实测范围和仍需用户验收的项目见 [正式版交付说明](docs/RELEASE_1.0.3_ZH.md)。另见 [English README](README.md)、[CHANGELOG](CHANGELOG.md)、[中文升级指南](docs/UPGRADE_USER_GUIDE.zh-CN.md)、[中文安装教程](docs/SETUP_GUIDE.zh-CN.md)、[验收状态](docs/VALIDATION.md)、[安全边界](docs/SECURITY.md)。
 
 ## 图形安装流程
 
