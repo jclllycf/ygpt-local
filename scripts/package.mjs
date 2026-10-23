@@ -3,7 +3,7 @@ import path from 'node:path';
 import {createHash} from 'node:crypto';
 import {execFileSync} from 'node:child_process';
 const version=JSON.parse(await fs.readFile('package.json')).version,stage=path.resolve('build/payload-'+Date.now()),dist=path.resolve('dist');await fs.mkdir(stage,{recursive:true});await fs.mkdir(dist,{recursive:true});
-for(const dir of ['runtime','service','engine/src','engine/vendor','engine/windows','engine/build','node_modules'])await fs.cp(dir,path.join(stage,dir),{recursive:true,filter:p=>!p.includes('__pycache__')&&!/\.py[co]$/.test(p)});
+for(const dir of ['runtime','service','engine/src','engine/vendor','engine/windows','engine/build','node_modules','extension'])await fs.cp(dir,path.join(stage,dir),{recursive:true,filter:p=>!p.includes('__pycache__')&&!/\.py[co]$/.test(p)});
 await fs.cp('build/runtimes',path.join(stage,'runtimes'),{recursive:true});await fs.copyFile('build/YGPTLocal.exe',path.join(stage,'YGPTLocal.exe'));
 await fs.copyFile('build/YGPTWatchdog.exe',path.join(stage,'YGPTWatchdog.exe'));await fs.cp('assets',path.join(stage,'assets'),{recursive:true});
 // The installed brand folder doubles as the owner's plugin-icon picker, so it

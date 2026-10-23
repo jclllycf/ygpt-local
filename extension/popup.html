@@ -1,0 +1,20 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>YGPT Local</title>
+<style>
+  body{font-family:system-ui,sans-serif;width:300px;margin:0;padding:14px;color:#12324a;background:linear-gradient(180deg,#f4faff,#fff)}
+  h1{font-size:15px;margin:0 0 4px}
+  p{font-size:12px;color:#4a6a84;margin:4px 0 10px}
+  label{display:block;font-size:11px;font-weight:600;margin:8px 0 3px;color:#33566e}
+  input{width:100%;box-sizing:border-box;padding:7px 9px;border:1px solid #bcd9f7;border-radius:8px;font-size:13px}
+  button{margin-top:12px;width:100%;padding:9px;border:0;border-radius:9px;background:#1f9bf0;color:#fff;font-weight:700;cursor:pointer}
+  #status{margin-top:10px;font-size:12px;color:#33566e;white-space:pre-line}
+</style>
+<h1>YGPT Local</h1>
+<p>Pair this browser profile with YGPT Local on this computer. Get the token from the pairing page your YGPT app shows (http://127.0.0.1:19341).</p>
+<label for="host">Host</label><input id="host" value="127.0.0.1">
+<label for="port">Port</label><input id="port" type="number" value="19341">
+<label for="token">Pairing token</label><input id="token" placeholder="paste the token">
+<button id="save">Save &amp; connect</button>
+<div id="status">…</div>
+<script src="popup.js"></script>
