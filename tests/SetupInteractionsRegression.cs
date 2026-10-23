@@ -52,6 +52,10 @@ public static class SetupInteractionsRegression {
   var fields=(Dictionary<string,TextBox>)Get(w,"fields");fields["folder"].Text=root;Set(w,"step",4);Call(w,"Render");
   Check(!(bool)Call(w,"CanContinueInstallation")&&((Button)Get(w,"next")).Content.ToString()=="Apply changed settings","Changed settings require one explicit apply");
   Set(w,"step",7);Call(w,"Render");Check(((Button)Get(w,"next")).Content.ToString()=="Skip for now","Daily browser step is skippable by default");
+  var browser=Find<ComboBox>(w,"handoff-browser");browser.ApplyTemplate();
+  Check(browser.Template.FindName("PART_Popup",browser)!=null&&browser.ItemContainerStyle!=null&&browser.MinHeight>=44,"Browser picker has a themed native popup and generous targets");
+  Check(AutomationProperties.GetName(browser)=="Browser for ChatGPT and setup links"&&browser.Focusable,"Browser picker retains accessible naming and keyboard focus");
+  browser.SelectedIndex=2;Check((string)Call(w,"Browser")=="edge","Themed picker preserves browser selection");browser.SelectedIndex=0;
   ((CheckBox)Get(w,"dailyOptIn")).IsChecked=true;Call(w,"Render");
   Check(Find<Button>(w,"open-chrome-extensions")!=null&&Find<Button>(w,"open-edge-extensions")!=null&&Find<Button>(w,"open-pairing-page")!=null,"Direct extension and pairing page actions exist");
   Call(w,"Next",null,new RoutedEventArgs());Check((int)Get(w,"step")==8,"Optional browser has its own step before final check");

@@ -6,17 +6,17 @@ Bring files, projects and approved Windows tools to the ChatGPT account you alre
 
 **Positioning:** YGPT Local is a free, open-source, lightweight local semi-automated agent for using your own Windows PC through ChatGPT conversations. In supported ChatGPT web or desktop experiences, you can ask it to work with local files, browser tasks and approved tools while you stay in control of sensitive actions. YGPT itself needs no paid membership; ChatGPT plugin access, Platform Tunnels and any third-party services have their own account, workspace and cost requirements. See [OpenAI's plugin availability guidance](https://help.openai.com/en/articles/20001256-plugins-in-chatgpt) and [custom MCP requirements](https://help.openai.com/en/articles/12584461-connecting-custom-mcp-servers-in-chatgpt).
 
-**1.0.4 is the current stable release, with English-only UI.** Download from [GitHub Releases](https://github.com/jclllycf/ygpt-local/releases/tag/v1.0.4). Source and downloads are public. See the [release notes](docs/RELEASE_1.0.4.md) for the new guided setup and its verification scope.
+**1.0.5 is the current stable release, with English-only UI.** Download from [GitHub Releases](https://github.com/jclllycf/ygpt-local/releases/tag/v1.0.5). Source and downloads are public. See the [release notes](docs/RELEASE_1.0.5.md) for the new guided setup and its verification scope.
 
 **Free-account field result:** on October 23, 2026, the project owner reported successful real use with a ChatGPT Free account. This is a concrete user-reported feasibility milestone; account availability, workspace permissions and Platform Tunnel access still need to be checked for each setup. It is not a promise of access for every Free account.
 
 [Setup guide](docs/SETUP_GUIDE.md) · [Upgrade guide](docs/UPGRADE_USER_GUIDE.md) · [Changelog](CHANGELOG.md) · [Validation](docs/VALIDATION.md) · [Security](docs/SECURITY.md) · [中文说明](README.zh-CN.md)
 
-![English Windows setup guide](docs/images/setup-1.0.4.png)
+![English Windows setup guide](docs/images/setup-1.0.5.png)
 
 ## Install
 
-1. Obtain `YGPTLocal-Setup-1.0.4-win-x64.exe` and compare its SHA-256 with `SHA256SUMS.txt`. The installers are unsigned. Already installed? Run `YGPTLocal-Update-1.0.4-win-x64.exe` instead: it preserves your data, keys, connection identity, snapshots and ChatGPT plugin; legacy external data moves inside the application folder ([upgrade guide](docs/UPGRADE_USER_GUIDE.md)).
+1. Obtain `YGPTLocal-Setup-1.0.5-win-x64.exe` and compare its SHA-256 with `SHA256SUMS.txt`. The installers are unsigned. Already installed? Run `YGPTLocal-Update-1.0.5-win-x64.exe` instead: it preserves your data, keys, connection identity, snapshots and ChatGPT plugin; legacy external data moves inside the application folder ([upgrade guide](docs/UPGRADE_USER_GUIDE.md)).
 2. Follow the nine-step native Windows wizard. Choose an application folder and an authorized working folder. Node, Python and the official Tunnel Client are bundled; normal installation needs no developer tools or administrator privileges.
 3. Keep **OpenAI Secure MCP Tunnel** selected. Create a dedicated Tunnel in your eligible Platform organization and associate the intended ChatGPT workspace. Do not reuse a Tunnel already run by another installation.
 4. Enter the full ID and a dedicated runtime API key in the masked local field. DPAPI encrypts it for your Windows user. It authenticates the Tunnel Client; setup does not call generation models or create keys.

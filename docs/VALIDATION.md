@@ -1,6 +1,8 @@
-# Current validation: 1.0.4
+# Current validation: 1.0.5
 
-The current stable release is 1.0.4. See the [release notes](RELEASE_1.0.4.md) and [machine-readable verification](../evidence/setup-1.0.4-verification.json). This release tests the compiled WPF flow and bounded after-exit cleanup in disposable fixtures. The owner reported successful real use with a ChatGPT Free account on October 23, 2026; that field result is separate from automated evidence. The final draft composer, human approval, clean-Windows and Windows sign-in acceptance are not established by local fixtures. Production installation of 1.0.4 remains deferred at the owner's request.
+The current release is 1.0.5. See the [release notes](RELEASE_1.0.5.md) and [machine-readable verification](../evidence/startup-1.0.5-verification.json). It fixes a reproduced numbered-Chrome-profile ACL startup refusal and themes the native browser picker. The repaired owner installation recovered local readiness, Tunnel connectivity and successful host-requested file operations. Release-package and installation checks are recorded separately from those field observations. The owner's earlier local-update deferral was superseded by their explicit repair/update request.
+
+Native Windows regression checks cover permitted cache capabilities and rejected unsafe ACLs, the WPF picker, installer navigation and cleanup safeguards. Isolated Chromium relay fixtures use fresh test browsers and do not prove every real signed-in browser workflow. The owner-reported ChatGPT Free result remains one account's field evidence. Clean-Windows, Windows sign-in/reboot and new human-approval acceptance are not established by this repair.
 
 Earlier stable and RC records remain historical evidence. The table below describes RC3 only.
 

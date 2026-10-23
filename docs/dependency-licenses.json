@@ -833,6 +833,14 @@
       ]
     },
     {
+      "name": "ws",
+      "version": "8.22.0",
+      "license": "MIT",
+      "noticeFiles": [
+        "node_modules/ws/LICENSE"
+      ]
+    },
+    {
       "name": "zod",
       "version": "3.25.76",
       "license": "MIT",

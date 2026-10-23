@@ -46,3 +46,25 @@ test('Native state audit diagnoses a linked state root before preparing any ACLs
  });
  assert.equal(fs.readFileSync(path.join(target,'sentinel.txt'),'utf8'),'KEEP');
 });
+
+test('Numbered Chrome profiles permit only the owned network-service capability on isolated caches',{skip:process.platform!=='win32'},()=>{
+ const dir=fs.mkdtempSync(path.join(nativeTestRoot,'chrome-profiles-')),state=path.join(dir,'state');
+ nativeWindows('state-prepare',{root:state});
+ const chromeSid='S-1-15-3-1024-1653277547-598600573-1504598449-2187120098-1115546814-1860042162-2924348907-3700367812';
+ const grant=(p,sid)=>execFileSync('icacls.exe',[p,'/grant','*'+sid+':(OI)(CI)M'],{windowsHide:true,stdio:'pipe'});
+ for(const home of ['home','engine-home'])for(const profile of ['Default','Profile 1','Profile 12']){
+  const cache=path.join(state,home,'AppData','Local','Google','Chrome','User Data',profile,'Cache');
+  fs.mkdirSync(cache,{recursive:true});grant(cache,chromeSid);fs.mkdirSync(path.join(cache,'Cache_Data'));
+ }
+ assert.equal(nativeWindows('state-verify',{root:state}).descendantsChecked,true);
+ const forbidden=path.join(state,'home','AppData','Local','Google','Chrome','User Data','Profile 1','Credentials');
+ fs.mkdirSync(forbidden);grant(forbidden,chromeSid);
+ assert.throws(()=>nativeWindows('state-verify',{root:state}),e=>e.code==='STATE_DESCENDANT_ACL_UNSAFE'&&e.path===forbidden);
+ fs.rmSync(forbidden,{recursive:true});
+ const fake=path.join(state,'home','AppData','Local','Google','Chrome','User Data','Profile 1 extra','Cache');
+ fs.mkdirSync(fake,{recursive:true});grant(fake,chromeSid);
+ assert.throws(()=>nativeWindows('state-verify',{root:state}),e=>e.code==='STATE_DESCENDANT_ACL_UNSAFE'&&e.path===fake);
+ fs.rmSync(path.dirname(fake),{recursive:true});
+ const cache=path.join(state,'home','AppData','Local','Google','Chrome','User Data','Profile 1','Cache');grant(cache,'S-1-1-0');
+ assert.throws(()=>nativeWindows('state-verify',{root:state}),e=>e.code==='STATE_DESCENDANT_ACL_UNSAFE'&&e.path===cache);
+});

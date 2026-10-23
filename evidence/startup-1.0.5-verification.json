@@ -1,0 +1,97 @@
+{
+  "version": "1.0.5",
+  "at": "2026-10-23T19:23:39.428Z",
+  "regressions": {
+    "numberedChromeCacheCapabilityAccepted": true,
+    "credentialDirectoryCapabilityRejected": true,
+    "misleadingProfileNameRejected": true,
+    "foreignSidRejected": true,
+    "reparseChecksRetained": true,
+    "nativeBrowserPickerSelectionPreserved": true,
+    "accessibleNameAndFocusRetained": true
+  },
+  "tests": {
+    "uniqueTests": 126,
+    "passed": 121,
+    "failed": 0,
+    "skipped": 5,
+    "mainRun": {
+      "total": 126,
+      "passed": 116,
+      "skipped": 10
+    },
+    "supplementaryChromeRun": {
+      "passed": 5,
+      "skipped": 0
+    },
+    "skipReasons": [
+      "Repo-local Roslyn SDK/net48 references absent; native Framework compilation succeeded",
+      "Three POSIX-shebang fixtures do not apply to Windows",
+      "python3 unavailable for one child-environment fixture"
+    ],
+    "browserScope": "Fresh isolated Chrome processes with a protocol-backed extension fixture; no owner browser tabs or profiles accessed"
+  },
+  "package": {
+    "version": "1.0.5",
+    "manifestFiles": 5885,
+    "manifestMismatches": 0,
+    "forbiddenMembers": 0,
+    "currentRuntimeServiceExtensionMatch": true,
+    "currentNativeBinariesMatch": true,
+    "artifacts": [
+      {
+        "file": "YGPTLocal-Setup-1.0.5-win-x64.exe",
+        "bytes": 94366208,
+        "sha256": "4a809d0b46be3a2d16d1acc2eb35e811b5e62dc3709f67bf11f3078563366fed"
+      },
+      {
+        "file": "YGPTLocal-Update-1.0.5-win-x64.exe",
+        "bytes": 94366208,
+        "sha256": "3b2dfbf34cc8681c5e77f9bd451f64690aff1a49410af52f40a70e85949ab276"
+      },
+      {
+        "file": "ygpt-local-portable-1.0.5-win-x64.zip",
+        "bytes": 93381006,
+        "sha256": "c3c6fc30bc432a46244dca333560f9df705d2c8232e08f32cb8426b77aa2f394"
+      }
+    ]
+  },
+  "nativeUi": {
+    "compiledAndPackagedWpfRendered": true,
+    "fixtureOnly": true,
+    "mainImageSha256": "c6d0319ea122446f62a4b5a58b8922493821828fa95db9598aa80447a28338ea"
+  },
+  "production": {
+    "version": "1.0.5",
+    "manifestFiles": 5885,
+    "manifestMismatches": 0,
+    "packageManifestMatches": true,
+    "credentialsConnectionPairingPreserved": true,
+    "stateAuditPassed": true,
+    "containedState": true,
+    "oldExternalDataAbsent": true,
+    "health": {
+      "version": "1.0.5",
+      "phase": "connected",
+      "localReady": true,
+      "tunnelConnected": true,
+      "restarts": 0,
+      "lastError": ""
+    },
+    "preUpgradeFieldEvidence": "After the minimal native-checker repair, the existing production ledger recorded successful file reads, file information and directory-list calls from the connected host.",
+    "afterFullUpgradeHostAcceptance": "Local startup self-test and connected Tunnel observed; no new remote initialization claimed"
+  },
+  "cleanup": {
+    "verifiedReceiptsBytesReclaimed": 601969666,
+    "verifiedReceiptsFilesRemoved": 11738,
+    "retainedRollbackCopies": 1,
+    "privateSnapshotsKept": true,
+    "unclassifiedTemporaryFilesKept": true
+  },
+  "limits": [
+    "No clean-Windows VM or sign-in/reboot acceptance",
+    "No new physical human approval attestation",
+    "Post-update local readiness is separate from a completed ChatGPT tool answer",
+    "Saved Chrome groups cannot replace live tabs during automation"
+  ]
+}

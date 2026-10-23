@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0.5 — numbered Chrome profiles and a clearer browser picker
+
+- Fix engine startup refusal on isolated Chrome `Profile N` cache permissions while preserving owner, capability-SID, path and reparse checks.
+- Theme the native browser ComboBox and its menu with the setup wizard's pale-blue colors, rounded corners and visible focus/selection states.
+- Add regression coverage for permitted numbered profiles, rejected unsafe ACLs and native browser selection.
+
 ## 1.0.4 — guided setup and exact-file cleanup
 
 - Retry transient Windows clipboard contention without losing setup progress.
