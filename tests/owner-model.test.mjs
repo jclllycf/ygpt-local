@@ -21,12 +21,13 @@ test('File engine: absolute paths work on any volume; relative paths stay inside
   const outside=path.join(rootB,'AppData','Roaming','clash','config.yaml');
   fs.mkdirSync(path.dirname(outside),{recursive:true});
   const written=await engine.atomicWrite(outside,'port: 7890\n');
-  assert.equal(written.path,outside);
+  // Windows runners may supply an 8.3 TEMP alias; the engine returns canonical paths.
+  assert.equal(fs.realpathSync.native(written.path).toLowerCase(),fs.realpathSync.native(outside).toLowerCase());
   assert.equal((await engine.read(outside)).content,'port: 7890\n');
   // A relative path is confined to the engine root by definition.
   await assert.rejects(engine.atomicWrite('../escape.txt','x'),e=>e.code==='OUT_OF_SCOPE');
   const inside=await engine.atomicWrite('local.txt','ok');
-  assert.equal(inside.path,path.join(rootA,'local.txt'));
+  assert.equal(fs.realpathSync.native(inside.path).toLowerCase(),fs.realpathSync.native(path.join(rootA,'local.txt')).toLowerCase());
 });
 
 test('Access policy: trash tiers, downloads and document writes follow the owner model',async()=>{
