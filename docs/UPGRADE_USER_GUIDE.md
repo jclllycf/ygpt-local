@@ -1,56 +1,38 @@
-> rc.18：默认数据已改为所选安装目录内的 `data`；旧外部数据会迁移。隔离浏览器默认一次读取后退出，多步任务显式使用 `keepAlive=true`。本次旧扩展各需 Reload 一次。详见 [实机修复说明](RC18_FIELD_REPAIR_ZH.md)。
+# Upgrading and using YGPT Local
 
-# YGPT Local 升级版 · 简短操作指南（候选版 1.0.0-rc.17）
+[中文升级说明](UPGRADE_USER_GUIDE.zh-CN.md) · [Setup](SETUP_GUIDE.md) · [Release notes](RELEASE_1.0.0.md)
 
-这一版是「普通聊天专用」的 YGPT：它为普通 ChatGPT 对话工作，每个对话只操作自己创建的标签页、窗口绑定、进程和任务。按你的指示（rc.13 起），桌面版 ChatGPT Agent 的窗口、进程、文件夹和浏览器不再被特殊屏蔽，和其他目标一样按下面的规则处理。生产环境仍是 rc.2，是否切换由你决定。
+## Update in place
 
-## UIA 桌面操作：默认要你点头
+Run the Update EXE from the latest release. It finds the existing installation, lets you choose the intended one if several exist, waits for owned work and replaces the program payload. The update button stays visible while optional appearance settings scroll. Settings, encrypted keys, connection identity, snapshots, private data and the ChatGPT plugin are preserved.
 
-- 看窗口列表（`y_desktop_windows`）是自动的，不打扰你。
-- **绑定窗口、点击、输入、聚焦**都会弹审批卡：卡上写明应用、窗口、动作、要输入的内容和风险。点「允许一次」只执行这一次；拒绝或超时什么都不会发生，也不会自动重试。
-- 你也可以在卡片上选「在本对话内允许」——只对**同一窗口、同类动作**在两小时内有效，窗口或程序变了就重新审批。
-- 没有「永远拒绝」的窗口：ChatGPT 应用、终端、密码管理器也一样，你批准绑定那个具体窗口后才能控制，之后每个动作再问你。
+All product data lives in `<chosen application folder>\data`. Staging and rollback members live in `.updates`. Legacy external data is moved inside the chosen application folder; two private state trees are never merged. Unknown user files remain untouched.
 
-## 多个对话同时工作
+If a browser extension from rc.17 or earlier remains loaded, click Reload once in each profile's extension manager. Keep the pairing token. Extension 1.0.19 includes version negotiation for subsequent resource reloads.
 
-- 可以放心并行：A 在跑长任务，B 照常读写文件、开浏览器，互不阻塞。
-- 两个对话同时改同一个文件：后写的会收到 `STALE_PREIMAGE` 冲突提示，需要重读后再改，不会互相覆盖。
-- 每个对话第一次创建标签页/窗口绑定/进程/任务时，会拿到一个只属于它的 contextToken，之后的调用带上它即可；不要把这个 token 贴到别的对话里。
+## Understand permission prompts
 
-## 文件权限：默认放行，按风险分级（黑名单模式）
+Ordinary file reads and routine work follow local policy. Higher-risk operations ask for approval for the exact action. Review the target and details before choosing **Allow once** or **Deny**. An eligible **Always allow in this chat** grant covers only the displayed scope for up to two hours. It does not grant another conversation access.
 
-- **读**：全部自动放行。
-- **写**：工作目录默认放行；其他位置的普通文件（比如 C 盘里某个软件的配置目录）也默认放行，不需要逐个登记。涉及系统文件、凭据相邻路径（.ssh、浏览器 Cookie 等）时先弹卡问你。
-- **删**：单个普通文件默认删除，但删前强制做受保护快照，快照 ID 就是回滚句柄，删错了用快照恢复；一次删多个、删整个文件夹、删系统路径，先弹卡问你。删文件夹时会把整个文件夹里的文件逐个放进快照；快照装不下的（太大、文件太多或含链接）要你先点头，删后只在回收站里，结果里会列为 `recycleBinOnly`。
-- **命令**：批量删除形态（通配符、递归、管道枚举删除）会被识别为高风险，先问你；普通命令自动执行，执行前对工作目录做有界快照。
-- **写入或删除 YGPT 自身的运行目录/状态/凭据、G: 保险库**：先弹卡问你（不是拒绝）——那是审批和回滚机制本身所在，所以每次都要你本人确认。读取它们是自动的。
-- 没有任何「硬拒绝」的目标；剩下的拒绝只针对格式错误的请求（缺路径、非法参数等）。
+Desktop window binding, clicks, typing and focus changes require approval by default. Desktop ChatGPT Agent windows are ordinary targets under the same rules. Credential-adjacent or system changes, broad searches and bulk deletion require their applicable local approval. Malformed requests are rejected.
 
-## 出错了怎么恢复
+## Work in several conversations
 
-- **审批相关**：结果不确定时先用 `y_call_status` / `y_call_result` 查原请求，**不要重发原操作**。
-- **任务状态 unknown**：用 `y_job_status` 查，不要重新提交；系统不会自动重放。
-- **文件改坏了**：每次写文件前都有受保护快照，用 `y_backup_list` 找到它，`y_backup_restore` 恢复。
-- **删错了文件**：`y_file_trash` 是进回收站 + 留快照双保险，按返回的 snapshotId 用 `y_backup_restore` 恢复。
-- **想看谁占用了资源**：`y_resource_owner` 显示本对话拥有的任务/标签页/窗口，以及其他对话的数量（只计数，不泄露内容）。
-- **想看用量**：`y_usage_report` 按最近 24 小时/7 天统计调用量、成功率和耗时。
+Each conversation keeps its own context token and owns its tabs, window bindings, jobs and processes. Keep that token with the task. Concurrent writes to the same file use preimage hashes; a `STALE_PREIMAGE` response means read the current file before trying a new change. One conversation cannot take another's resources by guessing an ID.
 
-## 一句话原则
+## Browser choices
 
-默认全部放行，只有真正有风险的动作（桌面控制、批量/系统删除、系统与凭据相关操作）先问你。模型不能自己批准自己的请求。
+- **Isolated browser:** a default open returns a snapshot, closes the browser and removes its temporary profile before returning. For several interactions, explicitly use `keepAlive=true`, keep the original context token and close the tabs when done. Closing the last tab closes its browser; a 30-second idle lease cleans up abandoned work.
+- **Daily Chrome or Edge:** load and pair the extension in the intended profile. Each profile has a separate relay; each chat selects its own profile. When several are connected, select the intended one. YGPT works within its own tab group. Personal tabs and the user's browser remain open after detach.
 
-## 已安装用户如何更新（不用卸载）
+The last setup page includes optional extension and pairing shortcuts. A profile without the extension must first be installed and paired by its owner.
 
-1. 下载与版本对应的更新包 `YGPTLocal-Update-<版本>-win-x64.exe` 并运行。
-2. 更新器会自动找到你已安装的 YGPT Local，显示"当前版本 → 新版本"，点 **Update now** 即可。
-3. 更新过程只替换程序文件：你的设置、加密密钥、隧道连接、快照都原样保留，ChatGPT 里的插件不需要删除或重新添加。
-4. 在更新器里还可以顺手改授权条图标和样式（新版 / 经典版），带实时预览；改完即存入配置。
-5. 更新完成后连接会自动重启。向导（完整安装包）仍然可以用来修复或改配置。
-6. 如果你装了 YGPT 浏览器扩展：打开 `chrome://extensions`（Edge 是 `edge://extensions`），在 YGPT Local 扩展上点「重新加载」。「加载未打包的扩展程序」装的扩展不会自己读取更新后的文件。配对码不变，不用重新配对。
+## Recover without repeating work
 
-## 浏览器两种模式（rc.13–rc.15）
+If a mutation's result is unknown, retrieve the existing request with `y_call_status` / `y_call_result` instead of submitting it again. Check an existing job with `y_job_status`. Use `y_backup_list` and `y_backup_restore` for protected file snapshots. Restore conflicts preserve newer content.
 
-- **隔离浏览器（默认）**：YGPT 自己启动的浏览器（默认 Chrome，可在配置里改 Edge），和你的日常浏览器不共用登录信息。每个对话有自己全新的浏览器上下文和标签页，别的对话看不到、也关不掉；空闲一段时间自动释放。可以访问公开网站，只有黑名单（你拉黑的主机、带账密的链接）会被拦。
-- **接管你的日常浏览器**：通过 YGPT 浏览器扩展，接管你平时用的那个 Chrome/Edge 本人——默认配置文件、你的登录账户、你的标签页都在。一次性设置：① 在浏览器打开 `chrome://extensions`（Edge 是 `edge://extensions`），打开"开发者模式"，点"加载未打包的扩展程序"，选择 YGPT 安装目录里的 `extension` 文件夹；② 在那个浏览器里打开 `http://127.0.0.1:19341`，复制页面上的配对码；③ 点工具栏的 YGPT 扩展图标，把配对码粘进去保存。之后对话调用接管就会连上。
-- **接管时的工作纪律**：YGPT 只在自己的标签组（名为 "YGPT" 的真实标签组）里干活——新建的都是后台标签页，不抢你当前标签、不弹焦点；你的标签页它只计数、从不读取或关闭。断开接管不会关掉你的浏览器，标签组会留着，下次接管自动认领。断开只针对发起的那个对话：另一个对话还在用你的浏览器时，共享连接保持打开。浏览器顶部会显示「YGPT Local 已开始调试此浏览器」的提示条：在上面点「取消」就是立即停止本次接管（标签组保留，扩展保持配对），对话要重新接管才能继续。
-- **多账户/多浏览器**：如果好几个浏览器/配置文件都装了扩展并完成配对，接管时会先把候选列出来（浏览器 + 账户邮箱），等你指定用哪个，绝不猜着连——选错账户比慢一点更糟。
+Single ordinary file deletion uses a protected snapshot and the Recycle Bin. Bulk, directory and system deletion require approval. Snapshot limits are reported; do not assume every terminal command is fully reversible. See the [security note](UPGRADE_SECURITY_NOTE.md).
+
+## Check connection status
+
+**Local tools**, **Private tunnel** and **First ChatGPT task** describe different checks. A connected private tunnel can wait for a first remote request before starting the local engine. Expand connection details for actual errors. A saved key or successful local fixture is not proof of a real ChatGPT answer or physical human approval.

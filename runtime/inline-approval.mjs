@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {config,RUNTIME,INSTALL} from './config.mjs';
 // New resource URI forces hosts to fetch the revised CSP and bridge bundle.
-export const BAR_URI='ui://ygpt/approval/strip-v4-rc18.html';
+export const BAR_URI='ui://ygpt/approval/strip-v5.html';
 // The prior ChatGPT tool catalog can retain this URI across conversations.
 // Serve the NEW strip at this legacy address rather than the retired large card.
 export const LEGACY_BAR_URI='ui://ygpt/approval/card-v1.html';
@@ -11,7 +11,7 @@ export const LEGACY_BAR_URI='ui://ygpt/approval/card-v1.html';
 export const INSPECTION_URI=config.chatAppConsent?'ui://ygpt/approval/compact-v1-rc2.html':'ui://ygpt/approval/inspection-v1.html';
 // Resource addresses are protocol identifiers, not display branding. Old chats
 // retain these exact addresses and must still receive the current component.
-const knownResources=[BAR_URI,LEGACY_BAR_URI,INSPECTION_URI,'ui://ygpt/approval/strip-v3.html',...['compact-v11-3','interactive-v11-2c','interactive-v11-2b','interactive-v11-2','interactive-v11-1','interactive-v11','inspection-v1'].map(n=>'ui://ygpt/approval/'+n+'.html')];
+const knownResources=[BAR_URI,LEGACY_BAR_URI,INSPECTION_URI,'ui://ygpt/approval/strip-v4-rc18.html','ui://ygpt/approval/strip-v3.html',...['compact-v11-3','interactive-v11-2c','interactive-v11-2b','interactive-v11-2','interactive-v11-1','interactive-v11','inspection-v1'].map(n=>'ui://ygpt/approval/'+n+'.html')];
 export function approvalResourceUris(){
  const modern=config.rc10Candidate?knownResources:!config.rc9Candidate&&uiEnabled()?(barEnabled()?[BAR_URI,LEGACY_BAR_URI]:[BAR_URI]):[];
  return [...new Set(modern)];
@@ -84,7 +84,7 @@ function brandIconDataUrl(){const name=BRAND_ICON_FILES.includes(config.brandIco
 // recomputed over the exact served script/style (same transform as
 // scripts/csp.mjs) and the meta is patched to match.
 const GREEN_ICON_FILES=['ygpt-local-green-y-256.png','ygpt-local-green-256.png'];
-const GREEN_THEME=[['--accent:#0369a1','--accent:#15803d'],['--sky1:#38bdf8','--sky1:#4ade80'],['--sky2:#0284c7','--sky2:#16a34a'],['--act1:#0284c7','--act1:#16a34a'],['--act2:#075985','--act2:#166534'],['--tint:#e0f2fe','--tint:#dcfce7'],['--tint-line:#bae6fd','--tint-line:#bbf7d0'],['--tint-ink:#075985','--tint-ink:#166534'],['--ring:rgba(56,189,248,.22)','--ring:rgba(34,197,94,.22)'],['--lift:rgba(2,132,199,.10)','--lift:rgba(22,163,74,.12)'],['#eff8fe','#f0fdf4'],['#d5e6f2','#bbf7d0'],['#0ea5e9','#22c55e'],['--accent:#7dd3fc','--accent:#86efac'],['--sky2:#0369a1','--sky2:#15803d'],['--tint:#0f3550','--tint:#14532d'],['--tint-line:#1d5a80','--tint-line:#166534'],['--tint-ink:#bae6fd','--tint-ink:#bbf7d0'],['--ring:rgba(56,189,248,.3)','--ring:rgba(34,197,94,.3)']];
+const GREEN_THEME=[['--accent:#0369a1','--accent:#15803d'],['--sky1:#a6e1fa','--sky1:#4ade80'],['--sky2:#7ac8f5','--sky2:#16a34a'],['--act1:#d5f0ff','--act1:#d5f5e0'],['--act2:#b9e4fc','--act2:#b3e8c6'],['--act-ink:#164765','--act-ink:#14532d'],['--act-edge:#9ed3f0','--act-edge:#9cd6b3'],['--tint:#e0f2fe','--tint:#dcfce7'],['--tint-line:#bae6fd','--tint-line:#bbf7d0'],['--tint-ink:#075985','--tint-ink:#166534'],['--ring:rgba(56,189,248,.22)','--ring:rgba(34,197,94,.22)'],['--lift:rgba(2,132,199,.10)','--lift:rgba(22,163,74,.12)'],['#eff8fe','#f0fdf4'],['#d5e6f2','#bbf7d0'],['#0ea5e9','#22c55e'],['--accent:#7dd3fc','--accent:#86efac'],['--sky2:#0369a1','--sky2:#15803d'],['--tint:#0f3550','--tint:#14532d'],['--tint-line:#1d5a80','--tint-line:#166534'],['--tint-ink:#bae6fd','--tint-ink:#bbf7d0'],['--ring:rgba(56,189,248,.3)','--ring:rgba(34,197,94,.3)']];
 function rehashCsp(text){
  const hash=v=>createHash('sha256').update(v.replace(/\r\n?/g,'\n')).digest('base64');
  const grab=(open,close)=>{const a=text.indexOf(open),b=a<0?-1:text.indexOf(close,a+open.length);return a<0||b<0?null:text.slice(a+open.length,b);};

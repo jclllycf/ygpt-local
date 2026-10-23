@@ -9,14 +9,13 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import http from 'node:http';
+
 import {WebSocket} from 'ws';
 import {AsyncLocalStorage} from 'node:async_hooks';
 
 const CHROME=process.env.YGPT_TEST_CHROMIUM??'/opt/meta-chromium/chrome';
 const available=fs.existsSync(CHROME);
 const tmp=()=>fs.mkdtempSync(path.join(os.tmpdir(),'ygpt-ext-'));
-async function freePort(){return new Promise(res=>{const s=http.createServer();s.listen(0,'127.0.0.1',()=>{const p=s.address().port;s.close(()=>res(p));});});}
 const CDP_EVENTS=['Page.frameNavigated','Page.loadEventFired','Page.lifecycleEvent','Page.frameStartedLoading','Page.frameStoppedLoading','Page.domContentEventFired','Runtime.executionContextCreated','Runtime.executionContextDestroyed','Runtime.executionContextsCleared','Runtime.exceptionThrown','Network.requestWillBeSent','Network.responseReceived','Network.loadingFinished','Network.loadingFailed','Log.entryAdded','Fetch.requestPaused','DOM.documentUpdated','Page.javascriptDialogOpening','Page.fileChooserOpened','Page.windowOpen','Page.frameAttached','Page.frameDetached','Target.targetCreated','Target.targetInfoChanged','Target.targetDestroyed','Target.attachedToTarget','Target.detachedFromTarget'];
 // Fixture pages are served by intercepting https://fixture.invalid/** —
 // this host's Chromium build hard-blocks navigations to 127.0.0.1
@@ -93,7 +92,7 @@ test('Extension takeover: pairing, choice, group discipline, detach',{skip:!avai
   const {YExtensionBrowser}=await import('../engine/src/browser-engine.mjs');
   const {chromium}=await import('playwright');
   const base='https://fixture.invalid';
-  const port=await freePort();
+  const port=0;
   const scope=new AsyncLocalStorage();
   const engine=new YExtensionBrowser({stateDir:tmp(),port,currentOwner:()=>scope.getStore()??'local'});
   const browserA=await chromium.launch({executablePath:CHROME,args:['--no-sandbox']});
@@ -156,7 +155,7 @@ test('Extension takeover: pairing, choice, group discipline, detach',{skip:!avai
 test('Extension takeover: a session Chrome ended is dropped and re-adopted; Cancel ends the take-over',{skip:!available&&'no chromium on this host',timeout:120000},async()=>{
   const {YExtensionBrowser}=await import('../engine/src/browser-engine.mjs');
   const {chromium}=await import('playwright');
-  const engine=new YExtensionBrowser({stateDir:tmp(),port:await freePort()});
+  const engine=new YExtensionBrowser({stateDir:tmp(),port:0});
   const browser=await chromium.launch({executablePath:CHROME,args:['--no-sandbox']});
   const until=async(check,what)=>{for(let i=0;i<200;i++){if(await check())return;await new Promise(r=>setTimeout(r,25));}assert.fail('timed out waiting for '+what);};
   try{
@@ -188,7 +187,7 @@ test('Extension takeover: a popup opened by one chat\'s group tab stays with tha
   const {YExtensionBrowser}=await import('../engine/src/browser-engine.mjs');
   const {chromium}=await import('playwright');
   const scope=new AsyncLocalStorage();
-  const engine=new YExtensionBrowser({stateDir:tmp(),port:await freePort(),currentOwner:()=>scope.getStore()??'local'});
+  const engine=new YExtensionBrowser({stateDir:tmp(),port:0,currentOwner:()=>scope.getStore()??'local'});
   const browser=await chromium.launch({executablePath:CHROME,args:['--no-sandbox']});
   const until=async(check,what)=>{for(let i=0;i<200;i++){if(await check())return;await new Promise(r=>setTimeout(r,25));}assert.fail('timed out waiting for '+what);};
   try{
@@ -212,7 +211,7 @@ test('Extension takeover: a popup opened by one chat\'s group tab stays with tha
 test('Extension takeover: unsigned Chrome profiles attach by stable identity and never guess between profiles',{skip:!available&&'no chromium on this host',timeout:120000},async()=>{
   const {YExtensionBrowser}=await import('../engine/src/browser-engine.mjs');
   const {chromium}=await import('playwright');
-  const engine=new YExtensionBrowser({stateDir:tmp(),port:await freePort()});
+  const engine=new YExtensionBrowser({stateDir:tmp(),port:0});
   const a=await chromium.launch({executablePath:CHROME,args:['--no-sandbox']}),b=await chromium.launch({executablePath:CHROME,args:['--no-sandbox']});
   try{
     await engine.ensureRelay();const {token}=await engine.relay.pairing();

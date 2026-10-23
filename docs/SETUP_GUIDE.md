@@ -1,100 +1,84 @@
-# RC3 installation / RC3 逐字段安装
+# Windows setup guide
 
-This is the candidate's guide, not evidence that a new user or ChatGPT has passed acceptance. Interface wording can change. Official sources and observation limits are listed below.
+[中文安装说明](SETUP_GUIDE.zh-CN.md) · [Release notes](RELEASE_1.0.0.md) · [Upgrade guide](UPGRADE_USER_GUIDE.md)
 
-## 1. Local setup / 本机设置
+The application is English-only. The next action stays at the bottom of the native window; optional settings expand when needed.
 
-The wizard, Settings and status interface are English-only. There is no language switch. Pick an application directory and a separate working folder. Authorize local access before continuing. Auto-start and safe cleanup default to On and can be disabled. This follows the owner's updated UI requirement; the separate Chinese documentation remains available.
+## Before you start
 
-程序目录保存运行组件和按需 Settings；授权工作目录用于文件任务，不默认开放整个磁盘。不要把已有生产目录选作实验安装目录。
+Run **YGPTLocal-Setup-1.0.0-win-x64.exe** for your first installation, or **YGPTLocal-Update-1.0.0-win-x64.exe** to update in place. Compare the download's SHA-256 with `SHA256SUMS.txt` from the same release. Installers are unsigned.
 
-Secure Tunnel is recommended and selected by default. **Advanced connection methods** contains Cloudflare and local-only modes. A loopback-only installation cannot be reached by remote ChatGPT.
+## 1. Choose folders
 
-## 2. OpenAI Create tunnel
+Choose an empty **Application folder**, such as `D:\YGPTLocal`. Product data, caches, snapshots and update files stay inside it. **Working folder** is where initial file tasks run; use a Projects or test folder rather than a whole drive. Review the local-access consent before continuing.
 
-Open [Platform Tunnels](https://platform.openai.com/settings/organization/tunnels) using the organization that will own the runtime credential. Click **Create tunnel**.
+**Appearance and approval preview** and **Installation cleanup** are optional. Safe cleanup keeps private data and unknown files. Deleting the exact downloaded Setup requires its own checkbox; Downloads is never swept.
 
-| Current field / 字段 | What to enter / 填写内容 |
+## 2. Check this PC
+
+Review Windows x64, drive space and Windows-user encryption. Node, Python and the official Tunnel Client are included. **Connect automatically when I sign in** starts one quiet connection at Windows sign-in. Advanced port and proxy fields are optional.
+
+## 3. Choose a connection
+
+**Secure MCP Tunnel** is the default for an eligible OpenAI organization and associated ChatGPT workspace. Open the official Tunnels page from the guide, create a dedicated tunnel and paste the complete `tunnel_…` ID. Copy buttons provide its suggested name and description. The expandable guide explains organization and workspace fields.
+
+A Tunnel ID is not an API key. Use the organization that owns the runtime credential and the workspace where you will install the plugin. Do not reuse another installation's active tunnel.
+
+Cloudflare and local-only routes remain under **Advanced connection methods**. Public HTTPS uses OAuth; local-only mode cannot be reached directly by remote ChatGPT.
+
+## 4. Add the runtime key
+
+Choose **Open official API Keys** and create a dedicated key in the intended organization. Follow its permission and expiry policy. Paste the secret only into the masked **OpenAI Tunnel runtime key** field. DPAPI encrypts it for your Windows user. It runs the Tunnel Client; setup does not invoke generation models.
+
+A saved key is kept unless you expand **Replace the saved credential**. A saved label establishes that encrypted data exists; connection checks establish whether the connection works.
+
+## 5. Review and install
+
+Check the application folder, internal data path, working folder, connection method and preferences. Choose **Install YGPT Local**. Setup verifies the payload, protects configuration and starts this installation's connection. Repair waits for owned work and preserves connection identity.
+
+## 6. Check connection
+
+| Row | Meaning |
 | --- | --- |
-| Name | `YGPT Local` — use **Copy suggested Tunnel name** in the installer instead of typing |
-| Description | `Private MCP connection for my Windows PC` — use **Copy suggested Tunnel description** |
-| Organizations | The intended Platform organization; not merely a ChatGPT subscription name / 运行 Key 所属 Platform 组织 |
-| ChatGPT workspaces | The workspace in which the personal plugin will be installed / 实际安装个人插件的 ChatGPT 工作区 |
+| Local tools | Whether the local tool engine has responded |
+| Private tunnel | Whether the Tunnel Client reports a current connection |
+| First ChatGPT task | Whether the verification file was read over the authenticated connection |
 
-These four fields were inspected in the real official form on 2026-10-21. The capture uses example text and empty organization/workspace selections, contains no real Tunnel ID and does not record a creation. Click the image to enlarge it; the same capture is embedded in the Windows guide.
+A connected tunnel may wait for ChatGPT's first request before starting the engine; continue to the next step in that case. Expand **Connection details** for diagnostics and use **Run connection checks** to refresh. Local status does not prove a real ChatGPT answer or human approval.
 
-[![Actual official form with example values, not a created Tunnel](images/official-create-tunnel.png)](images/official-create-tunnel.png)
+## 7. Add to ChatGPT
 
-Create the resource in your own account, then copy the **complete** `tunnel_…` ID into **Dedicated Secure MCP Tunnel ID**. An ID is not an API key. Use a dedicated acceptance Tunnel while another production connection remains active.
+Open **ChatGPT Plugins → Add → Add custom MCP server**.
 
-Creation/editing requires organization-level **Tunnels Read + Manage**; running/selecting requires **Read + Use**, plus the appropriate associated ChatGPT workspace. Missing organization privileges are not fixed by changing a project API key to All. See [official Tunnel documentation](https://developers.openai.com/api/docs/guides/secure-mcp-tunnels).
-
-## 3. Runtime API key / 运行 Key
-
-Open the official [API Keys](https://platform.openai.com/api-keys) entry. If the navigation or labels differ, use the current Platform API Keys menu; do not enter credentials into third-party copies of the page.
-
-| Field / 字段 | Guidance / 指导 |
+| Field | Dedicated private tunnel |
 | --- | --- |
-| Owned by | **You** for personal use; Service account only when the organization intends that ownership / 个人通常选 You |
-| Name | `YGPT Local Tunnel Runtime` — use **Copy suggested API key name** |
-| Project | A project in the organization with the required Tunnel privileges / 对应组织内有权使用的项目 |
-| Expiration | **Never expire only if offered and permitted by organization policy**; otherwise choose a permitted expiry and plan rotation / 不放宽组织策略 |
-| Permissions | A dedicated minimum-scope credential with actual organization **Tunnels Read + Use**; do not assume project All grants missing organization RBAC |
+| Icon | `assets/brand/plugin-icon-256.png`, under 10 KB |
+| Name | **Copy name** |
+| Description | **Copy description** |
+| Connection | **Tunnel** |
+| Tunnel ID | **Copy Tunnel ID** |
+| Authentication | **No authentication**, for this dedicated private tunnel only |
 
-The live API-key form was not successfully rendered in this development session. This table is conditional guidance; its current field variants and expiry choices remain a live-UI acceptance item. No API-key-form mock is presented as an official screenshot.
+Keep the runtime key in YGPT; do not paste it into the plugin form or chat. No authentication omits extra application OAuth for this private tunnel. Runtime credentials, organization/workspace restrictions and local protections still apply. Public HTTPS uses **OAuth**.
 
-Copy the one-time secret into the Windows **masked runtime key field**, never into a chat, issue, screenshot or plugin description. The application saves it with current-user DPAPI. It does not submit model-generation requests or create API keys. A long-lived key remains usable after a leak until revoked: keep revocation and rotation available.
+Read the official risk warning yourself, then create and install the personal plugin. YGPT does not accept those human confirmations for you. Platform labels and account availability may vary.
 
-Saved users see **Saved credential detected** and keep it by default. Expand **Replace** only for a new value; **Test** reports actual service state. Existing ciphertext does not prove that the key is valid online.
+## 8. Try your first task
 
-| Result / 状态 | Next step / 下一步 |
-| --- | --- |
-| `RUNTIME_KEY_INVALID_OR_EXPIRED` | Inspect expiry/revocation and replace the local saved key / 核对到期或吊销，替换本机 Key |
-| `TUNNEL_PERMISSION_OR_WORKSPACE_DENIED` | Check organization Read + Use, the selected Tunnel and workspace association; the status alone cannot distinguish every denial reason |
-| Local ready, Tunnel not verified | Inspect outbound HTTPS/proxy and official account eligibility; do not recreate resources blindly |
-| No local Broker before first handshake | The official private Tunnel may still be waiting for the host; this alone is not a restart trigger |
+Select `@YGPT Local` in a new conversation. Choose **Copy first-task prompt**, paste it into the chat and confirm the exact random marker returned. Choose **Check first real tool result** to refresh the local status.
 
-No system proxy/firewall changes are made. Advanced proxy input accepts HTTP(S) without embedded credentials.
+You may close setup after copying the prompt; the connection stays active. Eligible cleanup waits for verified first use and setup exit. Settings contains receipts and maintenance actions.
 
-## 4. Install and verify / 安装和验证
+## Completion and uninstall feedback
 
-The installer validates each payload file's SHA-256, saves private configuration, registers its own current-user logon task and starts the standalone Watchdog. The dashboard distinguishes engine, Tunnel, startup configuration and actual first read. An early catalog count is not accepted as a full ready catalog.
+Installation and authenticated file-read verification have separate completion banners. Connection checks may report **Connection checks complete** while the first ChatGPT task is still pending. An installed update whose connection is starting is shown separately from **Update complete**; failures offer **Try update again**. The window prevents closing during file replacement.
 
-Local-only tests never mark a remote first-use proof. Repair/upgrade blocks new calls and refuses unsafe maintenance while owned work or approvals are active. The original production Tunnel is not stopped to start a candidate.
+Uninstall stops this installation and removes unchanged application files. Its result window lists deleted, already absent, changed and blocked files separately. Private settings, encrypted credentials, snapshots, recovery records and unregistered user files remain intentionally. **Open retained folder** and **Copy details** help review them. The private receipt is `data/uninstall-report.json`. The contained `.updates` folder retains recovery records and the uninstall helper; no helper process remains after closing the result window. Changed or locked files are reported instead of being silently forced away.
 
-## 5. ChatGPT personal plugin / 个人插件
+## Optional: your daily browser
 
-In [ChatGPT Plugins](https://chatgpt.com/plugins), choose **Add → Add custom MCP server**. The live form was inspected on 2026-10-21. No risk checkbox was accepted and no new plugin was created by the agent.
+Expand **Use your daily Chrome or Edge** on the last page. In the intended profile, enable Developer mode, load the installed `extension` folder, open the pairing page and copy its token into the extension. Each profile pairs separately. Tasks choose the intended profile if several are connected. YGPT works in its own tab group and preserves personal tabs.
 
-| Field / 字段 | Private Secure Tunnel / 私人 Tunnel |
-| --- | --- |
-| Icon | Installed `assets/brand/ygpt-local-256.png`: 256×256, 4,530 bytes in this candidate; the icon-folder button opens it locally |
-| Name | `YGPT Local` |
-| Description (optional) | Use **Copy plugin description** for the more specific text: `YGPT Local connects ChatGPT to your authorized Windows PC. When you ask to find, inspect, search, read, create or edit local files, review code and projects, run builds or tests, or verify changes, use YGPT Local tools directly instead of asking you to copy and run commands. It also supports approved terminal tasks, browser and desktop automation, system diagnostics, and protected file snapshots with rollback. Actions are limited by local permissions; high-risk operations require your approval.` |
-| Connection | **Tunnel**, not Server URL |
-| Tunnel ID | The same full ID saved by this installation; the runtime key is not repeated here |
-| Authentication | **No authentication** only for this dedicated private Tunnel |
+The isolated browser works without this extension. A default isolated read closes the browser and deletes its temporary profile before returning. Multi-step work explicitly uses `keepAlive=true`, keeps its context token and closes its tabs when done; a 30-second idle lease cleans up abandoned work.
 
-No authentication means no additional application OAuth layer in ChatGPT. It does **not** remove the official runtime key, Tunnel identity, account/workspace restrictions or local tool protections. Public HTTPS/Cloudflare uses the implemented owner-bound **OAuth** route, not anonymous access. See [official custom MCP guidance](https://developers.openai.com/api/docs/guides/custom-mcp-server).
-
-Read **Custom MCP servers introduce risk**, personally check **I understand and want to continue**, click **Create as a plugin**, and install for your personal account. The application cannot complete those official human confirmations for you. Do not select another product's existing Tunnel to avoid creating a new one.
-
-## 6. First read, GUI exit and cleanup / 首次读取、退出和清理
-
-Open a new chat, select `@YGPT Local`, and paste **Copy first-task prompt** from the wizard. It lists only the dedicated verification folder and reads its harmless random marker; no command or write is requested. Check the exact returned marker.
-
-The protected callback binds the generation, marker hash and actual successful result to an authenticated transport. Client metadata alone does not attest physical human identity. Therefore a real ChatGPT answer must be checked independently; local scripted tests are labelled as fixtures.
-
-Once verified, close Setup. Its Watchdog continues. The cleaner waits for the setup PID/birth to end and a live connection, then checks the exact signed file list. A user-downloaded Setup is retained unless separately selected in the cleanup plan. It never sweeps the download directory.
-
-Receipts show Complete / Partially skipped, categories, counts and bytes. Settings → Advanced maintenance can review the receipt or retry eligible leftovers. Unknown, changed, open, linked, shared, referenced and foreign files stay. Keys, databases, approvals, snapshots and maintenance/update/uninstall remain available. Uninstall is a separate action and disconnects the service.
-
-After cleanup, use a **new ChatGPT chat** for `y_ping` and the same read-only marker test. Until both real calls have been checked, end-to-end cleanup acceptance is **Not verified**.
-
-## 7. Startup and recovery / 自启和恢复
-
-At the current Windows user's next sign-in, one task starts `YGPTWatchdog.exe` silently with its own data directory. Secure Tunnel uses stdio; advanced HTTPS/local modes need a gateway. Settings is dormant, not a resident GUI.
-
-An owned process exit causes bounded exponential backoff (maximum 120 seconds); the official client handles network reconnects. Credential rejection leaves a clear attention state and does not request new resources. Unknown tool outcomes require querying their existing status, never replay.
-
-Current tests verify the task action and duplicate launch on this Windows host. They do not replace a real logout/login or network-disconnection test. No current production logout, restart or network disruption is authorized by the test runner.
+Background references: [Secure MCP Tunnels](https://developers.openai.com/api/docs/guides/secure-mcp-tunnels), [custom MCP servers](https://developers.openai.com/api/docs/guides/custom-mcp-server). Local fixtures do not replace real account acceptance.

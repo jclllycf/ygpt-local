@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.0.0 — stable release, clean light blue
+
+- Lighten the sprout mark's lower stem and blue arms while preserving its shape and golden sun. Regenerate full-color application PNGs, seven Windows ICO frames, the extension icon and the dedicated plugin upload icon (under 10 KB).
+- Use a pale sky-blue approval button with dark, readable text. Refresh CSP hashes, themed previews and the resource URI; previous resource addresses still serve the current strip.
+- Simplify the English Windows guide with clearer steps and actions, inline folder browsers, grouped copy controls, copy confirmations, separate connection states, optional sections and consistent Segoe UI Variable typography. Keep the updater action outside scrolling options. Provide English GitHub documentation with separate Chinese guides.
+- Add prominent completion and recovery states for installation, verification and updates. Report uninstall deletions, changed/locked remnants and intentionally retained private data, with a saved receipt, copy/details actions and a contained uninstall helper.
+- Carry forward rc.18's contained install/data/update layout, isolated-browser cleanup and per-profile daily-browser relay. Extension version 1.0.19 preserves monotonic browser-extension updates.
+- Publish Setup, Update and Portable artifacts with SHA-256 sums as a stable GitHub Release. See the release handoff for measured results and remaining owner acceptance.
+
 ## 1.0.0-rc.18 — contained data, browser lifetime and crisp icons
 
 - Keep all application-owned data in the chosen installation's `data` folder. Stage updates and retain rollback members in `.updates`; preserve unknown user files and nested private data during payload replacement. Relocate legacy data and internal cache junctions, preserve encrypted credentials and connection identity, refresh the bundled UIA fixture hash, and replace this installation's startup registration.

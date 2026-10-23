@@ -1,4 +1,8 @@
-# RC3 validation and owner handoff
+# Current validation: 1.0.0
+
+The current stable release is 1.0.0. See the [release handoff](RELEASE_1.0.0.md) and [machine-readable verification](../evidence/stable-1.0.0-verification.json). The rc.18 field repair provides the preceding host evidence; the records below describe RC3 only and are retained as history. Stable release status does not claim real ChatGPT human-click, clean-Windows or Windows sign-in acceptance.
+
+## Historical RC3 validation and owner handoff
 
 The owner requested English-only UI, then asked to perform the remaining tests personally. Automated behavioral testing was stopped. The final RC3 package is compiled and supplied for owner acceptance; no final package, official Secure Tunnel, or ChatGPT acceptance is claimed. The existing RC2 production connection was preserved.
 

@@ -31,17 +31,18 @@ public class UpdateWindow:Window{
  string install="",data="",brandIcon="plugin-icon-256.png",approvalStyle="current";
  readonly List<Border> iconTiles=new List<Border>();
  Border previewHost;
- bool busy=false,idleWait=false,closed=false;
+ bool busy=false,idleWait=false,closed=false,completed=false;readonly Border outcome=new Border();readonly TextBlock outcomeTitle=new TextBlock(),outcomeDetail=new TextBlock();readonly ProgressBar operationProgress=new ProgressBar();
  static SolidColorBrush B(string s){return (SolidColorBrush)new BrushConverter().ConvertFromString(s);}
  public UpdateWindow():this(DiscoverInstalls()){}
  internal UpdateWindow(List<string[]> availableInstalls){
   installs=availableInstalls;
-  Title="YGPT Local — Update";Width=760;Height=760;MinWidth=680;MinHeight=620;WindowStartupLocation=WindowStartupLocation.CenterScreen;FontFamily=new FontFamily("Segoe UI");FontSize=14;Background=B(Cream);Foreground=B(Ink);
+  Title="YGPT Local — Update";Width=760;Height=760;MinWidth=680;MinHeight=620;WindowStartupLocation=WindowStartupLocation.CenterScreen;FontFamily=new FontFamily("Segoe UI Variable Text, Segoe UI");FontSize=15;TextOptions.SetTextFormattingMode(this,TextFormattingMode.Display);UseLayoutRounding=true;Background=B(Cream);Foreground=B(Ink);
   var root=new DockPanel{Margin=new Thickness(28,22,28,22)};Content=root;
-  var head=new StackPanel{Orientation=Orientation.Horizontal,Margin=new Thickness(0,0,0,14)};DockPanel.SetDock(head,Dock.Top);root.Children.Add(head);
+  var head=new DockPanel{Margin=new Thickness(0,0,0,20),LastChildFill=true};DockPanel.SetDock(head,Dock.Top);root.Children.Add(head);
   BitmapSource brand=null;using(var stream=Assembly.GetExecutingAssembly().GetManifestResourceStream("YGPT.Brand")){if(stream!=null){var b=new BitmapImage();b.BeginInit();b.CacheOption=BitmapCacheOption.OnLoad;b.StreamSource=stream;b.EndInit();brand=b;}}
   if(brand!=null)head.Children.Add(new Image{Source=brand,Width=44,Height=44,Margin=new Thickness(0,0,14,0)});
-  var titles=new StackPanel();titles.Children.Add(new TextBlock{Text="Update YGPT Local",FontSize=22,FontWeight=FontWeights.SemiBold});titles.Children.Add(new TextBlock{Text="In place. Nothing is uninstalled, and your ChatGPT plugin stays connected.",FontSize=13,Foreground=B(Muted)});head.Children.Add(titles);
+  var titles=new StackPanel();titles.Children.Add(new TextBlock{Text="Update YGPT Local",FontSize=26,FontWeight=FontWeights.SemiBold});titles.Children.Add(new TextBlock{Text="Keep your files, settings and ChatGPT connection.",TextWrapping=TextWrapping.Wrap,FontSize=14,Foreground=B(Muted)});head.Children.Add(titles);
+  var outcomeBody=new StackPanel();outcomeTitle.FontSize=20;outcomeTitle.FontWeight=FontWeights.SemiBold;outcomeDetail.FontSize=14;outcomeDetail.TextWrapping=TextWrapping.Wrap;outcomeDetail.Margin=new Thickness(0,6,0,0);outcomeBody.Children.Add(outcomeTitle);outcomeBody.Children.Add(outcomeDetail);operationProgress.Height=4;operationProgress.Margin=new Thickness(0,12,0,0);outcomeBody.Children.Add(operationProgress);outcome.Child=outcomeBody;outcome.Padding=new Thickness(18);outcome.CornerRadius=new CornerRadius(10);outcome.Margin=new Thickness(0,0,0,16);outcome.Visibility=Visibility.Collapsed;AutomationProperties.SetAutomationId(outcome,"update-outcome");AutomationProperties.SetLiveSetting(outcomeTitle,AutomationLiveSetting.Assertive);DockPanel.SetDock(outcome,Dock.Top);root.Children.Add(outcome);
   var scroll=new ScrollViewer{Content=body,VerticalScrollBarVisibility=ScrollBarVisibility.Auto};root.Children.Add(scroll);
   if(installs.Count==0){
    Text("No existing YGPT Local installation was found on this PC.",14,true);
@@ -52,9 +53,10 @@ public class UpdateWindow:Window{
   body.Children.Add(summary);body.Children.Add(pickerHost);
   SelectInstall(0);
   Closing+=(s,e)=>{if(busy&&!idleWait){e.Cancel=true;Log("Please wait for the update to finish before closing this window.");}};Closed+=(s,e)=>closed=true;
-  updateButton.Click+=async(s,e)=>await RunUpdate();
+  updateButton.Click+=async(s,e)=>{if(completed){Close();return;}await RunUpdate();};
   AutomationProperties.SetAutomationId(updateButton,"update-now");
-  body.Children.Add(updateButton);body.Children.Add(log);
+  updateButton.Background=B("#C5E9FC");updateButton.Foreground=B("#164765");updateButton.BorderBrush=B("#9ED3F0");updateButton.Padding=new Thickness(20,10,20,10);updateButton.FontSize=15;updateButton.FontWeight=FontWeights.SemiBold;updateButton.Template=(ControlTemplate)System.Windows.Markup.XamlReader.Parse("<ControlTemplate xmlns='http://schemas.microsoft.com/winfx/2006/xaml/presentation' TargetType='Button'><Border x:Name='surface' xmlns:x='http://schemas.microsoft.com/winfx/2006/xaml' Background='{TemplateBinding Background}' BorderBrush='{TemplateBinding BorderBrush}' BorderThickness='{TemplateBinding BorderThickness}' CornerRadius='8' Padding='{TemplateBinding Padding}'><ContentPresenter HorizontalAlignment='Center' VerticalAlignment='Center'/></Border><ControlTemplate.Triggers><Trigger Property='IsMouseOver' Value='True'><Setter TargetName='surface' Property='Opacity' Value='.88'/></Trigger><Trigger Property='IsKeyboardFocused' Value='True'><Setter TargetName='surface' Property='BorderBrush' Value='#0369A1'/><Setter TargetName='surface' Property='BorderThickness' Value='2'/></Trigger><Trigger Property='IsPressed' Value='True'><Setter TargetName='surface' Property='Opacity' Value='.72'/></Trigger><Trigger Property='IsEnabled' Value='False'><Setter TargetName='surface' Property='Opacity' Value='.45'/></Trigger></ControlTemplate.Triggers></ControlTemplate>");
+  var detailsScroll=new ScrollViewer{Content=log,MaxHeight=140,VerticalScrollBarVisibility=ScrollBarVisibility.Auto};DockPanel.SetDock(detailsScroll,Dock.Bottom);root.Children.Insert(1,detailsScroll);DockPanel.SetDock(updateButton,Dock.Bottom);root.Children.Insert(2,updateButton);
  }
  void Text(string s,double size=14,bool bold=false,string color=null){body.Children.Add(new TextBlock{Text=s,FontSize=size,FontWeight=bold?FontWeights.SemiBold:FontWeights.Normal,Foreground=B(color??Ink),TextWrapping=TextWrapping.Wrap,Margin=new Thickness(0,0,0,10)});}
  void PickerText(Panel p,string s,double size,bool bold,string color){p.Children.Add(new TextBlock{Text=s,FontSize=size,FontWeight=bold?FontWeights.SemiBold:FontWeights.Normal,Foreground=B(color),TextWrapping=TextWrapping.Wrap,Margin=new Thickness(0,0,0,8)});}
@@ -115,7 +117,7 @@ public class UpdateWindow:Window{
   summary.Children.Add(new TextBlock{Text="Installed: "+installs[index][2]+"   →   This update: "+HostCore.Version,FontSize=14,FontWeight=FontWeights.SemiBold,TextWrapping=TextWrapping.Wrap,Margin=new Thickness(0,0,0,4)});
   summary.Children.Add(new TextBlock{Text=install,FontSize=12,Foreground=B(Muted),TextWrapping=TextWrapping.Wrap,Margin=new Thickness(0,0,0,4)});
   summary.Children.Add(new TextBlock{Text="Kept as-is: settings, encrypted keys, connection identity, snapshots and your ChatGPT plugin.",FontSize=13,Foreground=B(Muted),TextWrapping=TextWrapping.Wrap,Margin=new Thickness(0,0,0,12)});
-  pickerHost.Children.Clear();BuildPicker(pickerHost);
+  pickerHost.Children.Clear();var appearance=new StackPanel{Margin=new Thickness(0,12,0,0)};BuildPicker(appearance);pickerHost.Children.Add(new Expander{Header="Appearance and approval preview (optional)",Content=appearance,Margin=new Thickness(0,8,0,16)});
  }
  BitmapSource BrandBitmap(int i){
   string file=Path.Combine(install,"assets","brand",BrandIconFiles[i].Replace("-256.png","-512.png"));if(File.Exists(file)){try{using(var stream=File.OpenRead(file)){var b=new BitmapImage();b.BeginInit();b.CacheOption=BitmapCacheOption.OnLoad;b.StreamSource=stream;b.EndInit();b.Freeze();return b;}}catch{}}
@@ -140,6 +142,7 @@ public class UpdateWindow:Window{
   BitmapSource shot=null;using(var stream=Assembly.GetExecutingAssembly().GetManifestResourceStream(resource)){if(stream!=null){var b=new BitmapImage();b.BeginInit();b.CacheOption=BitmapCacheOption.OnLoad;b.StreamSource=stream;b.EndInit();shot=b;}}
   previewHost.Child=shot!=null?new Image{Source=shot,Stretch=Stretch.Uniform}:(UIElement)new TextBlock{Text=approvalStyle=="legacy"?"Classic strip - the original design.":"New strip - follows the icon you pick.",Foreground=B(Muted)};
  }
+ void Feedback(string title,string detail,string kind){outcomeTitle.Text=title;outcomeDetail.Text=detail;outcome.Background=B(kind=="success"?"#EAF7EF":kind=="error"?"#FFF1F2":kind=="warning"?"#FFF6E5":"#E7F4FC");outcomeTitle.Foreground=B(kind=="success"?"#14532D":kind=="error"?"#9F1239":kind=="warning"?"#854D0E":"#164765");outcomeDetail.Foreground=B(Ink);outcome.Visibility=Visibility.Visible;operationProgress.IsIndeterminate=busy;operationProgress.Visibility=busy?Visibility.Visible:Visibility.Collapsed;}
  void Log(string line){log.Text=log.Text.Length==0?line:log.Text+"\n"+line;}
  // Post-update housekeeping (owner request): retained program copies used
  // to pile up next to the application folder as <install>.previous-<ticks>
@@ -173,7 +176,7 @@ public class UpdateWindow:Window{
   return false;
  }
  async Task RunUpdate(){
-  if(busy)return;busy=true;updateButton.IsEnabled=false;installChoice.IsEnabled=false;pickerHost.IsEnabled=false;log.Text="";
+  if(busy||completed)return;busy=true;Feedback("Updating YGPT Local","Please keep this window open while files are replaced. Your private data and connection identity are preserved.","info");updateButton.IsEnabled=false;installChoice.IsEnabled=false;pickerHost.IsEnabled=false;log.Text="";
   // Bind every asynchronous step to the installation selected at the click.
   string targetInstall=install,targetData=data,selectedIcon=brandIcon,selectedStyle=approvalStyle;
   bool wasPaused=File.Exists(Path.Combine(targetData,"paused")),restarted=false;
@@ -194,7 +197,7 @@ public class UpdateWindow:Window{
     idleWait=true;try{await Task.Delay(5000);}finally{idleWait=false;}
     if(closed)return;
    }
-   if(!pausedOk){Log("Stopped after waiting 10 minutes: the connection stayed busy, so nothing was changed. Finish the pending request in ChatGPT, then run the update again.");return;}
+   if(!pausedOk){Feedback("Update waiting for your task","Finish pending approvals or running tasks in ChatGPT, then try again. No program files were changed.","warning");Log("Stopped after waiting 10 minutes: the connection stayed busy, so nothing was changed. Finish the pending request in ChatGPT, then run the update again.");return;}
    Log("Replacing application files (your data folder is not touched)…");
    await Task.Run(()=>YGPTApp.InstallPayload(targetInstall));
    Log("Moving private data inside the application folder and refreshing the bundled UIA identity…");
@@ -211,6 +214,7 @@ public class UpdateWindow:Window{
     try{var h=HostCore.Read(Path.Combine(targetData,"watchdog-health.json"));live=HostCore.S(h,"ownerId")==HostCore.OwnerId(targetData)&&HostCore.S(h,"version")==HostCore.Version&&HostCore.B(h,"localReady")&&!HostCore.B(h,"stopped")&&(DateTime.UtcNow-DateTime.Parse(HostCore.S(h,"at")).ToUniversalTime()).TotalSeconds<25;}catch{}
    }
    Log(live?"Update complete — now running "+HostCore.Version+". Your ChatGPT plugin, settings and keys were kept; nothing to re-add.":"Update complete — now running "+HostCore.Version+". The connection is still starting; it reconnects automatically. Your plugin, settings and keys were kept.");
+   completed=true;updateButton.Content="Close updater";Feedback(live?"Update complete":"Update installed — connection starting",live?"YGPT Local "+HostCore.Version+" is running. Your settings, keys and ChatGPT plugin were kept.":"The application files are updated. The connection is still starting; open Settings to check its status.",live?"success":"warning");
    if(live){
     try{
      var removed=await Task.Run(()=>CleanupUpdateBackups(targetInstall));
@@ -221,6 +225,7 @@ public class UpdateWindow:Window{
   // C# 5 (the .NET Framework csc used by the Windows build) cannot await
   // inside a catch block, so recovery runs after it.
   if(failed!=null){
+   Feedback("Update could not finish",failed.Message+". Review the recovery details below, then try again.","error");updateButton.Content="Try update again";
    Log("Update stopped: "+failed.Message);
    if(!File.Exists(Path.Combine(targetData,"ygpt.config.json"))&&File.Exists(Path.Combine(targetInstall,"data","ygpt.config.json")))targetData=Path.Combine(targetInstall,"data");
    // Resume only a pause this run created (including a pause that timed out
@@ -231,6 +236,6 @@ public class UpdateWindow:Window{
    }
    Log("Nothing was uninstalled. Your previous version was left in place where possible; running the full Setup package as Repair also works.");
   }
-  }finally{busy=false;idleWait=false;updateButton.IsEnabled=true;installChoice.IsEnabled=true;pickerHost.IsEnabled=true;}
+  }finally{busy=false;idleWait=false;operationProgress.Visibility=Visibility.Collapsed;updateButton.IsEnabled=true;installChoice.IsEnabled=!completed;pickerHost.IsEnabled=!completed;}
  }
 }

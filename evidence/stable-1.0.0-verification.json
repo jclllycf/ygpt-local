@@ -1,0 +1,120 @@
+{
+  "version": "1.0.0",
+  "at": "2026-10-23T15:09:18.385Z",
+  "tests": {
+    "total": 119,
+    "passed": 114,
+    "failed": 0,
+    "skipped": 5,
+    "environment": "Windows, native UIA, Chrome-backed protocol fixtures, Edge and bundled Python"
+  },
+  "nativeWizard": {
+    "assembly": "compiled production WPF windows",
+    "capturedSteps": [
+      0,
+      2,
+      3,
+      5,
+      6,
+      7
+    ],
+    "compactSize": [
+      900,
+      680
+    ],
+    "updaterActionVisibleAtMinimumHeight": true,
+    "fixtureOnly": true,
+    "noInstallOrNetworkActionInvoked": true,
+    "completionStates": [
+      "installation complete",
+      "verification complete",
+      "update complete",
+      "connection starting",
+      "update failed",
+      "uninstall with retained files"
+    ]
+  },
+  "approval": {
+    "resource": "ui://ygpt/approval/strip-v5.html",
+    "checks": [
+      {
+        "mode": "light",
+        "style": {
+          "text": "rgb(22, 71, 101)",
+          "start": "#d5f0ff",
+          "end": "#b9e4fc"
+        },
+        "minimumTextContrast": 7.33,
+        "cspViolations": 0,
+        "iconDecoded": true,
+        "at320pxNoHorizontalOverflow": true
+      },
+      {
+        "mode": "dark",
+        "style": {
+          "text": "rgb(22, 71, 101)",
+          "start": "#d5f0ff",
+          "end": "#b9e4fc"
+        },
+        "minimumTextContrast": 7.33,
+        "cspViolations": 0,
+        "iconDecoded": true,
+        "at320pxNoHorizontalOverflow": true
+      }
+    ],
+    "pluginIconBytes": 4166
+  },
+  "publicationScan": {
+    "passed": true,
+    "sourceFiles": 256,
+    "dependencyPackages": 106,
+    "findings": [],
+    "scope": "Selected clean source tree only; binaries, third-party runtime inventories and publication history require separate checks.",
+    "at": "2026-10-23T15:16:46.358Z"
+  },
+  "limits": {
+    "realChatGPTHumanDecision": "not verified",
+    "allSignedInBrowserProfiles": "not verified",
+    "windowsSignInAndCleanWindows": "not verified",
+    "packageSigning": "unsigned"
+  },
+  "precedingFieldEvidence": "evidence/rc18-verification.json",
+  "uninstallFixture": {
+    "unchangedRemoved": true,
+    "changedPreserved": true,
+    "lockedReported": true,
+    "privateAndUnknownPreserved": true,
+    "retryRemovesUnlockedFile": true,
+    "unsafeManifestRefusedBeforeDeletion": true,
+    "realOwnerInstallationUninstalled": false
+  },
+  "releaseArtifacts": [
+    {
+      "file": "YGPTLocal-Setup-1.0.0-win-x64.exe",
+      "bytes": 93625856,
+      "sha256": "6d2b32c759a514009e48977c3ded69831d6ca87360c2cf8c633a6036f9746463"
+    },
+    {
+      "file": "YGPTLocal-Update-1.0.0-win-x64.exe",
+      "bytes": 93625856,
+      "sha256": "341c62ebe21af46a4dccd1a37e9c71f6c056d5bed8261bf1b581834ac56dd709"
+    },
+    {
+      "file": "ygpt-local-portable-1.0.0-win-x64.zip",
+      "bytes": 92700036,
+      "sha256": "40af8d4edf08e581943a213adb361deac8ddc63a757b4ca06b33a339546a1171"
+    }
+  ],
+  "package": {
+    "files": 5857,
+    "sourceAndBinaryMatch": true,
+    "privatePayloadFiles": 0
+  },
+  "localUpdate": {
+    "state": "waiting-for-existing-approvals",
+    "installedVersion": "1.0.0-rc.18",
+    "pendingUnexpiredApprovals": 5,
+    "connectionPreserved": true,
+    "privateIdentityFilesRecorded": 4
+  }
+}

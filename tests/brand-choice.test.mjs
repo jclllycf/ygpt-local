@@ -58,14 +58,14 @@ function assertCspMatchesServed(text){
 }
 test('green-family icon: the strip re-skins to fresh green and CSP still matches the served style',()=>{
   const text=serveRaw({brandIcon:'ygpt-local-green-y-256.png'});
-  assert.ok(text.includes('--act1:#16a34a'),'primary button follows the green family');
+  assert.ok(text.includes('--act1:#d5f5e0'),'primary button follows the green family');
   assert.ok(text.includes('--sky1:#4ade80'),'top edge follows the green family');
-  assert.ok(!text.includes('--act1:#0284c7'),'no sky primary remains');
+  assert.ok(!text.includes('--act1:#d5f0ff'),'no sky primary remains');
   assertCspMatchesServed(text);
 });
 test('sky-family icon: default Sky Air accents and CSP matches the served style',()=>{
   const text=serveRaw({brandIcon:'ygpt-local-sky-y-256.png'});
-  assert.ok(text.includes('--act1:#0284c7'));
+  assert.ok(text.includes('--act1:#d5f0ff'));
   assertCspMatchesServed(text);
 });
 

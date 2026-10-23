@@ -1,4 +1,4 @@
-name: Build Windows candidate
+name: Build Windows release
 on:
   push:
   pull_request:
@@ -25,6 +25,6 @@ jobs:
       - run: npm run package
       - uses: actions/upload-artifact@v4
         with:
-          name: ygpt-local-windows-candidate
+          name: ygpt-local-windows
           path: dist/*
           if-no-files-found: error
