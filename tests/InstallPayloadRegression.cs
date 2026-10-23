@@ -38,7 +38,7 @@ public static class InstallPayloadRegression {
   }
   using(var payload=Payload("valid"))YGPTApp.InstallPayload(install,payload);
   Check(File.ReadAllText(Path.Combine(install,"app.txt"))=="new application","New application missing");
-  var marker=HostCore.Read(Path.Combine(install,".ygpt-install.json"));Check(HostCore.S(marker,"version")==HostCore.Version&&HostCore.S(marker,"installRoot")==install,"New ownership missing or incorrect");
+  var marker=HostCore.Read(Path.Combine(install,".ygpt-install.json"));Check(HostCore.S(marker,"version")==HostCore.Version&&String.Equals(HostCore.S(marker,"installRoot"),HostCore.Full(install),StringComparison.OrdinalIgnoreCase),"New ownership missing or incorrect");
   var retained=Directory.GetDirectories(root,"application.previous-*");Check(retained.Length==0,"Rollback must never escape the installation root");
   var internalBackups=Directory.GetFiles(Path.Combine(install,".updates"),".ygpt-install.json",SearchOption.AllDirectories);Check(internalBackups.Length==1,"Rollback ownership not retained inside the installation");
   Check(File.ReadAllText(Path.Combine(install,"original.txt"))=="old application","Unknown user file was replaced");
