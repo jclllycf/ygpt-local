@@ -12,7 +12,7 @@ master; there are no loose multi-size PNG files anymore.
 Usage: python3 scripts/make-icons-from-original.py   (requires Pillow)
 Outputs: assets/brand/ygpt-local-256.png, ygpt-local-light-256.png,
 plugin-icon-256.png, ygpt-local.ico; assets/png/icon-256.png, assets/ygpt.ico;
-plugin/assets/logo.png. The .ico files are written by hand below so every
+plugin/assets/logo.png; extension/icons/ygpt-256.png. The .ico files are written by hand below so every
 size entry is explicit; the shipped ICO was verified entry by entry (7 PNG
 frames, the 256 frame pixel-identical to the HD render). The setup also
 nudges the Windows icon cache after install, which otherwise keeps serving
@@ -88,6 +88,8 @@ def main():
         f.write(data)
     for path in (os.path.join(brand, 'ygpt-local.ico'), os.path.join(ROOT, 'assets', 'ygpt.ico')):
         write_ico(path)
+    with open(os.path.join(ROOT, 'extension', 'icons', 'ygpt-256.png'), 'wb') as f:
+        f.write(data)
     print('shipped icons: one canonical 256x256 PNG (%d bytes) + multi-size ICOs' % len(data))
 
 

@@ -59,7 +59,7 @@ public static class YGPTApp {
   for(int i=0;i<150;i++){bool stopped=false;try{var p=Path.Combine(data,"service-health.json");stopped=File.Exists(p)&&File.GetLastWriteTimeUtc(p)>=requested&&Read(p).ContainsKey("stopped")&&(bool)Read(p)["stopped"];}catch{}if(stopped||!connected){Thread.Sleep(1200);return;}Thread.Sleep(200);}throw new Exception("The existing service has not stopped safely. No application files were replaced.");}
  public static void Background(string data){HostCore.Start(Base,data);}
  public static string ShortcutPath(string data){return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.StartMenu),"Programs","YGPT Local"+(String.Equals(Path.GetFullPath(data),Path.GetFullPath(DefaultData),StringComparison.OrdinalIgnoreCase)?"":" - "+HostCore.OwnerId(data).Substring(0,8))+".lnk");}
- public static void Shortcut(string install,string data){string p=ShortcutPath(data);object shell=Activator.CreateInstance(Type.GetTypeFromProgID("WScript.Shell"));object link=shell.GetType().InvokeMember("CreateShortcut",BindingFlags.InvokeMethod,null,shell,new object[]{p});var t=link.GetType();t.InvokeMember("TargetPath",BindingFlags.SetProperty,null,link,new object[]{Path.Combine(install,"YGPTLocal.exe")});t.InvokeMember("Arguments",BindingFlags.SetProperty,null,link,new object[]{"--data-dir "+Q(data)});t.InvokeMember("Save",BindingFlags.InvokeMethod,null,link,null);}
+ public static void Shortcut(string install,string data,string shortcutPath=null){string p=shortcutPath??ShortcutPath(data);object shell=Activator.CreateInstance(Type.GetTypeFromProgID("WScript.Shell"));object link=shell.GetType().InvokeMember("CreateShortcut",BindingFlags.InvokeMethod,null,shell,new object[]{p});var t=link.GetType();t.InvokeMember("TargetPath",BindingFlags.SetProperty,null,link,new object[]{Path.Combine(install,"YGPTLocal.exe")});t.InvokeMember("Arguments",BindingFlags.SetProperty,null,link,new object[]{"--data-dir "+Q(data)});t.InvokeMember("IconLocation",BindingFlags.SetProperty,null,link,new object[]{Path.Combine(install,"assets","ygpt.ico")+",0"});t.InvokeMember("Save",BindingFlags.InvokeMethod,null,link,null);}
  public static void Register(string install,string data,bool startup){string id=HostCore.OwnerId(data).Substring(0,12);using(var k=Registry.CurrentUser.CreateSubKey("Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\YGPTLocal-"+id)){k.SetValue("DisplayName","YGPT Local");k.SetValue("DisplayVersion",Version);k.SetValue("DisplayIcon",Path.Combine(install,"YGPTLocal.exe"));k.SetValue("InstallLocation",install);k.SetValue("UninstallString",Q(Path.Combine(install,"YGPTLocal.exe"))+" --uninstall --data-dir "+Q(data));}HostCore.RegisterTask(install,data,startup);Shortcut(install,data);RefreshIconCache();}
  public static void ValidateInstallTarget(string target){
   CheckPath(target);string marker=Path.Combine(target,".ygpt-install.json");
@@ -101,9 +101,9 @@ public static class YGPTApp {
    // Commit the ownership marker before moving the current installation. A
    // failed marker write must leave the existing application repairable.
    HostCore.Save(Path.Combine(stage,".ygpt-install.json"),new{product="YGPT Local",version=Version,installRoot=Path.GetFullPath(install)});
-   string previous=null;
+   string previous=null;long previousTicks=DateTime.UtcNow.Ticks;
    try{
-    if(Directory.Exists(install)){if(Directory.GetFileSystemEntries(install).Length>0){previous=install+".previous-"+DateTime.UtcNow.Ticks;MoveDirectoryWithRetry(install,previous);}else DeleteEmptyDirectoryWithRetry(install);}
+    if(Directory.Exists(install)){if(Directory.GetFileSystemEntries(install).Length>0){previous=install+".previous-"+previousTicks;MoveDirectoryWithRetry(install,previous);}else DeleteEmptyDirectoryWithRetry(install);}
     MoveDirectoryWithRetry(stage,install);
    }catch(Exception swapError){
     if(previous!=null&&Directory.Exists(previous)&&!Directory.Exists(install)){
@@ -112,6 +112,14 @@ public static class YGPTApp {
     }
     if(swapError is UnauthorizedAccessException||swapError is IOException)throw new IOException("The YGPT Local folder is still in use, so Setup could not replace it. The previous application was retained and your private data is unchanged. Close this installation's windows or restart the PC, then retry.",swapError);
     throw;
+   }
+   // The retained copy belongs INSIDE the application folder, not next to
+   // it: backup folders must not accumulate beside the install in the
+   // owner's drive root. This is a same-volume rename; if a lingering
+   // handle prevents it, the copy stays beside the install and the
+   // updater's post-update cleanup (or the next update) removes it.
+   if(previous!=null&&Directory.Exists(previous)&&Directory.Exists(install)){
+    try{MoveDirectoryWithRetry(previous,Path.Combine(install,".previous-"+previousTicks));}catch{}
    }
   }finally{
    // Corrupt archives and failed verification must not leak a payload-sized

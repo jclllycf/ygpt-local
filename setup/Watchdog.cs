@@ -23,7 +23,17 @@ public static class YGPTWatchdog {
  // transport stdio asks the broker to shut down normally, without replay.
  static void OwnChild(Process p){job=CreateJobObject(IntPtr.Zero,null);var v=new LIMIT();v.Basic.LimitFlags=0x3000;int size=Marshal.SizeOf(typeof(LIMIT));IntPtr mem=Marshal.AllocHGlobal(size);try{Marshal.StructureToPtr(v,mem,false);if(job==IntPtr.Zero||!SetInformationJobObject(job,9,mem,(uint)size)||!AssignProcessToJobObject(job,p.Handle)){if(!p.HasExited)p.Kill();throw new Exception("OWNED_JOB_UNAVAILABLE");}}finally{Marshal.FreeHGlobal(mem);}}
  static void StopChild(){if(job!=IntPtr.Zero){CloseHandle(job);job=IntPtr.Zero;}else if(child!=null&&!child.HasExited)child.Kill();if(child!=null){child.Dispose();child=null;}}
- static void Health(bool localReady,bool connected){HostCore.Save(Path.Combine(data,"watchdog-health.json"),new{product="YGPT Local",version=HostCore.Version,ownerId=HostCore.OwnerId(data),installRoot=install,pid=Process.GetCurrentProcess().Id,birth=Process.GetCurrentProcess().StartTime.ToUniversalTime().Ticks,childPid=child!=null&&!child.HasExited?(int?)child.Id:null,phase=phase,localReady=localReady,tunnelConnected=connected,restarts=restarts,lastError=lastError,lastExitCode=lastExitCode,retryInSeconds=retryInSeconds,stopped=phase=="stopped",guiRequired=false,at=DateTime.UtcNow.ToString("o")});}
+ // Bootstrap can fail before the owner-control pipe exists. Read its bounded,
+ // structured failure from the existing service-health file, never raw stderr.
+ // Reports predating this transport launch cannot describe the current attempt.
+ static Dictionary<string,object> StartupFailure(bool localReady){
+  if(localReady||authFailure||phase=="stopped")return null;
+  try{var h=HostCore.Read(Path.Combine(data,"service-health.json"));var failure=h.ContainsKey("startupFailure")?h["startupFailure"] as Dictionary<string,object>:null;
+   if(HostCore.S(h,"product")!="YGPT Local"||failure==null||HostCore.S(failure,"version")!=HostCore.Version||DateTime.Parse(HostCore.S(failure,"at")).ToUniversalTime()<started)return null;
+   return failure;
+  }catch{return null;}
+ }
+ static void Health(bool localReady,bool connected){var startupFailure=StartupFailure(localReady);if(startupFailure!=null)lastError=HostCore.S(startupFailure,"code","STARTUP_FAILED");HostCore.Save(Path.Combine(data,"watchdog-health.json"),new{product="YGPT Local",version=HostCore.Version,ownerId=HostCore.OwnerId(data),installRoot=install,pid=Process.GetCurrentProcess().Id,birth=Process.GetCurrentProcess().StartTime.ToUniversalTime().Ticks,childPid=child!=null&&!child.HasExited?(int?)child.Id:null,phase=startupFailure!=null?"engine-startup-failed":phase,localReady=localReady,tunnelConnected=connected,restarts=restarts,lastError=lastError,startupFailure=startupFailure,lastExitCode=lastExitCode,retryInSeconds=retryInSeconds,stopped=phase=="stopped",guiRequired=false,at=DateTime.UtcNow.ToString("o")});}
  static bool Connected(){try{string p=Path.Combine(data,"tunnel-health.url");HostCore.CheckPath(p);var u=new Uri(File.ReadAllText(p).Trim());if(u.Scheme!="http"||u.Host!="127.0.0.1"||u.IsDefaultPort||u.UserInfo!=""||u.Query!=""||u.Fragment!="")return false;var q=(HttpWebRequest)WebRequest.Create(u.GetLeftPart(UriPartial.Authority)+"/readyz");q.Proxy=null;q.Timeout=2000;using(var r=(HttpWebResponse)q.GetResponse())return r.StatusCode==HttpStatusCode.OK;}catch{return false;}}
  static string ClassifyClientError(string line){
   if(String.IsNullOrWhiteSpace(line))return "";
@@ -65,7 +75,7 @@ public static class YGPTWatchdog {
   }else si=new ProcessStartInfo(node,HostCore.Q(Path.Combine(install,"service","supervisor.mjs"))+" "+HostCore.Q(data));
   si.UseShellExecute=false;si.CreateNoWindow=true;si.WindowStyle=ProcessWindowStyle.Hidden;si.WorkingDirectory=install;si.RedirectStandardOutput=true;si.RedirectStandardError=true;
   si.EnvironmentVariables["YGPT_CONFIG"]=Path.Combine(data,"ygpt.config.json");si.EnvironmentVariables["YGPT_SETUP_DATA_DIR"]=data;si.EnvironmentVariables["YGPT_FIRST_USE_KEY"]=HostCore.S(secrets,"verificationKey");si.EnvironmentVariables["YGPT_LOCAL_CONTROL_KEY"]=HostCore.S(secrets,"localKey");si.EnvironmentVariables["YGPT_CONTROL_PIPE"]="\\\\.\\pipe\\"+HostCore.PipeName(data);si.EnvironmentVariables["PATH"]=Path.GetDirectoryName(node)+";"+si.EnvironmentVariables["PATH"];si.EnvironmentVariables["PYTHONDONTWRITEBYTECODE"]="1";ProxyEnvironment(si,connection);
-  authFailure=false;child=Process.Start(si);OwnChild(child);child.OutputDataReceived+=(s,e)=>ObserveClientLine(e.Data);child.ErrorDataReceived+=(s,e)=>ObserveClientLine(e.Data);child.BeginOutputReadLine();child.BeginErrorReadLine();started=DateTime.UtcNow;
+  authFailure=false;started=DateTime.UtcNow;child=Process.Start(si);OwnChild(child);child.OutputDataReceived+=(s,e)=>ObserveClientLine(e.Data);child.ErrorDataReceived+=(s,e)=>ObserveClientLine(e.Data);child.BeginOutputReadLine();child.BeginErrorReadLine();
  }
  public static int Main(string[] args){
   try{

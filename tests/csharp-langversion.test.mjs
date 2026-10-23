@@ -20,6 +20,7 @@ const names=['mscorlib','System','System.Core','System.Xml','System.Xaml','Syste
 const targets=[
   ['setup','winexe',null,['setup/HostCore.cs','setup/YGPTLocal.cs','setup/SetupWindow.cs','setup/UpdateWindow.cs']],
   ['watchdog','winexe','YGPTWatchdog',['setup/HostCore.cs','setup/Watchdog.cs']],
+  ['watchdog-startup-regression','exe','WatchdogStartupRegression',['setup/HostCore.cs','setup/Watchdog.cs','tests/WatchdogStartupRegression.cs']],
   ['ydesktop','exe',null,['engine/windows/YDesktop.cs']],
   ['native-windows','exe','NativeWindows',['setup/HostCore.cs','setup/NativeWindows.cs'],[automation]],
   ['update-window-regression','exe','UpdateWindowRegression',['setup/UpdateWindow.cs','tests/UpdateWindowRegression.cs']],

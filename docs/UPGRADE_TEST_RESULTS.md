@@ -17,7 +17,7 @@ Environment for everything below: Linux VM (Ubuntu 24.04), Node 24, Roslyn csc f
 | `node --check` on all runtime/service/engine/scripts `.mjs` | ✅ clean |
 | `node scripts/csp.mjs` | ✅ hashes match |
 | `node scripts/public-audit.mjs` | ✅ 204 source files, 0 findings |
-| Icon regeneration (`scripts/make-icons.mjs` twice, md5 compare) | ✅ deterministic (verified at the brand commits; icon inputs unchanged since) |
+| Historical SVG icon regeneration (superseded by `docs/BRAND_ASSETS.md`) | ✅ deterministic (verified at the brand commits; icon inputs unchanged since) |
 
 ## Taskbook §4 matrix — coverage map
 

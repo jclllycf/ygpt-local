@@ -42,6 +42,14 @@ public static class InstallPayloadRegression {
   var retained=Directory.GetDirectories(root,"application.previous-*");Check(retained.Length==1&&File.ReadAllText(Path.Combine(retained[0],"original.txt"))=="old application","Rollback application not retained");
   Check(Directory.GetDirectories(root,"application.staging-*").Length==0,"Successful update leaked staging");
   Check(File.ReadAllText(Path.Combine(data,"sentinel.txt"))=="private fixture data","Private data changed");
+  // A disposable shell shortcut: verify the actual .lnk icon property, never
+  // write to the owner's Start Menu or Desktop in a regression fixture.
+  string icon=Path.Combine(install,"assets","ygpt.ico"),shortcut=Path.Combine(root,"fixture.lnk");Directory.CreateDirectory(Path.GetDirectoryName(icon));
+  File.Copy(Path.Combine(Environment.CurrentDirectory,"assets","ygpt.ico"),icon);
+  YGPTApp.Shortcut(install,data,shortcut);
+  dynamic shell=Activator.CreateInstance(Type.GetTypeFromProgID("WScript.Shell"));dynamic link=shell.CreateShortcut(shortcut);
+  Check(String.Equals((string)link.TargetPath,Path.Combine(install,"YGPTLocal.exe"),StringComparison.OrdinalIgnoreCase),"Shortcut target changed");
+  Check(String.Equals((string)link.IconLocation,icon+",0",StringComparison.OrdinalIgnoreCase),"Shortcut must use the shipped multi-size HD icon, independently of the cached exe icon");
   Console.WriteLine("INSTALL_PAYLOAD_PASS");return 0;
  }
 }

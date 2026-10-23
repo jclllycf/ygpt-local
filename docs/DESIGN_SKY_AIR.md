@@ -1,5 +1,7 @@
 # Sky Air: YGPT Local design system
 
+> Historical design record. The current owner-board artwork, regeneration recipe and icon surfaces are documented in [BRAND_ASSETS.md](BRAND_ASSETS.md). Retired SVG sources mentioned below are no longer shipped.
+
 > **Superseded by [First Light](DESIGN_FIRST_LIGHT.md) (yuki-warm, 2026-10-22).** This page is kept as the record of the previous round. First Light keeps Sky Air's blue language, its contrast rules and its one-primary-per-view rule. It replaces the `y/_` glyph with the signature y. and its sun, and deepens the action gradient to `#0284C7 → #075985`. It also adds serif page titles, helper lines under every field, a readable Check step, and the sun as the single warm "you are here" accent. Where the two disagree, First Light wins.
 
 YGPT Local gives ChatGPT hands on your own PC. The interface should therefore feel like **open air and quiet trust**. It should be light, clear and unhurried, and it should be exact about what will happen. Sky Air is one blue colour language used on every surface: the setup wizard, the native approval popup, the in-chat approval card and the icon.

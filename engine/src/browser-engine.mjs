@@ -126,7 +126,7 @@ export class YExtensionBrowser {
   async attachBrowser({instance}={}){
     // The take-over connection is shared by every chat. A later attach adopts
     // group tabs no chat holds (left over, or released by a detach).
-    if(this.browser){this.holders.add(this.owner());const adopted=this.adoptUnowned(this.owner());return {...this.status(),adopted};}
+    if(this.browser&&!instance){this.holders.add(this.owner());const adopted=this.adoptUnowned(this.owner());return {...this.status(),adopted};}
     await this.ensureRelay();
     let candidates=this.relay.instancesList();
     const fresh=Date.now()-(this.relay.startedAt??0)<YExtensionBrowser.FRESH_RELAY_MS;
@@ -140,15 +140,19 @@ export class YExtensionBrowser {
     // attaching must never guess between accounts.
     if(candidates.length===1&&!instance){await new Promise(r=>setTimeout(r,700));candidates=this.relay.instancesList();}
     let chosen=null;
-    if(instance){const needle=String(instance).toLowerCase();const exact=candidates.find(c=>c.id===instance);const matches=exact?[exact]:candidates.filter(c=>(c.profileEmail??'').toLowerCase().includes(needle)||c.browser.toLowerCase()===needle);if(matches.length>1)return {needsChoice:true,note:'That account/browser matches several paired profiles. Choose an exact instance id.',candidates:matches.map(c=>({instance:c.id,browser:c.browser,profileEmail:c.profileEmail,tabs:c.totalTabs}))};chosen=matches[0]??null;if(!chosen)throw new EngineError('BROWSER_INSTANCE_UNKNOWN','No connected browser matches "'+instance+'". Connected: '+candidates.map(c=>c.browser+' ('+(c.profileEmail??'profile not signed in')+')').join('; '));}
-    else if(candidates.length>1)return {needsChoice:true,note:'Several browsers/profiles are paired. Ask the owner which account/browser to use, then attach again with its instance id or profile email — do not guess: accounts must not be mixed.',candidates:candidates.map(c=>({instance:c.id,browser:c.browser,profileEmail:c.profileEmail,tabs:c.totalTabs}))};
+    if(instance){const needle=String(instance).toLowerCase();const exact=candidates.find(c=>c.id===instance);const matches=exact?[exact]:candidates.filter(c=>(c.profileEmail??'').toLowerCase().includes(needle)||c.browser.toLowerCase()===needle);if(matches.length>1)return {needsChoice:true,note:'That account/browser matches several paired profiles. Choose an exact instance id.',candidates:matches.map(c=>({instance:c.id,browser:c.browser,profileEmail:c.profileEmail,profileLabel:c.profileLabel,tabs:c.totalTabs}))};chosen=matches[0]??null;if(!chosen)throw new EngineError('BROWSER_INSTANCE_UNKNOWN','No connected browser matches "'+instance+'". Connected: '+candidates.map(c=>c.profileLabel+' ['+c.id+']').join('; '));}
+    else if(candidates.length>1)return {needsChoice:true,note:'Several browsers/profiles are paired. Ask the owner which account/browser to use, then attach again with its instance id or profile email — do not guess: accounts must not be mixed.',candidates:candidates.map(c=>({instance:c.id,browser:c.browser,profileEmail:c.profileEmail,profileLabel:c.profileLabel,tabs:c.totalTabs}))};
     else chosen=candidates[0];
+    if(this.browser){
+      if(this.identity.instance!==chosen.id)throw new EngineError('BROWSER_ALREADY_ATTACHED','The daily browser is already attached to '+this.identity.instance+'. Detach before selecting '+chosen.id+'; the existing profile was left in place.');
+      this.holders.add(this.owner());const adopted=this.adoptUnowned(this.owner());return {...this.status(),adopted};
+    }
     this.relay.bind(chosen.id);
     let browser;
     try{browser=await chromium.connectOverCDP(this.relay.endpoint(),{timeout:10000,headers:this.relay.cdpHeaders()});}
     catch{this.relay.unbind();throw new EngineError('BROWSER_ATTACH_FAILED','The paired browser stopped answering before the connection completed. Nothing was changed.');}
     this.browser=browser;
-    this.identity={via:'YGPT browser extension',browser:chosen.browser,profileEmail:chosen.profileEmail,instance:chosen.id};
+    this.identity={via:'YGPT browser extension',browser:chosen.browser,profileEmail:chosen.profileEmail,profileLabel:chosen.profileLabel,instance:chosen.id};
     browser.on('disconnected',()=>{if(this.browser===browser){this.browser=null;this.tabs.clear();this.identity=null;this.holders.clear();}});
     let adopted=0;
     const owner=this.owner();this.holders=new Set([owner]);
@@ -199,7 +203,7 @@ export class YExtensionBrowser {
   }
   async open(url){
     this.validateUrl(url);
-    if(!this.browser){const r=await this.attach({});if(r?.needsChoice)throw new EngineError('BROWSER_CHOICE_REQUIRED','Several browsers/profiles are paired ('+r.candidates.map(c=>c.browser+' — '+(c.profileEmail??'profile not signed in')).join('; ')+'). Ask the owner which account/browser to use, then y_browser_attach with that instance.');}
+    if(!this.browser){const r=await this.attach({});if(r?.needsChoice)throw new EngineError('BROWSER_CHOICE_REQUIRED','Several browsers/profiles are paired ('+r.candidates.map(c=>c.profileLabel+' ['+c.instance+']').join('; ')+'). Ask the owner which account/browser to use, then y_browser_attach with that instance.');}
     const page=await this.createGroupTab(url);
     this.track(page);
     try{await page.waitForLoadState('domcontentloaded',{timeout:15000});}catch{}

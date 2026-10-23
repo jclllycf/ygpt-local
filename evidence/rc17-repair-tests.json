@@ -1,0 +1,100 @@
+{
+  "at": "2026-10-23T08:53:30.892Z",
+  "sourceCommit": "df5a4b91cae96c0d05b2db996b56d6a2a6fd882b",
+  "baselineCommit": "e8c46ad",
+  "version": "1.0.0-rc.16",
+  "fullCommand": "npm test",
+  "baseline": {
+    "tests": 93,
+    "pass": 77,
+    "fail": 11,
+    "skip": 5,
+    "failures": [
+      "Actual broker preserves pending approvals during drain and records marker result; controlled transport fixture is NOT ChatGPT",
+      "Actual isolated Edge, native UIA fixture and durable job output",
+      "Branded approval bundle executes with its real browser CSP; not a ChatGPT host test",
+      "Browser fixtures handle current metadata with the matching App tool names; not host attestation",
+      "DPAPI OAuth state survives restart; refresh rotates and replay revokes its family",
+      "Fixture decisions: Deny, bounded chat grant, context revocation; not human-host attestation",
+      "Native Windows checks preserve read-only AST boundaries without executing submitted text",
+      "Native state ACL audit rejects a linked descendant and a drive root; never weakens private state",
+      "Real authenticated HTTP: OAuth PKCE, consent, catalog, tool call and revocation",
+      "Renamed catalog, snapshots, conflict safety, approvals and continuation",
+      "Twelve concurrent real MCP HTTP handshakes share one ready broker"
+    ]
+  },
+  "full": {
+    "tests": 112,
+    "pass": 93,
+    "fail": 11,
+    "skip": 8,
+    "failures": [
+      "Actual broker preserves pending approvals during drain and records marker result; controlled transport fixture is NOT ChatGPT",
+      "Actual isolated Edge, native UIA fixture and durable job output",
+      "Branded approval bundle executes with its real browser CSP; not a ChatGPT host test",
+      "Browser fixtures handle current metadata with the matching App tool names; not host attestation",
+      "DPAPI OAuth state survives restart; refresh rotates and replay revokes its family",
+      "Fixture decisions: Deny, bounded chat grant, context revocation; not human-host attestation",
+      "Native Windows checks preserve read-only AST boundaries without executing submitted text",
+      "Native state ACL audit rejects a linked descendant and a drive root; never weakens private state",
+      "Real authenticated HTTP: OAuth PKCE, consent, catalog, tool call and revocation",
+      "Renamed catalog, snapshots, conflict safety, approvals and continuation",
+      "Twelve concurrent real MCP HTTP handshakes share one ready broker"
+    ]
+  },
+  "identicalFailureNames": true,
+  "portable": {
+    "command": "YGPT_TEST_CHROMIUM=/opt/meta-chromium/chrome node --test --test-concurrency=1 tests/{owner-model,upgrade-portable,upgrade-new-tools,brand-choice,blacklist-rc13,extension-takeover,extension-safety,csharp-langversion,updater-window,startup-diagnostics}.test.mjs",
+    "tests": 82,
+    "pass": 80,
+    "fail": 0,
+    "skip": 2,
+    "failures": []
+  },
+  "regressions": {
+    "before": {
+      "tests": 14,
+      "pass": 0,
+      "fail": 14,
+      "skip": 0,
+      "failures": [
+        "A missing registration acknowledgement closes the socket and schedules reconnection",
+        "A real bootstrap audit failure reaches service health before any MCP port or response exists",
+        "A successful retry clears startup failure health and diagnostics stay bounded and scrubbed",
+        "An explicit attach selector cannot silently adopt the browser already attached for another profile",
+        "Every current icon surface shares the board PNG; plugin icons meet the upload constraint",
+        "Extension takeover: unsigned Chrome profiles attach by stable identity and never guess between profiles",
+        "Native state refusal preserves the error code, offending path and reparse target",
+        "Popup reports Connected only after relay registration, and refreshes while open",
+        "README headers use the canonical board artwork and retired SVG candidates cannot ship",
+        "Real worker registers an unsigned profile with a distinguishable label and relay acknowledgement",
+        "Registration and popup status do not wait on optional Chrome identity or tab enumeration",
+        "Signed-in identity is an optional signal with the Chrome email permission declared",
+        "The pairing page updates its connected list after the owner pairs from an already open page",
+        "Worker restart reuses pairing and identity; relay replaces the old registration"
+      ]
+    },
+    "after": {
+      "tests": 15,
+      "pass": 15,
+      "fail": 0,
+      "skip": 0,
+      "failures": []
+    },
+    "note": "Fourteen portable repair regressions fail on original rc.16 and pass after repair; the fifteenth is the popup-edit regression, separately seen failing before its follow-up fix."
+  },
+  "csp": "pass",
+  "publicAudit": "pass; zero findings",
+  "nativeWindowsSha256": "2c43849141eb2372f0d0bdfee52bed4cfffe76490ac39b1cd0034329ecaaf2ed",
+  "unchangedBoardPngSha256": "94a762d508b14ebefdd94e30683ba1721e9443e5698e6cb5e44469e464ba9482",
+  "limitations": [
+    "NTFS, ACL, COM shortcut, WPF updater and watchdog execution require Windows.",
+    "Real Chrome/Edge unpacked extension and the owner Desktop shortcut/icon cache cannot be verified on Linux.",
+    "The specific optional browser callback stalled on the owner machine is not established without a worker trace."
+  ],
+  "constraints": {
+    "pushed": false,
+    "versionBumped": false,
+    "installersRebuilt": false
+  }
+}

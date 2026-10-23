@@ -1,5 +1,7 @@
 # First Light: the YGPT Local design system
 
+> Historical design record. The current owner-board artwork, regeneration recipe and icon surfaces are documented in [BRAND_ASSETS.md](BRAND_ASSETS.md). Retired SVG sources mentioned below are no longer shipped.
+
 YGPT Local connects a person's own ChatGPT to their own Windows PC. Most people meeting it are doing that for the first time, and many are not technical. The design has three jobs: make them feel **welcomed**, keep them **oriented**, and let them feel **safe** handing an AI the keys to their computer. It should also look like a product a design studio shipped.
 
 First Light succeeds [Sky Air](DESIGN_SKY_AIR.md). It keeps Sky Air's clear-blue palette and its accessibility work. It adds a point of view: **the morning sky, and something growing toward it.**

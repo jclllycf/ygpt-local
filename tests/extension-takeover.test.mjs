@@ -37,7 +37,7 @@ async function serveFixtures(context){
 class FakeExtension {
   constructor(playwright,endpoint,token,{id,email}){
     this.pw=playwright;this.id=id;this.email=email;this.tabs=new Map();this.seq=100;this.createCalls=[];
-    this.ws=new WebSocket(endpoint.replace('http://','ws://')+'/ext?token='+encodeURIComponent(token));
+    this.ws=new WebSocket(endpoint.replace('http://','ws://')+'/ext?token='+encodeURIComponent(token),{origin:'chrome-extension://'+'a'.repeat(32)});
     this.ws.on('message',raw=>{void this.onMessage(JSON.parse(raw.toString()));});
   }
   async init(browser){
@@ -55,8 +55,9 @@ class FakeExtension {
   async openFromGroupTab(openerTabId,url){const page=await this.context.newPage();await page.goto(url);const tabId=++this.seq;this.tabs.set(tabId,{page,inGroup:true,session:null,openerTabId});this.send({type:'event',kind:'tabsChanged',totalTabs:this.tabs.size});return tabId;}
   tabIdFor(url){for(const [tabId,t] of this.tabs)if(t.page.url()===url)return tabId;return null;}
   async chromeDetach(tabId,reason){const t=this.tabs.get(tabId);await t?.session?.detach().catch(()=>{});if(t)t.session=null;this.send({type:'event',kind:'detached',tabId,reason});}
-  hello(){this.send({type:'hello',id:this.id,browser:'Chrome',version:'fake',profile:{email:this.email,id:'id-'+this.id},totalTabs:this.tabs.size});}
+  hello(){this.send({type:'hello',id:this.id,browser:'Chrome',version:'fake',profile:{email:this.email||null,id:this.email?'id-'+this.id:null},totalTabs:this.tabs.size});}
   async onMessage(msg){
+    if(msg.type==='registered'){this.registration=msg;return;}
     if(msg.type!=='req')return;
     const reply=(ok,payload)=>this.send({type:'res',reqId:msg.reqId,ok,...(ok?{result:payload}:{error:String(payload?.message??payload)})});
     try{
@@ -205,4 +206,41 @@ test('Extension takeover: a popup opened by one chat\'s group tab stays with tha
   }finally{
     await engine.close().catch(()=>{});await browser.close().catch(()=>{});
   }
+});
+
+
+test('Extension takeover: unsigned Chrome profiles attach by stable identity and never guess between profiles',{skip:!available&&'no chromium on this host',timeout:120000},async()=>{
+  const {YExtensionBrowser}=await import('../engine/src/browser-engine.mjs');
+  const {chromium}=await import('playwright');
+  const engine=new YExtensionBrowser({stateDir:tmp(),port:await freePort()});
+  const a=await chromium.launch({executablePath:CHROME,args:['--no-sandbox']}),b=await chromium.launch({executablePath:CHROME,args:['--no-sandbox']});
+  try{
+    await engine.ensureRelay();const {token}=await engine.relay.pairing();
+    // Run the pairing page with its real HTTP CSP. Proxy a fixture origin
+    // because this host Chromium blocks direct loopback navigations.
+    const pairing=await a.newPage();
+    await pairing.route('https://pairing.invalid/**',async route=>{
+      const response=await fetch(engine.relay.endpoint()+new URL(route.request().url()).pathname);
+      await route.fulfill({status:response.status,headers:Object.fromEntries(response.headers),body:await response.text()});
+    });
+    await pairing.goto('https://pairing.invalid/');assert.match(await pairing.locator('#instances').innerText(),/No extension/);
+    const first=new FakeExtension(null,engine.relay.endpoint(),token,{id:'unsigned-a',email:''});await first.init(a);first.hello();
+    const attached=await engine.attach({});assert.equal(attached.identity.profileEmail,null);assert.equal(attached.identity.profileLabel,'Chrome profile unsigned-a');
+    assert.equal(first.registration.id,'unsigned-a');
+    await pairing.waitForFunction(()=>document.getElementById('instances').textContent.includes('Chrome profile unsigned-a'));
+    assert.match((await engine.snapshot(attached.tabs[0].tabId)).aria,/earlier/);
+    const second=new FakeExtension(null,engine.relay.endpoint(),token,{id:'unsigned-b',email:''});await second.init(b);second.hello();
+    await new Promise(r=>setTimeout(r,50));
+    await assert.rejects(engine.attach({instance:'unsigned-b'}),{code:'BROWSER_ALREADY_ATTACHED'});
+    await engine.detach();
+    const choice=await engine.attach({});assert.equal(choice.needsChoice,true);
+    assert.deepEqual(choice.candidates.map(c=>c.profileLabel),['Chrome profile unsigned-a','Chrome profile unsigned-b']);
+    await pairing.waitForFunction(()=>document.getElementById('instances').textContent.includes('Chrome profile unsigned-b'));
+    const page=await pairing.locator('#instances').innerText();for(const c of choice.candidates)assert.ok(page.includes(c.profileLabel));
+    const ambiguous=await engine.attach({instance:'Chrome'});assert.equal(ambiguous.needsChoice,true);assert.equal(engine.status().attached,false);
+    const designated=await engine.attach({instance:'unsigned-b'});assert.equal(designated.identity.instance,'unsigned-b');
+    assert.match((await engine.snapshot(designated.tabs[0].tabId)).aria,/earlier/);
+    await engine.open('https://fixture.invalid/work');assert.equal(first.createCalls.length,0);assert.equal(second.createCalls.length,1);
+    assert.equal((await engine.list()).ownerTabsNotTouched,1);
+  }finally{await engine.close().catch(()=>{});await a.close();await b.close();}
 });

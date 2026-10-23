@@ -10,7 +10,7 @@ import {WebSocket} from 'ws';
 import {ExtensionRelay} from '../engine/src/extension-relay.mjs';
 import {YBrowserFacade,YExtensionBrowser} from '../engine/src/browser-engine.mjs';
 
-async function extensionFixture(t,saved={}){
+async function extensionFixture(t,saved={},options={}){
   const calls=[],responses=[],listeners={},store={ygptInstanceId:'fixture',...saved};
   const event=name=>({addListener(fn){listeners[name]=fn;}});
   const tabs=new Map([[1,{id:1,groupId:-1,windowId:1,url:'https://personal.invalid/private',title:'Personal secret'}],[2,{id:2,groupId:7,windowId:1,url:'https://work.invalid/',title:'Work'}]]);
@@ -26,13 +26,16 @@ async function extensionFixture(t,saved={}){
     debugger:{attach:async target=>{calls.push(['attach',target.tabId]);},detach:async target=>{calls.push(['detach',target.tabId]);},sendCommand:async(target,method)=>{calls.push(['send',target.tabId,method]);return {};},onEvent:event('debuggerEvent'),onDetach:event('debuggerDetach')},
     alarms:{create(){},onAlarm:event('alarm')},runtime:{onInstalled:event('installed'),onStartup:event('startup'),onMessage:event('message')}
   };
+  if(options.identity)chrome.identity.getProfileUserInfo=options.identity;
+  if(options.query)chrome.tabs.query=options.query;
   const timers=new Set();
-  const context=vm.createContext({chrome,crypto:globalThis.crypto,navigator:{userAgent:'Chrome'},Uint8Array,WebSocket:{OPEN:1},
+  const context=vm.createContext({chrome,crypto:globalThis.crypto,navigator:{userAgent:'Chrome'},Uint8Array,WebSocket:options.WebSocket??{OPEN:1},setInterval,clearInterval,
     setTimeout:(fn,ms)=>{const timer=setTimeout(fn,ms).unref();timers.add(timer);return timer;},clearTimeout,
     transport:{readyState:1,send:raw=>responses.push(JSON.parse(raw))}});
   vm.runInContext(await fs.readFile(new URL('../extension/background.js',import.meta.url),'utf8'),context);
   await new Promise(r=>setImmediate(r));
-  vm.runInContext('ws=transport',context);
+  if(!options.WebSocket)vm.runInContext('ws=transport',context);
+  else t.after(()=>vm.runInContext('stopKeepalive();clearTimeout(reconnectTimer);if(typeof registrationTimer!=="undefined")clearTimeout(registrationTimer);ws?.close()',context));
   t.after(()=>{for(const timer of timers)clearTimeout(timer);});
   const request=async(method,params={})=>{context.requestArg=JSON.stringify({type:'req',reqId:responses.length+1,method,params});await vm.runInContext('onRequest(requestArg)',context);return responses.at(-1);};
   return {request,calls,tabs,chrome,listeners,context,store};
@@ -347,4 +350,95 @@ test('The first attach after the relay starts waits for a paired extension that 
   assert.equal(attached.attached,true);assert.equal(attached.identity.instance,'late');
   assert.ok(Date.now()-started>=5000);
   await engine.detach();
+});
+
+
+// Run the real MV3 worker and its hello over a real extension-origin socket.
+// The earlier fake skipped onopen, identity lookup, tab counting and popup state.
+async function registeredWorker(t,relay,{id='unsigned-a',identity=async()=>({email:'',id:''}),query}={}){
+  class ExtensionSocket extends WebSocket{constructor(url){super(url,{origin:'chrome-extension://'+'a'.repeat(32)});}}
+  return extensionFixture(t,{ygptInstanceId:id,ygptSettings:{token:relay.token,port:relay.port}}, {WebSocket:ExtensionSocket,identity,query});
+}
+async function until(check,label){for(let i=0;i<100;i++){if(await check())return;await new Promise(r=>setTimeout(r,10));}assert.fail('timed out: '+label);}
+const workerStatus=f=>new Promise(resolve=>f.listeners.message({kind:'status'},{},resolve));
+
+test('Real worker registers an unsigned profile with a distinguishable label and relay acknowledgement',async t=>{
+  const relay=await relayFixture(t),f=await registeredWorker(t,relay);
+  await until(()=>relay.instancesList().length===1,'unsigned profile registration');
+  await until(()=>vm.runInContext('wsState',f.context)==='registered','registration acknowledgement');
+  const [instance]=relay.instancesList();assert.equal(instance.profileEmail,null);assert.equal(instance.profileLabel,'Chrome profile unsigned-a');
+  const page=await (await fetch(relay.endpoint()+'/')).text();assert.ok(page.includes(instance.profileLabel));assert.ok(page.includes(instance.id));
+  const st=await workerStatus(f);assert.equal(st.state,'registered');assert.equal(st.profileLabel,instance.profileLabel);
+});
+
+test('Registration and popup status do not wait on optional Chrome identity or tab enumeration',async t=>{
+  const relay=await relayFixture(t),f=await registeredWorker(t,relay,{identity:()=>new Promise(()=>{}),query:()=>new Promise(()=>{})});
+  await until(()=>relay.instancesList().length===1,'hello despite pending metadata');
+  const st=await Promise.race([workerStatus(f),new Promise((_,reject)=>setTimeout(()=>reject(Error('popup waited on identity')),300))]);
+  assert.equal(st.state,'registered');assert.equal(st.profileLabel,'Chrome profile unsigned-a');
+});
+
+test('Popup reports Connected only after relay registration, and refreshes while open',async()=>{
+  const elements=Object.fromEntries(['host','port','token','status','save'].map(id=>[id,{addEventListener(){}}]));
+  let state='open',tick;
+  const context=vm.createContext({document:{getElementById:id=>elements[id]},chrome:{runtime:{sendMessage:async()=>({state,profileLabel:'Chrome profile unsigned-a',settings:{host:'127.0.0.1',port:19341,hasToken:true}})}},setTimeout,setInterval:fn=>{tick=fn;return 1;}});
+  vm.runInContext(await fs.readFile(new URL('../extension/popup.js',import.meta.url),'utf8'),context);
+  await new Promise(r=>setImmediate(r));assert.ok(!elements.status.textContent.includes('Connected ✓'));
+  assert.equal(typeof tick,'function');state='registered';await tick();
+  assert.match(elements.status.textContent,/Connected ✓/);assert.match(elements.status.textContent,/Chrome profile unsigned-a/);
+});
+
+test('A missing registration acknowledgement closes the socket and schedules reconnection',async t=>{
+  const relay=await relayFixture(t);relay.onExtension=()=>{};
+  const f=await registeredWorker(t,relay);await until(()=>vm.runInContext('ws?.readyState',f.context)===1,'socket open');
+  // Trigger the worker deadline without a wall-clock wait.
+  vm.runInContext('registrationExpired(ws)',f.context);
+  await until(()=>vm.runInContext('ws',f.context)===null,'unacknowledged socket closed');
+  assert.equal((await workerStatus(f)).state,'registration-timeout');
+  assert.ok(vm.runInContext('reconnectTimer!==null',f.context));
+});
+
+test('Worker restart reuses pairing and identity; relay replaces the old registration',async t=>{
+  const relay=await relayFixture(t),first=await registeredWorker(t,relay);
+  await until(()=>relay.instancesList().length===1,'first worker');
+  const second=await registeredWorker(t,relay);await until(()=>vm.runInContext('wsState',second.context)==='registered','replacement worker');
+  assert.equal(relay.instancesList().length,1);assert.equal(relay.instancesList()[0].id,'unsigned-a');
+  assert.equal(second.store.ygptSettings.token,relay.token);
+  vm.runInContext('clearTimeout(reconnectTimer)',first.context);
+});
+
+test('Signed-in identity is an optional signal with the Chrome email permission declared',async()=>{
+  const manifest=JSON.parse(await fs.readFile(new URL('../extension/manifest.json',import.meta.url),'utf8'));
+  assert.ok(manifest.permissions.includes('identity.email'));
+});
+
+test('An explicit attach selector cannot silently adopt the browser already attached for another profile',async()=>{
+  const engine=new YExtensionBrowser({stateDir:os.tmpdir(),port:0});
+  engine.browser={contexts:()=>[]};engine.identity={instance:'a',profileEmail:null};
+  engine.ensureRelay=async()=>{};
+  engine.relay.instancesList=()=>[{id:'a',browser:'Chrome',profileEmail:null,profileLabel:'Chrome profile a'},{id:'b',browser:'Chrome',profileEmail:null,profileLabel:'Chrome profile b'}];
+  await assert.rejects(engine.attach({instance:'b'}),{code:'BROWSER_ALREADY_ATTACHED'});
+  const ambiguous=await engine.attach({instance:'Chrome'});assert.equal(ambiguous.needsChoice,true);
+  assert.deepEqual(ambiguous.candidates.map(c=>c.profileLabel),['Chrome profile a','Chrome profile b']);
+});
+
+test('The pairing page updates its connected list after the owner pairs from an already open page',async t=>{
+  const relay=await relayFixture(t);
+  const page=await (await fetch(relay.endpoint()+'/')).text();
+  assert.ok(page.includes('/pairing.js'),'pairing page loads the live list');
+  const script=await fetch(relay.endpoint()+'/pairing.js');assert.equal(script.status,200);
+  const list={rows:[],replaceChildren(...rows){this.rows=rows;}};let tick;
+  const context=vm.createContext({document:{getElementById:()=>list,createElement:()=>({textContent:''})},fetch:url=>fetch(relay.endpoint()+url),setInterval:fn=>{tick=fn;}});
+  vm.runInContext(await script.text(),context);await until(()=>list.rows.length===1,'initial empty list');
+  assert.match(list.rows[0].textContent,/No extension/);
+  await registeredWorker(t,relay);await until(()=>relay.instancesList().length===1,'worker registers');
+  await tick();assert.match(list.rows[0].textContent,/Chrome profile unsigned-a/);
+});
+
+test('Live popup status preserves host and port edits while the owner is pairing',async()=>{
+  const elements=Object.fromEntries(['host','port','token','status','save'].map(id=>[id,{addEventListener(){}}]));let tick;
+  const context=vm.createContext({document:{getElementById:id=>elements[id]},chrome:{runtime:{sendMessage:async()=>({state:'registering',profileLabel:'Chrome profile unsigned-a',settings:{host:'127.0.0.1',port:19341,hasToken:true}})}},setTimeout,setInterval:fn=>{tick=fn;return 1;}});
+  vm.runInContext(await fs.readFile(new URL('../extension/popup.js',import.meta.url),'utf8'),context);await new Promise(r=>setImmediate(r));
+  elements.host.value='localhost';elements.port.value='19342';await tick();
+  assert.equal(elements.host.value,'localhost');assert.equal(elements.port.value,'19342');
 });

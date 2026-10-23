@@ -13,7 +13,8 @@ const DEFAULTS={host:'127.0.0.1',port:19341,token:'',groupName:'YGPT'};
 let settings={...DEFAULTS};
 let ws=null,wsState='closed',backoff=2000,instanceId=null,attached=new Set();
 const attaching=new Map(),commandOrder=new Map();
-let connecting=null,reconnectTimer=null,keepaliveTimer=null;
+let connecting=null,reconnectTimer=null,keepaliveTimer=null,registrationTimer=null;
+let cachedProfile={email:null,id:null};
 // Chrome stops an idle MV3 service worker after about 30 s; WebSocket traffic
 // resets that timer (Chrome 116+). Without it the socket closes between chat
 // turns, the relay drops the binding and the chat loses its YGPT tabs.
@@ -44,18 +45,23 @@ async function connectOnce(){
   let socket;
   try{socket=new WebSocket(url);ws=socket;}catch{wsState='error';scheduleReconnect();return;}
   wsState='connecting';
-  socket.onopen=async()=>{
+  socket.onopen=()=>{
     if(ws!==socket)return;
-    wsState='open';backoff=2000;
+    wsState='registering';backoff=2000;
     startKeepalive(socket);
-    const profile=await profileInfo();
-    const count=await totalTabs();
-    send({type:'hello',id:instanceId,browser:browserKind(),version:(navigator.userAgent.match(/(?:Chrome|Edg)\/([\d.]+)/)||[])[1]||'',profile,totalTabs:count},socket);
+    // Pairing identifies a profile, even without Chrome sign-in. Neither
+    // optional browser API may hold up hello (or the popup's status reply).
+    send({type:'hello',id:instanceId,browser:browserKind(),version:(navigator.userAgent.match(/(?:Chrome|Edg)\/([\d.]+)/)||[])[1]||'',profile:cachedProfile,totalTabs:0},socket);
+    clearTimeout(registrationTimer);registrationTimer=setTimeout(()=>registrationExpired(socket),10000);
+    void profileInfo().then(profile=>{if(ws!==socket)return;cachedProfile=profile;send({type:'profile',profile},socket);});
+    void totalTabs().then(count=>send({type:'event',kind:'tabsChanged',totalTabs:count},socket));
   };
   socket.onmessage=ev=>{if(ws===socket)void onRequest(ev.data,socket);};
-  socket.onclose=()=>{if(ws!==socket)return;stopKeepalive();wsState='closed';ws=null;void detachAll().then(scheduleReconnect);};
+  socket.onclose=()=>{if(ws!==socket)return;stopKeepalive();clearTimeout(registrationTimer);if(wsState!=='registration-timeout')wsState='closed';ws=null;void detachAll().then(scheduleReconnect);};
   socket.onerror=()=>{try{socket.close();}catch{}};
 }
+function registrationExpired(socket){if(ws!==socket||wsState==='registered')return;wsState='registration-timeout';socket.close();}
+function profileLabel(){return cachedProfile.email||browserKind()+' profile '+instanceId;}
 function startKeepalive(socket){stopKeepalive();keepaliveTimer=setInterval(()=>{if(ws!==socket){stopKeepalive();return;}send({type:'ping'},socket);},KEEPALIVE_MS);}
 function stopKeepalive(){clearInterval(keepaliveTimer);keepaliveTimer=null;}
 // Commands for one tab reach chrome.debugger in the order the relay sent
@@ -123,6 +129,7 @@ async function createGroupTab(url){
 // ---------- service requests ----------
 async function onRequest(raw,socket=ws){
   let msg;try{msg=JSON.parse(raw);}catch{return;}
+  if(msg.type==='registered'&&msg.id===instanceId){clearTimeout(registrationTimer);wsState='registered';return;}
   if(msg.type!=='req')return;
   const reply=(ok,payload)=>send({type:'res',reqId:msg.reqId,ok,...(ok?{result:payload}:{error:String(payload?.message??payload)})},socket);
   try{
@@ -193,12 +200,12 @@ chrome.runtime.onMessage.addListener((msg,sender,respond)=>{
       await loadSettings();
       const next={...DEFAULTS,...msg.settings};if(!next.token)next.token=settings.token;
       settings=next;await chrome.storage.local.set({ygptSettings:settings});
-      const old=ws;ws=null;try{old?.close();}catch{}await detachAll();await connect();respond({ok:true});
+      clearTimeout(reconnectTimer);clearTimeout(registrationTimer);stopKeepalive();const old=ws;ws=null;try{old?.close();}catch{}await detachAll();await connect();respond({ok:true});
     })();
     return true;
   }
   if(msg?.kind==='status'){
-    void (async()=>{const profile=await profileInfo();respond({state:wsState,profile,settings:{host:settings.host,port:settings.port,hasToken:!!settings.token,groupName:settings.groupName}});})();
+    void (async()=>{await loadSettings();respond({state:wsState,profile:cachedProfile,profileLabel:profileLabel(),settings:{host:settings.host,port:settings.port,hasToken:!!settings.token,groupName:settings.groupName}});})();
     return true;
   }
   return false;

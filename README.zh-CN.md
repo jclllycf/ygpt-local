@@ -1,14 +1,14 @@
-<img src="assets/brand/ygpt-local.svg" width="72" alt="YGPT Local 原创 Y 连接图标">
+<img src="assets/brand/plugin-icon-256.png" width="72" alt="YGPT Local 原创 Y 连接图标">
 
 # YGPT Local
 
 从 ChatGPT 使用你自己的 Windows 文件和工具，保留写前快照、恢复冲突保护和高风险审批。
 
-**1.0.0-rc.16 是当前供所有者测试的候选版，界面仅英文，剩余测试由用户自行完成。** 仓库目前私有，安装包通过本仓库的 Releases 页面发布。rc.3 以来的变化见 [CHANGELOG](CHANGELOG.md)、[升级指南](docs/UPGRADE_USER_GUIDE.md)、[安全说明](docs/UPGRADE_SECURITY_NOTE.md)。另见 [逐字段教程](docs/SETUP_GUIDE.md)、[验收状态](docs/VALIDATION.md)、[安全边界](docs/SECURITY.md)。
+**1.0.0-rc.17 是当前供所有者测试的候选版，界面仅英文，剩余测试由用户自行完成。** 仓库目前私有，安装包通过本仓库的 Releases 页面发布。rc.3 以来的变化见 [CHANGELOG](CHANGELOG.md)、[升级指南](docs/UPGRADE_USER_GUIDE.md)、[安全说明](docs/UPGRADE_SECURITY_NOTE.md)。另见 [逐字段教程](docs/SETUP_GUIDE.md)、[验收状态](docs/VALIDATION.md)、[安全边界](docs/SECURITY.md)。
 
 ## 图形安装流程
 
-1. 获取 `YGPTLocal-Setup-1.0.0-rc.16-win-x64.exe`，核对 `SHA256SUMS.txt`。候选包未签名，不代表有可信发行者证书。已经安装过？改为运行 `YGPTLocal-Update-1.0.0-rc.16-win-x64.exe`：原地更新，保留数据目录、密钥、连接身份、快照和 ChatGPT 插件（见 [升级指南](docs/UPGRADE_USER_GUIDE.md)）。
+1. 获取 `YGPTLocal-Setup-1.0.0-rc.17-win-x64.exe`，核对 `SHA256SUMS.txt`。候选包未签名，不代表有可信发行者证书。已经安装过？改为运行 `YGPTLocal-Update-1.0.0-rc.17-win-x64.exe`：原地更新，保留数据目录、密钥、连接身份、快照和 ChatGPT 插件（见 [升级指南](docs/UPGRADE_USER_GUIDE.md)）。
 2. 双击八步向导，选择程序目录和授权工作目录。内置 Node、Python 和官方 Tunnel Client，普通安装不要求开发环境或管理员权限。
 3. 保留默认 **OpenAI Secure MCP Tunnel**。在自己有资格的 Platform 组织中创建专用 Tunnel，并关联实际使用的 ChatGPT 工作区。不要抢用其他实例已连接的 Tunnel。
 4. 在本机填写完整 Tunnel ID 和专用运行时 API Key。Key 使用遮罩输入和当前用户 DPAPI 加密，用于认证 Tunnel Client；安装器不调用 GPT 生成模型，也不代为创建 Key。
@@ -42,7 +42,7 @@ Secure Tunnel 默认走 stdio，不增加 HTTP Supervisor；高级 Cloudflare/�
 
 保留 Watchdog、Tunnel、必要运行时、设置/升级/卸载、DPAPI、配置、OAuth、审批账本、数据库、快照和回滚索引。删除 Setup 下载包后，已安装 Settings 仍可配置自己的校验完整运行时；文件损坏或升级需要完整安装包。
 
-默认程序目录 `D:\YGPTLocal`、私人数据 `D:\YGPTLocalData`（没有 D: 时用最大的其他非系统固定磁盘上的同名目录）；只有系统盘时为 `%LOCALAPPDATA%\Programs\YGPTLocal` 和 `%LOCALAPPDATA%\YGPTLocal`。开始菜单按需打开 Settings，无需常驻托盘。维护先阻止新调用，检查本实例活动，未结束任务或审批时拒绝不安全替换。升级保留旧程序与私人状态。真正卸载需单独确认，会断开连接，默认保留私人数据和修改过或未知的文件。见 [迁移说明](docs/MIGRATION.md)。
+默认程序目录 `D:\YGPTLocal`、私人数据 `D:\YGPTLocalData`（没有 D: 时用最大的其他非系统固定磁盘上的同名目录）；只有系统盘时为 `%LOCALAPPDATA%\Programs\YGPTLocal` 和 `%LOCALAPPDATA%\YGPTLocal`。开始菜单按需打开 Settings，无需常驻托盘。维护先阻止新调用，检查本实例活动，未结束任务或审批时拒绝不安全替换。升级期间旧程序副本保留在程序文件夹内部，更新验证可用后自动删除（旧版本留在程序文件夹旁的备份文件夹也会一并清理）；私人状态始终保留。真正卸载需单独确认，会断开连接，默认保留私人数据和修改过或未知的文件。见 [迁移说明](docs/MIGRATION.md)。
 
 RC3 开发不停止当前正常生产 Tunnel，也不把其他 Tunnel 的安装当作垃圾删除。
 

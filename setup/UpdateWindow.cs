@@ -141,6 +141,37 @@ public class UpdateWindow:Window{
   previewHost.Child=shot!=null?new Image{Source=shot,Stretch=Stretch.Uniform}:(UIElement)new TextBlock{Text=approvalStyle=="legacy"?"Classic strip - the original design.":"New strip - follows the icon you pick.",Foreground=B(Muted)};
  }
  void Log(string line){log.Text=log.Text.Length==0?line:log.Text+"\n"+line;}
+ // Post-update housekeeping (owner request): retained program copies used
+ // to pile up next to the application folder as <install>.previous-<ticks>
+ // siblings, alongside staging folders left by interrupted runs. Retained
+ // copies now live inside the application folder (.previous-<ticks>);
+ // after a verified update, remove them from BOTH places. A folder is
+ // deleted only when its own manifest or install marker identifies it as
+ // a YGPT Local program copy — anything else is left untouched.
+ List<string> CleanupUpdateBackups(string target){
+  var removed=new List<string>();
+  string full=HostCore.Full(target),parent=Path.GetDirectoryName(full),name=Path.GetFileName(full);
+  var candidates=new List<string>();
+  try{candidates.AddRange(Directory.GetDirectories(full,".previous-*"));}catch{}
+  if(!String.IsNullOrEmpty(parent)){
+   try{candidates.AddRange(Directory.GetDirectories(parent,name+".previous-*"));}catch{}
+   try{candidates.AddRange(Directory.GetDirectories(parent,name+".staging-*"));}catch{}
+  }
+  foreach(string candidate in candidates){
+   try{
+    if(String.Equals(HostCore.Full(candidate),full,StringComparison.OrdinalIgnoreCase))continue;
+    if((File.GetAttributes(candidate)&FileAttributes.ReparsePoint)!=0)continue;
+    if(!IsYGPTProgramCopy(candidate))continue;
+    Directory.Delete(candidate,true);removed.Add(Path.GetFileName(candidate));
+   }catch{}
+  }
+  return removed;
+ }
+ bool IsYGPTProgramCopy(string dir){
+  try{string manifest=Path.Combine(dir,"manifest.json");if(File.Exists(manifest)&&HostCore.S(YGPTApp.Read(manifest),"product")=="YGPT Local")return true;}catch{}
+  try{string marker=Path.Combine(dir,".ygpt-install.json");if(File.Exists(marker)&&HostCore.S(YGPTApp.Read(marker),"product")=="YGPT Local")return true;}catch{}
+  return false;
+ }
  async Task RunUpdate(){
   if(busy)return;busy=true;updateButton.IsEnabled=false;installChoice.IsEnabled=false;pickerHost.IsEnabled=false;log.Text="";
   // Bind every asynchronous step to the installation selected at the click.
@@ -167,7 +198,7 @@ public class UpdateWindow:Window{
    Log("Replacing application files (your data folder is not touched)…");
    await Task.Run(()=>YGPTApp.InstallPayload(targetInstall));
    Log("Saving your icon and strip style…");
-   try{await Task.Run(()=>{string cfgPath=Path.Combine(targetData,"ygpt.config.json");var cfg=YGPTApp.Read(cfgPath);cfg["brandIcon"]=selectedIcon;cfg["approvalStyle"]=selectedStyle;HostCore.Save(cfgPath,cfg);});}
+   try{await Task.Run(()=>{string cfgPath=Path.Combine(targetData,"ygpt.config.json");var cfg=YGPTApp.Read(cfgPath);cfg["brandIcon"]=selectedIcon;cfg["approvalStyle"]=selectedStyle;HostCore.Save(cfgPath,cfg);YGPTApp.Shortcut(targetInstall,targetData);});}
    catch(Exception ex){Log("Note: the icon choice could not be saved ("+ex.Message+"). Cosmetic choices never block a core update — you can pick it again later via Setup → Repair.");}
    YGPTApp.RefreshIconCache();
    Log("Restarting the connection…");
@@ -178,6 +209,12 @@ public class UpdateWindow:Window{
     try{var h=HostCore.Read(Path.Combine(targetData,"watchdog-health.json"));live=HostCore.S(h,"ownerId")==HostCore.OwnerId(targetData)&&HostCore.S(h,"version")==HostCore.Version&&!HostCore.B(h,"stopped")&&(DateTime.UtcNow-DateTime.Parse(HostCore.S(h,"at")).ToUniversalTime()).TotalSeconds<25;}catch{}
    }
    Log(live?"Update complete — now running "+HostCore.Version+". Your ChatGPT plugin, settings and keys were kept; nothing to re-add.":"Update complete — now running "+HostCore.Version+". The connection is still starting; it reconnects automatically. Your plugin, settings and keys were kept.");
+   if(live){
+    try{
+     var removed=await Task.Run(()=>CleanupUpdateBackups(targetInstall));
+     if(removed.Count>0)Log("Cleaned up "+removed.Count+" old update backup folder(s): "+String.Join(", ",removed.ToArray())+".");
+    }catch(Exception cleanupError){Log("Note: old update backups could not be cleaned ("+cleanupError.Message+"). They sit in or next to the application folder and can be deleted manually.");}
+   }
   }catch(Exception ex){failed=ex;}
   // C# 5 (the .NET Framework csc used by the Windows build) cannot await
   // inside a catch block, so recovery runs after it.

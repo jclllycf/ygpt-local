@@ -1,4 +1,5 @@
 import {spawn} from 'node:child_process';
+import {recordStartupFailure,clearStartupFailure} from './startup-diagnostics.mjs';
 import readline from 'node:readline';
 import path from 'node:path';
 import {randomUUID} from 'node:crypto';
@@ -166,13 +167,13 @@ const appOnly=t=>t._meta?.ui?.visibility?.includes('app');
 const groups=[['file','y_file_'],['search','y_search_'],['project','y_project_'],['process','y_process_'],['job','y_job_'],['browser','y_browser_'],['desktop','y_desktop_'],['backup','y_backup_'],['approval',/^y_(?:show_approval|approval_center|wait_approval|pending_approvals|bar_)/],['status',/^y_(?:ping|policy|recent_calls|usage_report|resource_owner|call_|system_)/]];
 function catalogSummary(){const list=tools(),byGroup={};for(const t of list){const g=groups.find(([,m])=>typeof m==='string'?t.name.startsWith(m):m.test(t.name))?.[0]??'other';byGroup[g]=(byGroup[g]??0)+1;}return {tools:list.length,publicTools:list.filter(t=>!appOnly(t)).length,appOnly:list.filter(appOnly).length,byGroup};}
 function ensureEngine(params){
-  if(!backendInitialization)backendInitialization=initializeEngine(params).catch(e=>{backendInitialization=null;throw e;});
+  if(!backendInitialization)backendInitialization=initializeEngine(params).catch(e=>{backendInitialization=null;recordStartupFailure(e);throw e;});
   return backendInitialization;
 }
 async function initializeEngine(){
   if(!nativeExtension){await ensureBackups();nativeExtension=await createNativeExtension({backups,ledger,protectState:async()=>acl});}
   const names=tools().map(t=>t.name);if(new Set(names).size!==names.length)throw Error('Duplicate tool catalog entry');
-  ready=true;healthRecord(true,{initializationSource:init?'host-request':'startup-self-test',initializedByTunnel:Boolean(init)&&config.deployment==='production'});
+  ready=true;clearStartupFailure();healthRecord(true,{initializationSource:init?'host-request':'startup-self-test',initializedByTunnel:Boolean(init)&&config.deployment==='production'});
 }
 async function jobControl(action,args){
   return new Promise((resolve,reject)=>{
@@ -509,7 +510,7 @@ if(!noLocalReview)portalServer=await launchPortal(execute);
 // The Tunnel opens stdio eagerly but may not send initialize until a chat calls.
 // Check only our private engine/catalog at boot; public requests still require
 // their own initialize, and this is never recorded as a ChatGPT host handshake.
-if(eagerStartup)ensureEngine(startupInit).catch(e=>{process.stderr.write('YGPT startup self-test failed: '+scrub(e.message)+'\n');});
+if(eagerStartup)ensureEngine(startupInit).catch(()=>{}); // ensureEngine records the sanitized startup failure
 const input=readline.createInterface({input:process.stdin});
 input.on('line',line=>{let msg;try{if(Buffer.byteLength(line)>131072)throw Error('Request too large');msg=JSON.parse(line);}catch{failure(null,'Malformed/oversized JSON-RPC');return;}
   activeOwnerRequests++;wireContext.run({version:msg.params?._meta?.['io.modelcontextprotocol/protocolVersion'],toolName:msg.params?.name,toolArgs:msg.params?.arguments},()=>handle(msg).catch(e=>failure(msg.id??null,e.message)).finally(()=>activeOwnerRequests--));});

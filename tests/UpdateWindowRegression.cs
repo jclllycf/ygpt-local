@@ -14,7 +14,7 @@ using System.Windows.Threading;
 // Backends deliberately have no process, registry, credential or network effects.
 // Only UpdateWindow.cs is production code in this isolated WPF regression.
 public static class HostCore {
- public const string Version="1.0.0-rc.16";
+ public const string Version="1.0.0-rc.17";
  public static readonly JavaScriptSerializer Json=new JavaScriptSerializer();
  public static readonly ManualResetEvent AllowPause=new ManualResetEvent(true),PauseEntered=new ManualResetEvent(false);
  public static readonly ConcurrentQueue<string> Calls=new ConcurrentQueue<string>();
@@ -34,6 +34,7 @@ public static class YGPTApp {
  public static Dictionary<string,object> Read(string p){return HostCore.Read(p);}
  public static void ValidateInstallTarget(string target){if(!File.Exists(Path.Combine(target,".ygpt-install.json")))throw new Exception("Fixture install missing");}
  public static void InstallPayload(string install){HostCore.Calls.Enqueue("payload:"+install);if(FailPayload)throw new IOException("Fixture payload failure");}
+ public static void Shortcut(string install,string data){HostCore.Calls.Enqueue("shortcut:"+install);}
  public static void RefreshIconCache(){}
 }
 public static class UpdateWindowRegression {
@@ -63,7 +64,7 @@ public static class UpdateWindowRegression {
   // Even a later field change cannot redirect the captured asynchronous target.
   w.GetType().GetField("install",Private).SetValue(w,second[0]);w.GetType().GetField("data",Private).SetValue(w,second[1]);
   HostCore.AllowPause.Set();PumpUntil(()=>task.IsCompleted);task.GetAwaiter().GetResult();
-  Check(HostCore.Calls.ToArray().SequenceEqual(new[]{"pause:"+first[0],"payload:"+first[0],"start:"+first[0]}),"All update operations must retain the original target");
+  Check(HostCore.Calls.ToArray().SequenceEqual(new[]{"pause:"+first[0],"payload:"+first[0],"shortcut:"+first[0],"start:"+first[0]}),"All update operations must retain the original target");
   Check(!HostCore.Read(Path.Combine(second[1],"ygpt.config.json")).ContainsKey("brandIcon"),"Another installation must retain its config");w.Close();
   // A failed payload swap resumes the retained application only when this run paused it.
   YGPTApp.FailPayload=true;string discarded;while(HostCore.Calls.TryDequeue(out discarded)){}

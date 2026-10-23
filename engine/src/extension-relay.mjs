@@ -83,12 +83,14 @@ export class ExtensionRelay {
   async http(req,res){
     if(!this.localRequest(req)||req.headers.origin&&req.headers.origin!==this.endpoint()&&req.headers.origin!=='http://localhost:'+this.port){res.writeHead(403);res.end();return;}
     res.setHeader('Cache-Control','no-store');
-    res.setHeader('Content-Security-Policy',"default-src 'none'; style-src 'unsafe-inline'; frame-ancestors 'none'");
+    res.setHeader('Content-Security-Policy',"default-src 'none'; style-src 'unsafe-inline'; script-src 'self'; connect-src 'self'; frame-ancestors 'none'");
     const url=new URL(req.url,'http://127.0.0.1');
     let pathname=url.pathname;if(pathname.length>1&&pathname.endsWith('/'))pathname=pathname.slice(0,-1); // Playwright asks for /json/version/ with a trailing slash
     if(pathname.startsWith('/json')&&!this.cdpAuthorized(req)){res.writeHead(401);res.end();return;}
     if(pathname==='/json/version'){return json(res,{Browser:'YGPT Extension Relay',ProtocolVersion:'1.3','Protocol-Version':'1.3',webSocketDebuggerUrl:'ws://127.0.0.1:'+this.port+'/devtools/browser/ygpt',UserAgent:'YGPT-Relay'});}
     if(pathname==='/json/list'||pathname==='/json'){const tabs=await this.boundGroupTabs().catch(()=>[]);return json(res,tabs.map(t=>({id:String(t.tabId),type:'page',title:t.title??'',url:t.url??'',webSocketDebuggerUrl:'ws://127.0.0.1:'+this.port+'/devtools/page/'+t.tabId})));}
+    if(pathname==='/instances')return json(res,this.instancesList());
+    if(pathname==='/pairing.js'){res.writeHead(200,{'content-type':'text/javascript; charset=utf-8'});res.end(PAIRING_SCRIPT);return;}
     if(pathname==='/'){return html(res,pairingPage({token:this.token,port:this.port,instances:this.instancesList()}));}
     res.writeHead(404);res.end();
   }
@@ -99,15 +101,18 @@ export class ExtensionRelay {
       let msg;try{msg=JSON.parse(raw.toString());}catch{return;}
       if(msg.type==='hello'){
         if(inst)return;
-        inst={id:String(msg.id||crypto.randomUUID()),browser:msg.browser??'Chromium',version:msg.version??'',profileEmail:msg.profile?.email??null,profileId:msg.profile?.id??null,ws,pending:new Map(),totalTabs:msg.totalTabs??0,connectedAt:Date.now()};
+        inst={id:String(msg.id||crypto.randomUUID()),browser:msg.browser??'Chromium',version:msg.version??'',profileEmail:profileEmail(msg.profile),profileId:msg.profile?.id??null,ws,pending:new Map(),totalTabs:msg.totalTabs??0,connectedAt:Date.now()};
         const previous=this.instances.get(inst.id);
         if(previous){if(this.boundId===inst.id)this.unbind();for(const p of previous.pending.values())p.reject(new Error('extension reconnected'));previous.pending.clear();previous.ws.terminate();}
+        inst.profileLabel=instanceLabel(inst);
         this.instances.set(inst.id,inst);
+        ws.send(JSON.stringify({type:'registered',id:inst.id,profileLabel:inst.profileLabel}));
         this.log('extension instance connected: '+inst.id+' '+(inst.profileEmail??''));
         return;
       }
       if(!inst||this.instances.get(inst.id)!==inst)return;
-      if(msg.type==='res'){const p=inst.pending.get(msg.reqId);if(p){inst.pending.delete(msg.reqId);msg.ok?p.resolve(msg.result):p.reject(new Error(msg.error??'extension error'));}}
+      if(msg.type==='profile'){inst.profileEmail=profileEmail(msg.profile);inst.profileId=msg.profile?.id??null;inst.profileLabel=instanceLabel(inst);}
+      else if(msg.type==='res'){const p=inst.pending.get(msg.reqId);if(p){inst.pending.delete(msg.reqId);msg.ok?p.resolve(msg.result):p.reject(new Error(msg.error??'extension error'));}}
       else if(msg.type==='event'&&msg.kind==='cdp'){this.forwardCdpEvent(inst,msg.tabId,msg.method,msg.params);}
       else if(msg.type==='event'&&msg.kind==='tabsChanged'){if(typeof msg.totalTabs==='number')inst.totalTabs=msg.totalTabs;this.emitTargetChanges();}
       else if(msg.type==='event'&&msg.kind==='tabRemoved'){this.onTabRemoved(inst,msg.tabId);}
@@ -124,7 +129,7 @@ export class ExtensionRelay {
       try{inst.ws.send(JSON.stringify({type:'req',reqId,method,params}),e=>{if(e){const p=inst.pending.get(reqId);inst.pending.delete(reqId);p?.reject(e);}});}catch(e){inst.pending.delete(reqId);clearTimeout(timer);reject(e);}
     });
   }
-  instancesList(){return [...this.instances.values()].map(i=>({id:i.id,browser:i.browser,version:i.version,profileEmail:i.profileEmail,totalTabs:i.totalTabs,connectedAt:i.connectedAt}));}
+  instancesList(){return [...this.instances.values()].map(i=>({id:i.id,browser:i.browser,version:i.version,profileEmail:i.profileEmail,profileLabel:i.profileLabel,totalTabs:i.totalTabs,connectedAt:i.connectedAt}));}
   bind(id){const inst=this.instances.get(id);if(!inst)throw new Error('extension instance is not connected');if(this.boundId!==id)this.unbind();this.boundId=id;return inst;}
   bound(){return this.boundId?this.instances.get(this.boundId)??null:null;}
   unbind(){this.boundId=null;this.frameIds.clear();for(const c of this.cdpClients)c.ws.terminate();}
@@ -300,7 +305,21 @@ export class ExtensionRelay {
 function json(res,obj){const body=JSON.stringify(obj);res.writeHead(200,{'content-type':'application/json','content-length':Buffer.byteLength(body)});res.end(body);}
 function html(res,body){res.writeHead(200,{'content-type':'text/html; charset=utf-8'});res.end(body);}
 function pairingPage({token,port,instances}){
-  const list=instances.length?instances.map(i=>'<li>'+escapeHtml(i.browser)+' — '+(i.profileEmail?escapeHtml(i.profileEmail):'profile not signed in')+' ('+i.totalTabs+' tabs)</li>').join(''):'<li>No extension connected yet.</li>';
-  return '<!doctype html><meta charset="utf-8"><title>YGPT browser pairing</title><style>body{font-family:system-ui;max-width:640px;margin:40px auto;padding:0 16px;color:#123}code{background:#eef4fb;padding:2px 6px;border-radius:6px}.tok{font-size:20px;letter-spacing:1px;background:#eaf5ff;border:1px solid #bcd9f7;border-radius:10px;padding:14px;word-break:break-all}</style><h1>Connect your daily browser to YGPT</h1><ol><li>In Chrome or Edge open <code>chrome://extensions</code> (Edge: <code>edge://extensions</code>), turn on <b>Developer mode</b>, choose <b>Load unpacked</b> and select the <code>extension</code> folder inside your YGPT Local installation folder.</li><li>Click the YGPT extension icon in the toolbar.</li><li>Paste this pairing token and keep port <code>'+port+'</code>:</li></ol><div class="tok">'+escapeHtml(token)+'</div><h2>Connected browsers</h2><ul>'+list+'</ul><p>YGPT only ever works inside its own tab group in your browser. Your own tabs are never read or touched.</p>';
+  const list=instances.length?instances.map(i=>'<li>'+escapeHtml(i.browser)+' — '+escapeHtml(i.profileLabel)+' <code>'+escapeHtml(i.id)+'</code>'+' ('+i.totalTabs+' tabs)</li>').join(''):'<li>No extension connected yet.</li>';
+  return '<!doctype html><meta charset="utf-8"><title>YGPT browser pairing</title><style>body{font-family:system-ui;max-width:640px;margin:40px auto;padding:0 16px;color:#123}code{background:#eef4fb;padding:2px 6px;border-radius:6px}.tok{font-size:20px;letter-spacing:1px;background:#eaf5ff;border:1px solid #bcd9f7;border-radius:10px;padding:14px;word-break:break-all}</style><h1>Connect your daily browser to YGPT</h1><ol><li>In Chrome or Edge open <code>chrome://extensions</code> (Edge: <code>edge://extensions</code>), turn on <b>Developer mode</b>, choose <b>Load unpacked</b> and select the <code>extension</code> folder inside your YGPT Local installation folder.</li><li>Click the YGPT extension icon in the toolbar.</li><li>Paste this pairing token and keep port <code>'+port+'</code>:</li></ol><div class="tok">'+escapeHtml(token)+'</div><h2>Connected browsers</h2><ul id="instances">'+list+'</ul><script src="/pairing.js"></script><p>YGPT only ever works inside its own tab group in your browser. Your own tabs are never read or touched.</p>';
 }
 function escapeHtml(s){return String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
+
+function profileEmail(profile){return typeof profile?.email==='string'&&profile.email.trim()?profile.email.trim():null;}
+function instanceLabel(i){return i.profileEmail||i.browser+' profile '+i.id;}
+
+const PAIRING_SCRIPT=`async function refresh(){
+  try{
+    const response=await fetch('/instances');if(!response.ok)return;
+    const instances=await response.json();
+    const rows=instances.map(i=>{const row=document.createElement('li');row.textContent=i.profileLabel+' ['+i.id+'] ('+i.totalTabs+' tabs)';return row;});
+    if(!rows.length){const row=document.createElement('li');row.textContent='No extension connected yet.';rows.push(row);}
+    document.getElementById('instances').replaceChildren(...rows);
+  }catch{}
+}
+void refresh();setInterval(refresh,1000);`;

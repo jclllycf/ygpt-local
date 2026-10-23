@@ -1,6 +1,6 @@
 # YGPT Local — security audit note
 
-Scope: candidate 1.0.0-rc.16 (the rc.15 code base plus the 2026-10-23 repository review repairs on branch `review/rc15-repair-20261023`; see `REVIEW_NOTES.md`). Production stays 1.0.0-rc.2 until the owner switches it. This note states what the build does and does not guarantee. The rc.13 revision records the owner's explicit directive (2026-10-22, after a capability test of rc.9) that supersedes two rc.4-era rules: the Desktop Agent boundary is removed, and the browser gains a take-over mode next to the isolated browser. Everything is now one owner blacklist model: default allow, human gates on risk signals, no hard-denied targets.
+Scope: candidate 1.0.0-rc.17 (the rc.16 code base plus the 2026-10-23 field-repair round; see the "rc.17 repair round" in `REVIEW_NOTES.md`). The owner's own install runs the previous candidate until they update it. This note states what the build does and does not guarantee. The rc.13 revision records the owner's explicit directive (2026-10-22, after a capability test of rc.9) that supersedes two rc.4-era rules: the Desktop Agent boundary is removed, and the browser gains a take-over mode next to the isolated browser. Everything is now one owner blacklist model: default allow, human gates on risk signals, no hard-denied targets.
 
 ## What is guaranteed by construction
 

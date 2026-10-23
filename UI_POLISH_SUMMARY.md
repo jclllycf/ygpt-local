@@ -1,5 +1,7 @@
 # UI polish and icon: summary
 
+> Historical design record. The current owner-board artwork, regeneration recipe and icon surfaces are documented in [BRAND_ASSETS.md](docs/BRAND_ASSETS.md). Retired SVG sources mentioned below are no longer shipped.
+
 ## First Light (yuki-warm, 2026-10-22, current)
 
 The owner called the Sky Air restyle plain and asked for the brand to feel

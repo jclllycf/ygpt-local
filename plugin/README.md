@@ -22,4 +22,4 @@ If ChatGPT says **App setup was rate limited**, ChatGPT is pacing plugin creatio
 
 This plugin format has no manifest or icon field, so `scripts/package.mjs` does not bundle the plugin. The logo is here for you to upload when you create or edit the personal YGPT Local plugin in ChatGPT, if the plugin settings let you choose an icon.
 
-The logo is generated from `assets/icon.svg` by `node scripts/make-icons.mjs`, which also writes the Windows icon `assets/ygpt.ico` and `assets/png/icon-*.png`. The mark has two optical cuts: the full leaf drawing at 32 px and above, and thinner arms with a deeper notch and a larger sun at 31 px and below. Do not edit the PNGs by hand. Change the SVG and run the script again. See `docs/DESIGN_FIRST_LIGHT.md`.
+The canonical artwork is the owner's board-derived `assets/icon-glyph-hd.png`. Run `python3 scripts/make-icons-from-original.py` (Pillow with libimagequant) to generate the 256×256 PNGs (≤10 KB) and seven-size Windows ICOs. `node scripts/make-icons.mjs` and `node scripts/brand-assets.mjs` both delegate to that generator. The five picker editions are retained independently. See `docs/BRAND_ASSETS.md`.

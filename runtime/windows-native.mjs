@@ -4,6 +4,6 @@ export const nativeWindowsExe=fileURLToPath(new URL('./NativeWindows.exe',import
 export function nativeWindows(action,args={},timeout=45000){
  const r=spawnSync(nativeWindowsExe,[],{input:JSON.stringify({action,...args}),encoding:'utf8',windowsHide:true,timeout,maxBuffer:1024*1024});
  let value;try{value=JSON.parse(r.stdout);}catch{throw Error('Native Windows checks unavailable; repair bundled runtime');}
- if(r.error||r.status!==0||!value.ok)throw Object.assign(Error('Native Windows check failed: '+(value.code??'UNAVAILABLE')),{code:value.code??'WINDOWS_CHECK_UNAVAILABLE'});
+ if(r.error||r.status!==0||!value.ok)throw Object.assign(Error('Native Windows check failed: '+(value.code??'UNAVAILABLE')+(value.path?' at '+value.path:'')+(value.target?' -> '+value.target:'')),{code:value.code??'WINDOWS_CHECK_UNAVAILABLE',path:value.path??null,target:value.target??null});
  return value.result;
 }
