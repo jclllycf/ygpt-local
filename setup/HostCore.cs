@@ -15,7 +15,7 @@ using Microsoft.Win32;
 using Microsoft.Win32.SafeHandles;
 
 public static class HostCore {
- public const string Version="1.0.2";
+ public const string Version="1.0.3";
  public static readonly JavaScriptSerializer Json=new JavaScriptSerializer{MaxJsonLength=32*1024*1024};
  public static string Full(string p){return Path.GetFullPath(p).TrimEnd(Path.DirectorySeparatorChar);}
  // Fresh-install defaults prefer a non-system fixed drive (D: when present)
@@ -69,7 +69,19 @@ public static class HostCore {
  }
  public static void Start(string install,string data){CheckPath(data);foreach(string file in new[]{"paused","maintenance-request"}){string p=Path.Combine(data,file);CheckPath(p);if(File.Exists(p))File.Delete(p);}Process.Start(new ProcessStartInfo(Path.Combine(install,"YGPTWatchdog.exe"),"--data-dir "+Q(data)){UseShellExecute=false,CreateNoWindow=true,WindowStyle=ProcessWindowStyle.Hidden,WorkingDirectory=install});}
  static bool Stopped(string data,DateTime after){try{var h=Read(Path.Combine(data,"watchdog-health.json"));return S(h,"ownerId")==OwnerId(data)&&B(h,"stopped")&&DateTime.Parse(S(h,"at")).ToUniversalTime()>=after&&!ProcessAlive(Convert.ToInt32(h["pid"]),Convert.ToInt64(h["birth"]));}catch{return false;}}
- static bool NoOwnedWorkers(Dictionary<string,object> health){string root=S(health,"installRoot");if(root=="")return false;using(var query=new ManagementObjectSearcher("SELECT ExecutablePath FROM Win32_Process")){foreach(ManagementObject p in query.Get()){string exe=Convert.ToString(p["ExecutablePath"]);if(exe!=""&&Within(exe,root)&&!new[]{"YGPTLocal.exe","YGPTWatchdog.exe","tunnel-client.exe"}.Contains(Path.GetFileName(exe),StringComparer.OrdinalIgnoreCase))return false;}}return true;}
+ // WMI can report synthetic or malformed executable paths for unrelated processes.
+ // Do not let one foreign invalid path disable a verified owner-only repair.
+ // A malformed path mentioning this installation is ambiguous: fail closed.
+ static bool IsOwnedProcessPath(string exe,string root){
+  if(String.IsNullOrWhiteSpace(exe))return false;
+  string ownedRoot=Full(root);
+  try{string full=Full(exe);return String.Equals(full,ownedRoot,StringComparison.OrdinalIgnoreCase)||Within(full,ownedRoot);}
+  catch(ArgumentException){
+   if(exe.IndexOf(ownedRoot,StringComparison.OrdinalIgnoreCase)>=0)throw new InvalidOperationException("Cannot prove an executable under the installation root is idle; no application files were replaced.");
+   return false;
+  }
+ }
+ static bool NoOwnedWorkers(Dictionary<string,object> health){string root=S(health,"installRoot");if(root=="")return false;using(var query=new ManagementObjectSearcher("SELECT ExecutablePath FROM Win32_Process")){foreach(ManagementObject p in query.Get()){string exe=Convert.ToString(p["ExecutablePath"]);if(IsOwnedProcessPath(exe,root)&&!new[]{"YGPTLocal.exe","YGPTWatchdog.exe","tunnel-client.exe"}.Contains(Path.GetFileName(exe),StringComparer.OrdinalIgnoreCase))return false;}}return true;}
  // A partially installed profile may not have produced watchdog-health.json yet.
  // Never invent a successful health record or stop an unrelated Tunnel.
  public static void PrepareOwnedRepair(string install,string data){
@@ -82,7 +94,7 @@ public static class HostCore {
    using(var query=new ManagementObjectSearcher("SELECT ProcessId,ExecutablePath,CommandLine FROM Win32_Process"))
    foreach(ManagementObject row in query.Get()){
     string exe=Convert.ToString(row["ExecutablePath"]),cmd=Convert.ToString(row["CommandLine"]);
-    if((exe!=""&&(String.Equals(Full(exe),Full(install),StringComparison.OrdinalIgnoreCase)||Within(exe,install)))||
+    if(IsOwnedProcessPath(exe,install)||
        (cmd!=""&&cmd.IndexOf("--data-dir",StringComparison.OrdinalIgnoreCase)>=0&&cmd.IndexOf(Full(data),StringComparison.OrdinalIgnoreCase)>=0))
      throw new InvalidOperationException("An installed YGPT Local process may still be active, but its Watchdog status is missing. Wait for startup or close only this installation safely, then retry. No application files were replaced.");
    }

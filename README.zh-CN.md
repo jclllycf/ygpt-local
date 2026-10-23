@@ -4,11 +4,11 @@
 
 从 ChatGPT 使用你自己的 Windows 文件和工具，保留写前快照、恢复冲突保护和高风险审批。
 
-**1.0.2 是当前正式版，界面仅英文。** 安装包见 [GitHub Releases](https://github.com/jclllycf/ygpt-local/releases/tag/v1.0.2)，仓库保持私有。实测范围和仍需用户验收的项目见 [正式版交付说明](docs/RELEASE_1.0.2_ZH.md)。另见 [English README](README.md)、[CHANGELOG](CHANGELOG.md)、[中文升级指南](docs/UPGRADE_USER_GUIDE.zh-CN.md)、[中文安装教程](docs/SETUP_GUIDE.zh-CN.md)、[验收状态](docs/VALIDATION.md)、[安全边界](docs/SECURITY.md)。
+**1.0.3 是当前正式版，界面仅英文。** 安装包见 [GitHub Releases](https://github.com/jclllycf/ygpt-local/releases/tag/v1.0.3)，仓库保持私有。实测范围和仍需用户验收的项目见 [正式版交付说明](docs/RELEASE_1.0.3_ZH.md)。另见 [English README](README.md)、[CHANGELOG](CHANGELOG.md)、[中文升级指南](docs/UPGRADE_USER_GUIDE.zh-CN.md)、[中文安装教程](docs/SETUP_GUIDE.zh-CN.md)、[验收状态](docs/VALIDATION.md)、[安全边界](docs/SECURITY.md)。
 
 ## 图形安装流程
 
-1. 获取 `YGPTLocal-Setup-1.0.2-win-x64.exe`，核对 `SHA256SUMS.txt`。安装包未签名。已经安装过？改为运行 `YGPTLocal-Update-1.0.2-win-x64.exe`：原地更新，保留数据、密钥、连接身份、快照和 ChatGPT 插件，并将旧版外部数据迁入程序目录（见 [升级指南](docs/UPGRADE_USER_GUIDE.zh-CN.md)）。
+1. 获取 `YGPTLocal-Setup-1.0.3-win-x64.exe`，核对 `SHA256SUMS.txt`。安装包未签名。已经安装过？改为运行 `YGPTLocal-Update-1.0.3-win-x64.exe`：原地更新，保留数据、密钥、连接身份、快照和 ChatGPT 插件，并将旧版外部数据迁入程序目录（见 [升级指南](docs/UPGRADE_USER_GUIDE.zh-CN.md)）。
 2. 双击八步向导，选择程序目录和授权工作目录。内置 Node、Python 和官方 Tunnel Client，普通安装不要求开发环境或管理员权限。
 3. 保留默认 **OpenAI Secure MCP Tunnel**。在自己有资格的 Platform 组织中创建专用 Tunnel，并关联实际使用的 ChatGPT 工作区。不要抢用其他实例已连接的 Tunnel。
 4. 在本机填写完整 Tunnel ID 和专用运行时 API Key。Key 使用遮罩输入和当前用户 DPAPI 加密，用于认证 Tunnel Client；安装器不调用 GPT 生成模型，也不代为创建 Key。

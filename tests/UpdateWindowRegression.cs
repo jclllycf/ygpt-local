@@ -14,7 +14,7 @@ using System.Windows.Threading;
 // Backends deliberately have no process, registry, credential or network effects.
 // Only UpdateWindow.cs is production code in this isolated WPF regression.
 public static class HostCore {
- public const string Version="1.0.2";
+ public const string Version="1.0.3";
  public static readonly JavaScriptSerializer Json=new JavaScriptSerializer();
  public static readonly ManualResetEvent AllowPause=new ManualResetEvent(true),PauseEntered=new ManualResetEvent(false);
  public static readonly ConcurrentQueue<string> Calls=new ConcurrentQueue<string>();

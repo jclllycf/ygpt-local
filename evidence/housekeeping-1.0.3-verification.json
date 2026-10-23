@@ -1,0 +1,143 @@
+{
+  "version": "1.0.3",
+  "at": "2026-10-23T16:35:23.967Z",
+  "tests": {
+    "total": 121,
+    "passed": 116,
+    "failed": 0,
+    "skipped": 5
+  },
+  "package": {
+    "version": "1.0.3",
+    "manifestFiles": 5869,
+    "manifestMismatches": 0,
+    "forbiddenMembers": 0,
+    "currentRuntimeServiceExtensionMatch": true,
+    "currentNativeBinariesMatch": true,
+    "artifacts": [
+      {
+        "file": "YGPTLocal-Setup-1.0.3-win-x64.exe",
+        "bytes": 93981696,
+        "sha256": "0956b9eb42d9e66869aa3790cd55b00ec8d9131c7dca69c8ab82eec44676c4bf"
+      },
+      {
+        "file": "YGPTLocal-Update-1.0.3-win-x64.exe",
+        "bytes": 93981696,
+        "sha256": "b9da165e07df73862dff8cdea423a605b1d0c43fb658e0f9a5fc77b233cae307"
+      },
+      {
+        "file": "ygpt-local-portable-1.0.3-win-x64.zip",
+        "bytes": 93023442,
+        "sha256": "6e4119a3dbc7e6ef1bd310c9f56cc8b47a1aa0966d8df8e602ba73d33dbac954"
+      }
+    ]
+  },
+  "integration": {
+    "remoteCommit": "c00a300ef2d5df8b1aae67e335caaefc360796ef",
+    "keepsConcurrentWindowsCiAndOwnershipFixes": true
+  },
+  "ownerMachine": {
+    "releaseInstalled": false,
+    "state": "deferred-by-owner",
+    "lastInstalledVersion": "1.0.2",
+    "agentUpgradedProductionAfterOwnerDeferral": false
+  },
+  "precedingWindowsFieldEvidence": {
+    "version": "1.0.2",
+    "installedPackage": {
+      "version": "1.0.2",
+      "at": "2026-10-23T16:28:01.785Z",
+      "finalPackageInstalled": true,
+      "manifestFiles": 5866,
+      "manifestMismatches": 0,
+      "secretsConnectionAndPairingPreserved": true,
+      "stateInsideSelectedRoot": true,
+      "oldExternalDataAbsent": true,
+      "fixtureHashMatches": true,
+      "stateAclAndLinksVerified": true,
+      "health": {
+        "version": "1.0.2",
+        "phase": "connected",
+        "localReady": true,
+        "tunnelConnected": true,
+        "error": ""
+      }
+    },
+    "initialFieldCleanup": {
+      "at": "2026-10-23T15:47:07.991Z",
+      "cleanupCompleted": true,
+      "removedFiles": 11692,
+      "bytesReclaimed": 692337314,
+      "removedRollbackCopies": 2,
+      "verifiedRollbackCopiesRetained": 1,
+      "obsoleteRegistrationsBackedUpAndRemoved": 3,
+      "remainingUpdatesFiles": 5863,
+      "remainingUpdatesBytes": 256752960,
+      "privateIdentityAndPairingUnchanged": true,
+      "developerGitCommonDirectoryPreserved": true,
+      "snapshotsSwept": false
+    },
+    "automaticCleanupAfterUpgrade": {
+      "version": "1.0.2",
+      "at": "2026-10-23T16:27:30.6893700Z",
+      "automaticAfterUpgrade": true,
+      "state": "complete",
+      "removedFiles": 5866,
+      "bytesReclaimed": 347641173,
+      "removedRollbackCopies": 1,
+      "verifiedRollbackRetained": true,
+      "removedRegistrations": 0,
+      "reviewRequired": false,
+      "retryPending": false,
+      "remainingUpdatesFiles": 5880,
+      "remainingUpdatesBytes": 257364440,
+      "privateDataKept": true,
+      "snapshotsSwept": false,
+      "externalDownloadsSwept": false,
+      "legacyDownloadReceipt": {
+        "state": "review-required",
+        "code": "INSTALLATION_SCOPE_CHANGED",
+        "at": "2026-10-23T16:21:33.8873583Z",
+        "filesDeleted": 0
+      },
+      "items": [
+        {
+          "kind": "rollback",
+          "outcome": "kept",
+          "reason": "latest verified rollback: 1.0.2"
+        },
+        {
+          "kind": "rollback",
+          "outcome": "removed",
+          "reason": "verified surplus application payload"
+        },
+        {
+          "kind": "release-cache",
+          "outcome": "removed",
+          "reason": "verified redundant download cache"
+        }
+      ]
+    }
+  },
+  "dependencyLock": {
+    "productVersionOnlyBump": true,
+    "installedDependenciesMatchLockedVersions": true,
+    "registryTarballVersionsMatchLock": true
+  },
+  "nativeUi": {
+    "sharedLayoutFixtureVersion": "1.0.2",
+    "compiledWpfRendered": true,
+    "fixtureOnly": true,
+    "englishOnly": true
+  },
+  "ownerBrowserExtension": {
+    "loadedLegacyCodeMayRequireManualReload": true,
+    "privilegedBrowserPageRefreshNotAutomated": true,
+    "privateProfilesCopied": false
+  },
+  "limits": {
+    "realChatGPTHumanApproval": "not verified",
+    "windowsSignInAndCleanWindows": "not verified",
+    "packageSigning": "unsigned"
+  }
+}

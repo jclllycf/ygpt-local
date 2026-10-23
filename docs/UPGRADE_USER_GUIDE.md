@@ -1,6 +1,6 @@
 # Upgrading and using YGPT Local
 
-[中文升级说明](UPGRADE_USER_GUIDE.zh-CN.md) · [Setup](SETUP_GUIDE.md) · [Release notes](RELEASE_1.0.2.md)
+[中文升级说明](UPGRADE_USER_GUIDE.zh-CN.md) · [Setup](SETUP_GUIDE.md) · [Release notes](RELEASE_1.0.3.md)
 
 ## Update in place
 
@@ -8,7 +8,7 @@ Run the Update EXE from the latest release. It finds the existing installation, 
 
 All product data lives in `<chosen application folder>\data`. Staging and rollback members live in `.updates`. Legacy external data is moved inside the chosen application folder; two private state trees are never merged. Unknown user files remain untouched.
 
-If a browser extension from rc.17 or earlier remains loaded, click Reload once in each profile's extension manager. Keep the pairing token. Extension 1.0.29 includes version negotiation for subsequent resource reloads.
+If a browser extension from rc.17 or earlier remains loaded, click Reload once in each profile's extension manager. Keep the pairing token. Extension 1.0.39 includes version negotiation for subsequent resource reloads.
 
 ## Understand permission prompts
 

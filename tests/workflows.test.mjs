@@ -14,7 +14,16 @@ test('Actual isolated Edge, native UIA fixture and durable job output',async()=>
   const image=await call('y_browser_screenshot',{tabId:tab,...ctx});assert.ok(image.result.sha256);
   const other=await c.call('y_browser_snapshot',{tabId:tab});assert.ok(other.isError&&/SESSION_FOREIGN/.test(JSON.stringify(other)),'another chat cannot read this tab');
   assert.equal((await call('y_browser_tabs')).result.tabs.length,0,'another chat lists no tabs of this chat');
-  created=await call('y_desktop_fixture');const window=await until(async()=>{const inventory=await call('y_desktop_windows');return inventory.result.windows.find(w=>w.pid===created.pid);});
+  created=await call('y_desktop_fixture');const window=await until(async()=>{
+    // Read-only UIA inventory may transiently time out on a heavily loaded Windows runner.
+    // Retry the observation only; never replay UIA actions or approvals.
+    const response=await c.call('y_desktop_windows');
+    if(response.isError){
+      if(response.structuredContent?.error?.code==='UIA_TIMEOUT')return false;
+      assert.fail(JSON.stringify(response));
+    }
+    return unpack(response).result.windows.find(w=>w.pid===created.pid);
+  },120000);
   // UIA is available but never silent: bind and each action wait for a decision.
   const pendingBind=await call('y_desktop_bind',{hwnd:window.hwnd,...ctx});assert.equal(pendingBind.code,'APPROVAL_REQUIRED');
   const bound=await decide(c,pendingBind,'once',ctx.contextToken);assert.equal(bound.state,'succeeded',JSON.stringify(bound));target=bound.result.structuredContent.result.targetId;

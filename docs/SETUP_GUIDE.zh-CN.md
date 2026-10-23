@@ -1,6 +1,6 @@
 # Windows 安装说明
 
-[English setup guide](SETUP_GUIDE.md) · [正式版说明](RELEASE_1.0.2_ZH.md)
+[English setup guide](SETUP_GUIDE.md) · [正式版说明](RELEASE_1.0.3_ZH.md)
 
 界面全部使用英文，中文说明单独提供。首次安装用 Setup，已安装用 Update，核对同一 Release 的 `SHA256SUMS.txt`。安装包未签名。
 

@@ -4,7 +4,7 @@
 
 Connect ChatGPT to files and tools on your own Windows PC, with protected snapshots, conflict-aware recovery and scoped approval.
 
-**1.0.2 is the current stable release, with English-only UI.** Download from [GitHub Releases](https://github.com/jclllycf/ygpt-local/releases/tag/v1.0.2). The repository remains private. See the [release handoff](docs/RELEASE_1.0.2.md) for verification and owner acceptance still outstanding.
+**1.0.3 is the current stable release, with English-only UI.** Download from [GitHub Releases](https://github.com/jclllycf/ygpt-local/releases/tag/v1.0.3). The repository remains private. See the [release handoff](docs/RELEASE_1.0.3.md) for verification and owner acceptance still outstanding.
 
 [Setup guide](docs/SETUP_GUIDE.md) · [Upgrade guide](docs/UPGRADE_USER_GUIDE.md) · [Changelog](CHANGELOG.md) · [Validation](docs/VALIDATION.md) · [Security](docs/SECURITY.md) · [中文说明](README.zh-CN.md)
 
@@ -12,7 +12,7 @@ Connect ChatGPT to files and tools on your own Windows PC, with protected snapsh
 
 ## Install
 
-1. Obtain `YGPTLocal-Setup-1.0.2-win-x64.exe` and compare its SHA-256 with `SHA256SUMS.txt`. The installers are unsigned. Already installed? Run `YGPTLocal-Update-1.0.2-win-x64.exe` instead: it updates in place and preserves your data, keys, connection identity, snapshots and ChatGPT plugin; legacy external data moves inside the application folder ([upgrade guide](docs/UPGRADE_USER_GUIDE.md)).
+1. Obtain `YGPTLocal-Setup-1.0.3-win-x64.exe` and compare its SHA-256 with `SHA256SUMS.txt`. The installers are unsigned. Already installed? Run `YGPTLocal-Update-1.0.3-win-x64.exe` instead: it updates in place and preserves your data, keys, connection identity, snapshots and ChatGPT plugin; legacy external data moves inside the application folder ([upgrade guide](docs/UPGRADE_USER_GUIDE.md)).
 2. Run the eight-step native Windows wizard. Choose an application folder and an authorized working folder. Node, Python and the official Tunnel Client are bundled; normal installation needs no developer tools or administrator privileges.
 3. Keep **OpenAI Secure MCP Tunnel** selected. Create a dedicated Tunnel in your eligible Platform organization and associate the intended ChatGPT workspace. Do not reuse a Tunnel already run by another installation.
 4. Enter the full ID and a dedicated runtime API key in the masked local field. DPAPI encrypts it for your Windows user. It authenticates the Tunnel Client; setup does not call generation models or create keys.

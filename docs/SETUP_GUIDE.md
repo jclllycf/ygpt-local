@@ -1,12 +1,12 @@
 # Windows setup guide
 
-[中文安装说明](SETUP_GUIDE.zh-CN.md) · [Release notes](RELEASE_1.0.2.md) · [Upgrade guide](UPGRADE_USER_GUIDE.md)
+[中文安装说明](SETUP_GUIDE.zh-CN.md) · [Release notes](RELEASE_1.0.3.md) · [Upgrade guide](UPGRADE_USER_GUIDE.md)
 
 The application is English-only. The next action stays at the bottom of the native window; optional settings expand when needed.
 
 ## Before you start
 
-Run **YGPTLocal-Setup-1.0.2-win-x64.exe** for your first installation, or **YGPTLocal-Update-1.0.2-win-x64.exe** to update in place. Compare the download's SHA-256 with `SHA256SUMS.txt` from the same release. Installers are unsigned.
+Run **YGPTLocal-Setup-1.0.3-win-x64.exe** for your first installation, or **YGPTLocal-Update-1.0.3-win-x64.exe** to update in place. Compare the download's SHA-256 with `SHA256SUMS.txt` from the same release. Installers are unsigned.
 
 ## 1. Choose folders
 

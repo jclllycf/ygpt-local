@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0.3 — integrated Windows release
+
+- Include the migration-cleanup fixes from 1.0.2 and preserve correct dependency lock versions.
+- Merge concurrent Windows CI improvements: scoped/concurrent builds, authenticated runtime metadata checks and clearer publisher errors.
+- Ignore unrelated malformed WMI paths while retaining fail-closed ownership checks for paths referring to this installation; stabilize physical-path, private-ACL and UIA fixtures.
+
 ## 1.0.2 — migration cleanup compatibility
 
 - Keep download cleanup and rollback-cache maintenance independent after migration.
