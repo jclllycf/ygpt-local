@@ -1,0 +1,37 @@
+[
+  {
+    "file": "01-sprout-256.png",
+    "design": "Current sprout",
+    "width": 256,
+    "height": 256,
+    "bytes": 4501
+  },
+  {
+    "file": "02-green-y-256.png",
+    "design": "Green y_",
+    "width": 256,
+    "height": 256,
+    "bytes": 4376
+  },
+  {
+    "file": "03-sky-y-256.png",
+    "design": "Sky y_",
+    "width": 256,
+    "height": 256,
+    "bytes": 4577
+  },
+  {
+    "file": "04-classic-green-256.png",
+    "design": "Classic green Y",
+    "width": 256,
+    "height": 256,
+    "bytes": 2991
+  },
+  {
+    "file": "05-signature-256.png",
+    "design": "Signature",
+    "width": 256,
+    "height": 256,
+    "bytes": 5306
+  }
+]

@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.0.4 — guided setup and exact-file cleanup
+
+- Retry transient Windows clipboard contention without losing setup progress.
+- Separate five upload-only PNG designs, each 256×256 and below 10,000 bytes, from HD app/approval artwork.
+- Default appearance and field guides open; put Copy beside each field and keep version information at the lower left.
+- Continue past an unchanged, already completed installation instead of installing again after Back.
+- Add a skippable browser step with Chrome/Edge extension-manager and pairing links.
+- Open an English installation/size/cleanup request as a new unsent ChatGPT draft; keep sending under the user's control.
+- Default exact download cleanup on; after authenticated first use, close this downloaded Setup when applicable and clean only signed-plan files with an installed after-exit helper.
+- Welcome feedback in English/Chinese docs and record the owner's successful Free-account use as user-reported field evidence.
+
 ## 1.0.3 — integrated Windows release
 
 - Include the migration-cleanup fixes from 1.0.2 and preserve correct dependency lock versions.

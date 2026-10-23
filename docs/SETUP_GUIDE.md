@@ -1,88 +1,94 @@
 # Windows setup guide
 
-[中文安装说明](SETUP_GUIDE.zh-CN.md) · [Release notes](RELEASE_1.0.3.md) · [Upgrade guide](UPGRADE_USER_GUIDE.md)
+[中文安装说明](SETUP_GUIDE.zh-CN.md) · [Release notes](RELEASE_1.0.4.md) · [Upgrade guide](UPGRADE_USER_GUIDE.md)
 
-The application is English-only. The next action stays at the bottom of the native window; optional settings expand when needed.
+The English Windows wizard has nine steps. Back and the next action stay visible; version information stays at the lower left. Longer pages scroll from the top when you enter them.
 
-## Before you start
-
-Run **YGPTLocal-Setup-1.0.3-win-x64.exe** for your first installation, or **YGPTLocal-Update-1.0.3-win-x64.exe** to update in place. Compare the download's SHA-256 with `SHA256SUMS.txt` from the same release. Installers are unsigned.
+Run **YGPTLocal-Setup-1.0.4-win-x64.exe** for a first installation, or **YGPTLocal-Update-1.0.4-win-x64.exe** to update. Compare SHA-256 with the same release's SHA256SUMS.txt. Installers are unsigned.
 
 ## 1. Choose folders
 
-Choose an empty **Application folder**, such as `D:\YGPTLocal`. Product data, caches, snapshots and update files stay inside it. **Working folder** is where initial file tasks run; use a Projects or test folder rather than a whole drive. Review the local-access consent before continuing.
+Choose an empty **Application folder**, for example D:\YGPTLocal. Product data, caches, snapshots and update files stay inside it. Choose an existing Projects or test **Working folder** for initial file tasks, then review the local-access consent.
 
-**Appearance and approval preview** and **Installation cleanup** are optional. Safe cleanup keeps private data and unknown files. Deleting the exact downloaded Setup requires its own checkbox; Downloads is never swept.
+**Appearance and approval preview** opens by default. Choose the icon and preview the approval strip. This does not reduce the quality of application or approval artwork.
+
+**Installation cleanup** also opens by default. Both safe cleanup and **Auto remove this exact downloaded Setup** are checked; you can turn either off before installing. The exact download path and size are shown. Downloads and Temp are never swept.
 
 ## 2. Check this PC
 
-Review Windows x64, drive space and Windows-user encryption. Node, Python and the official Tunnel Client are included. **Connect automatically when I sign in** starts one quiet connection at Windows sign-in. Advanced port and proxy fields are optional.
+Review Windows x64, available storage and Windows-user encryption. Node, Python and the official Tunnel Client are bundled. **Connect automatically when I sign in** starts one quiet connection. Port and proxy fields remain optional advanced settings.
 
-## 3. Choose a connection
+## 3. Connection method
 
-**Secure MCP Tunnel** is the default for an eligible OpenAI organization and associated ChatGPT workspace. Open the official Tunnels page from the guide, create a dedicated tunnel and paste the complete `tunnel_…` ID. Copy buttons provide its suggested name and description. The expandable guide explains organization and workspace fields.
+Keep **Secure MCP Tunnel** for a supported OpenAI organization and associated ChatGPT workspace. Open the official Tunnels page. The **field by field** guide is already open: copy the suggested name and description using the button beside each field, choose the organization owning your runtime key, and select the ChatGPT workspace where the plugin will be installed. Create a dedicated tunnel, copy its entire tunnel_… ID and paste it below.
 
-A Tunnel ID is not an API key. Use the organization that owns the runtime credential and the workspace where you will install the plugin. Do not reuse another installation's active tunnel.
+The Tunnel ID is not an API key. Do not reuse another installation's active tunnel. Cloudflare and local-only routes remain under advanced methods; public HTTPS uses OAuth, and local-only mode is not directly reachable by remote ChatGPT.
 
-Cloudflare and local-only routes remain under **Advanced connection methods**. Public HTTPS uses OAuth; local-only mode cannot be reached directly by remote ChatGPT.
+## 4. Runtime key
 
-## 4. Add the runtime key
+Open the official API Keys page. The expanded guide provides a suggested key name beside its Copy button and explains organization, project, permission and expiry choices. Paste the secret only into the masked local field. Windows DPAPI encrypts it for your user. Setup runs the Tunnel Client without calling generation models. Saved credentials are kept unless you choose to replace them.
 
-Choose **Open official API Keys** and create a dedicated key in the intended organization. Follow its permission and expiry policy. Paste the secret only into the masked **OpenAI Tunnel runtime key** field. DPAPI encrypts it for your Windows user. It runs the Tunnel Client; setup does not invoke generation models.
+## 5. Review & install
 
-A saved key is kept unless you expand **Replace the saved credential**. A saved label establishes that encrypted data exists; connection checks establish whether the connection works.
+Review all paths, connection settings and cleanup choices, then choose **Install YGPT Local**. The success banner confirms installation separately from remote verification.
 
-## 5. Review and install
-
-Check the application folder, internal data path, working folder, connection method and preferences. Choose **Install YGPT Local**. Setup verifies the payload, protects configuration and starts this installation's connection. Repair waits for owned work and preserves connection identity.
+Going Back and returning with unchanged settings shows **Continue to connection check** and does not install again. If you change installation settings, **Apply changed settings** applies the new choices once.
 
 ## 6. Check connection
 
 | Row | Meaning |
 | --- | --- |
-| Local tools | Whether the local tool engine has responded |
-| Private tunnel | Whether the Tunnel Client reports a current connection |
-| First ChatGPT task | Whether the verification file was read over the authenticated connection |
+| Local tools | Whether the local engine responded |
+| Private tunnel | Whether the Tunnel Client has a current connection |
+| First ChatGPT task | Whether the marker was read over the authenticated connection |
 
-A connected tunnel may wait for ChatGPT's first request before starting the engine; continue to the next step in that case. Expand **Connection details** for diagnostics and use **Run connection checks** to refresh. Local status does not prove a real ChatGPT answer or human approval.
+A connected Tunnel can wait for ChatGPT's first request before starting the engine. Continue to plugin creation in that case. **Connection details** provides measured errors and next actions. A local green status does not prove a real ChatGPT answer or human approval.
 
 ## 7. Add to ChatGPT
 
-Open **ChatGPT Plugins → Add → Add custom MCP server**.
+Open **Plugins → Add → Add custom MCP server**. Follow the visible numbered fields and adjacent Copy buttons.
 
 | Field | Dedicated private tunnel |
 | --- | --- |
-| Icon | `assets/brand/plugin-icon-256.png`, under 10 KB |
-| Name | **Copy name** |
-| Description | **Copy description** |
-| Connection | **Tunnel** |
-| Tunnel ID | **Copy Tunnel ID** |
-| Authentication | **No authentication**, for this dedicated private tunnel only |
+| Icon | Matching PNG in assets/plugin-icons; **Open plugin icons folder** opens only that folder |
+| Name | YGPT Local; copy beside the field |
+| Description | Copy beside the description field |
+| Connection | Tunnel |
+| Tunnel ID | Copy beside the connection field |
+| Authentication | No authentication, for this dedicated private Tunnel only |
 
-Keep the runtime key in YGPT; do not paste it into the plugin form or chat. No authentication omits extra application OAuth for this private tunnel. Runtime credentials, organization/workspace restrictions and local protections still apply. Public HTTPS uses **OAuth**.
+All five upload PNGs are 256 × 256 and below 10,000 bytes. App, approval, browser-extension and Windows icons use their separate HD assets. The plugin upload size limit does not apply to those surfaces.
 
-Read the official risk warning yourself, then create and install the personal plugin. YGPT does not accept those human confirmations for you. Platform labels and account availability may vary.
+Keep the runtime key in YGPT. No authentication omits additional application OAuth only; Tunnel credentials, organization/workspace restrictions and local protections remain. Public HTTPS uses OAuth. Read the official risk warning and create/install the plugin yourself.
 
-## 8. Try your first task
+## 8. Browser (optional)
 
-Select `@YGPT Local` in a new conversation. Choose **Copy first-task prompt**, paste it into the chat and confirm the exact random marker returned. Choose **Check first real tool result** to refresh the local status.
+Choose your default browser, Chrome or Edge for the final ChatGPT draft. Daily-browser pairing is optional: **Skip for now** continues without it.
 
-You may close setup after copying the prompt; the connection stays active. Eligible cleanup waits for verified first use and setup exit. Settings contains receipts and maintenance actions.
+To pair, select **Connect my daily Chrome or Edge**. Choose **Open Chrome extensions** or **Open Edge extensions**, turn on Developer mode in the intended profile and use Load unpacked. Copy/open the installed extension folder. Then choose **Open pairing page** in that same browser and enter its token in the extension. Each browser profile pairs separately; YGPT uses its own tab group and preserves personal tabs. You can continue without pairing.
 
-## Completion and uninstall feedback
+The isolated browser needs no extension. Default reads close it and remove its temporary profile before returning. Multi-step work explicitly uses keepAlive=true and closes when finished; an idle lease releases abandoned contexts.
 
-Installation and authenticated file-read verification have separate completion banners. Connection checks may report **Connection checks complete** while the first ChatGPT task is still pending. An installed update whose connection is starting is shown separately from **Update complete**; failures offer **Try update again**. The window prevents closing during file replacement.
+## 9. Verify & finish
 
-Uninstall stops this installation and removes unchanged application files. Its result window lists deleted, already absent, changed and blocked files separately. Private settings, encrypted credentials, snapshots, recovery records and unregistered user files remain intentionally. **Open retained folder** and **Copy details** help review them. The private receipt is `data/uninstall-report.json`. The contained `.updates` folder retains recovery records and the uninstall helper; no helper process remains after closing the result window. Changed or locked files are reported instead of being silently forced away.
+Choose **Open ChatGPT with the check ready**. A new conversation opens with an English prompt in the composer. Review it, select @YGPT Local if needed and send it yourself. Setup does not send the message or select approvals. The link uses OpenAI's [documented unsent-draft pattern](https://developers.openai.com/training/walkthroughs/building-a-shareable-site).
 
-## Installation leftovers
+The request checks the application location and file sizes, lists the verification marker before reading it, reports its exact text, and requests cleanup only through the signed ownership plan. Confirm the same marker in the ChatGPT answer. **Check verification result** refreshes local evidence.
 
-Open **Advanced maintenance → Review installation leftovers** to inspect cache and registration cleanup. After current payload integrity and connection health are verified, the automatic policy retains one complete rollback and removes surplus verified program copies and redundant contained installers. Old YGPT registrations are backed up before removal. Unknown, changed, linked, shared or referenced files remain with reasons. Private data, snapshots, migration/recovery records and developer directories remain untouched. The updater's optional download checkbox authorizes only that exact external file; Downloads is never swept.
+With both default cleanup choices kept on, after you open the draft and the authenticated read succeeds, this downloaded Setup closes for cleanup even if you have not clicked **Finish setup**. A hash-verified helper inside the installation waits for Setup to exit, removes eligible exact files and exits. Private data, Settings, runtimes, credentials, snapshots and the retained rollback stay. In-use, changed, referenced or unknown files stay with reasons. The receipt distinguishes completed from deferred removal. You can also finish manually; the connection runs independently.
 
-## Optional: your daily browser
+## Copying and completion feedback
 
-Expand **Use your daily Chrome or Edge** on the last page. In the intended profile, enable Developer mode, load the installed `extension` folder, open the pairing page and copy its token into the extension. Each profile pairs separately. Tasks choose the intended profile if several are connected. YGPT works in its own tab group and preserves personal tabs.
+Windows can temporarily lock the clipboard for another program. Copy/Paste buttons retry that contention, then show a recoverable message if it persists. Your setup progress stays available. Close the competing clipboard/remote-session overlay and retry the same button.
 
-The isolated browser works without this extension. A default isolated read closes the browser and deletes its temporary profile before returning. Multi-step work explicitly uses `keepAlive=true`, keeps its context token and closes its tabs when done; a 30-second idle lease cleans up abandoned work.
+Installation, authenticated marker verification and update completion have separate banners. A replaced payload whose connection is still starting is reported separately. File replacement prevents closing the window mid-operation; failures expose a retry action.
 
-Background references: [Secure MCP Tunnels](https://developers.openai.com/api/docs/guides/secure-mcp-tunnels), [custom MCP servers](https://developers.openai.com/api/docs/guides/custom-mcp-server). Local fixtures do not replace real account acceptance.
+Uninstall reports deleted, already absent, changed and blocked files separately, with **Open retained folder**, **Copy details** and data/uninstall-report.json. Private state, snapshots, recovery records and unregistered files are retained intentionally.
+
+**Advanced maintenance → Review installation leftovers** audits contained update caches and obsolete registrations. Cleanup verifies current integrity and connection health, retains one complete rollback, and backs up obsolete registrations before removing them. Developer folders, private data and protected recovery records are not swept.
+
+## Account field result and feedback
+
+On October 23, 2026, the owner reported successful real use with a ChatGPT Free account. This is a user-reported field result, separate from automated fixture tests; availability and permissions can vary by account and workspace.
+
+[Feedback is welcome](https://github.com/jclllycf/ygpt-local/issues/new): version, steps, expected/actual result and sanitized screenshots help reproduce a problem. Leave out keys, tokens and private contents.

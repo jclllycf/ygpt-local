@@ -2,24 +2,27 @@
 
 # YGPT Local
 
-Connect ChatGPT to files and tools on your own Windows PC, with protected snapshots, conflict-aware recovery and scoped approval.
+Bring files, projects and approved Windows tools to the ChatGPT account you already use, with protected snapshots and conflict-aware recovery.
 
-**1.0.3 is the current stable release, with English-only UI.** Download from [GitHub Releases](https://github.com/jclllycf/ygpt-local/releases/tag/v1.0.3). The source code and release downloads are public. See the [release handoff](docs/RELEASE_1.0.3.md) for verification and owner acceptance still outstanding.
+**1.0.4 is the current stable release, with English-only UI.** Download from [GitHub Releases](https://github.com/jclllycf/ygpt-local/releases/tag/v1.0.4). Source and downloads are public. See the [release notes](docs/RELEASE_1.0.4.md) for the new guided setup and its verification scope.
+
+**Free-account field result:** on October 23, 2026, the project owner reported successful real use with a ChatGPT Free account. This is a concrete user-reported feasibility milestone; account availability, workspace permissions and Platform Tunnel access still need to be checked for each setup. It is not a promise of access for every Free account.
 
 [Setup guide](docs/SETUP_GUIDE.md) · [Upgrade guide](docs/UPGRADE_USER_GUIDE.md) · [Changelog](CHANGELOG.md) · [Validation](docs/VALIDATION.md) · [Security](docs/SECURITY.md) · [中文说明](README.zh-CN.md)
 
-![English Windows setup guide](docs/images/setup-1.0.1.png)
+![English Windows setup guide](docs/images/setup-1.0.4.png)
 
 ## Install
 
-1. Obtain `YGPTLocal-Setup-1.0.3-win-x64.exe` and compare its SHA-256 with `SHA256SUMS.txt`. The installers are unsigned. Already installed? Run `YGPTLocal-Update-1.0.3-win-x64.exe` instead: it updates in place and preserves your data, keys, connection identity, snapshots and ChatGPT plugin; legacy external data moves inside the application folder ([upgrade guide](docs/UPGRADE_USER_GUIDE.md)).
-2. Run the eight-step native Windows wizard. Choose an application folder and an authorized working folder. Node, Python and the official Tunnel Client are bundled; normal installation needs no developer tools or administrator privileges.
+1. Obtain `YGPTLocal-Setup-1.0.4-win-x64.exe` and compare its SHA-256 with `SHA256SUMS.txt`. The installers are unsigned. Already installed? Run `YGPTLocal-Update-1.0.4-win-x64.exe` instead: it preserves your data, keys, connection identity, snapshots and ChatGPT plugin; legacy external data moves inside the application folder ([upgrade guide](docs/UPGRADE_USER_GUIDE.md)).
+2. Follow the nine-step native Windows wizard. Choose an application folder and an authorized working folder. Node, Python and the official Tunnel Client are bundled; normal installation needs no developer tools or administrator privileges.
 3. Keep **OpenAI Secure MCP Tunnel** selected. Create a dedicated Tunnel in your eligible Platform organization and associate the intended ChatGPT workspace. Do not reuse a Tunnel already run by another installation.
 4. Enter the full ID and a dedicated runtime API key in the masked local field. DPAPI encrypts it for your Windows user. It authenticates the Tunnel Client; setup does not call generation models or create keys.
 5. Install and inspect the dashboard. Saved credentials, local readiness, Tunnel readiness and actual ChatGPT use are separate states. A private Tunnel can wait for its first remote handshake before creating a Broker.
 6. In ChatGPT **Plugins → Add → Add custom MCP server**, choose **Tunnel**, enter its ID and use **No authentication** only for this dedicated private Tunnel. Read and accept the official risk warning yourself, then create and install the personal plugin. Public HTTPS still uses OAuth.
-7. Select `@YGPT Local` in a new chat. Copy the wizard's first-task prompt to list the verification folder and read its random marker. Confirm the exact answer in ChatGPT.
-8. Close setup. The connection runs independently. Authorized cleanup waits for the authenticated marker read and setup exit.
+7. In **Browser (optional)**, keep your default browser or choose Chrome/Edge. Skip daily-browser pairing, or use the direct extension-manager buttons and load the installed extension.
+8. Choose **Open ChatGPT with the check ready**. The English installation, file-size and cleanup request opens as a new draft. Review it, select `@YGPT Local` if needed and send it yourself.
+9. Confirm the exact marker in ChatGPT. With the default cleanup choices, the downloaded Setup closes after authenticated verification and its exact registered download and test marker are removed. Installed Settings and the connection remain available.
 
 The [field guide](docs/SETUP_GUIDE.md) covers organizations/workspaces, key ownership, project, expiry, permissions and authentication. Availability depends on account eligibility and organization RBAC. **Never paste keys, approval tokens, profiles or private logs into chat or GitHub.**
 
@@ -40,7 +43,7 @@ The Watchdog backs off after its transport exits. The official client handles ne
 
 ## Cleanup, settings and updates
 
-Automatic cleanup is enabled by default, explained before installation and cancellable. Only exact files in this generation's signed ownership manifest are eligible. A user-downloaded Setup needs an **additional explicit choice for that exact file**; location and matching names do not prove ownership.
+Automatic cleanup and **Auto remove this exact downloaded Setup** are checked by default and shown before installation; either can be turned off. Only exact files in this generation's signed ownership manifest are eligible. The displayed exact-file choice covers the download; location and matching names do not prove ownership. After opening the first-check draft and verifying the authenticated marker read, Setup can close for cleanup even if **Finish setup** was not clicked. A verified installed helper waits for its process to exit, performs the bounded cleanup and exits.
 
 The cleaner checks identity, size, SHA-256, ancestry, links, open handles, process/startup/maintenance references. Changed, replaced, shared, in-use, linked, foreign or unknown files stay with reasons. It never sweeps folders or calls the uninstaller. Receipts record categories, counts, bytes and outcomes, without keys or user contents.
 
@@ -78,3 +81,7 @@ node scripts/test-rc3-native.mjs
 The native probe installs only in a new `.ygpt-local-tests` directory, drives the real WPF package, closes the GUI, checks local MCP reads and single ownership, faults its own transport, and checks Settings after download removal. It is **not ChatGPT or clean-VM evidence**. Runtime digests: [lock](scripts/runtime-lock.json). Original MIT icons: [assets](assets/brand). Third-party [licenses](THIRD_PARTY_NOTICES.md) remain applicable.
 
 Official references: [Secure MCP Tunnels](https://developers.openai.com/api/docs/guides/secure-mcp-tunnels), [custom MCP server](https://developers.openai.com/api/docs/guides/custom-mcp-server), [Windows logon tasks](https://learn.microsoft.com/en-us/windows/win32/taskschd/logon-trigger-example--scripting-). This independent project is not an OpenAI product.
+
+## Feedback welcome
+
+Found a bug, a confusing setup step, or a useful workflow? [Open an issue](https://github.com/jclllycf/ygpt-local/issues/new). Include your YGPT version, Windows/browser version, steps, expected result and actual result. Sanitized screenshots help; leave out API keys, pairing tokens and private file contents. Reports from Free and paid ChatGPT accounts are welcome.

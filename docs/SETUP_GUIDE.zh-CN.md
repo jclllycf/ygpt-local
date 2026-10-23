@@ -1,24 +1,25 @@
-# Windows 安装说明
+# Windows 安装指南
 
-[English setup guide](SETUP_GUIDE.md) · [正式版说明](RELEASE_1.0.3_ZH.md)
+[English](SETUP_GUIDE.md) · [1.0.4 正式版](RELEASE_1.0.4_ZH.md)
 
-界面全部使用英文，中文说明单独提供。首次安装用 Setup，已安装用 Update，核对同一 Release 的 `SHA256SUMS.txt`。安装包未签名。
+界面全英文，共九步；版本信息固定左下角。使用 Setup 首次安装，已有安装使用同版本 Update。核对发行页的 SHA256SUMS.txt；程序目前未签名。
 
-1. **Choose folders**：首次安装选空程序目录，如 `D:\YGPTLocal`。数据、缓存和快照在其 `data` 内，更新资料在 `.updates` 内。Working folder 选项目或测试目录，阅读本机访问授权后继续。外观和清理选项按需展开。
-2. **Check this PC**：查看系统、空间和 Windows 用户加密状态。Node、Python 和 Tunnel Client 已内置。默认登录 Windows 后静默连接；高级端口、代理按需展开。
-3. **Connection method**：默认使用专用 Secure MCP Tunnel。打开官方 Tunnels 页面，在正确的 OpenAI 组织创建专用连接，关联实际使用的 ChatGPT 工作区，粘贴完整 `tunnel_…` ID；这不是 API Key。复制按钮可填名称和描述。其他方式在高级选项内；Local only 无法直接供远端 ChatGPT 使用。
-4. **Runtime key**：在正确组织创建专用运行凭据，只粘贴到本机遮罩输入框，用当前 Windows 用户 DPAPI 加密。旧凭据默认保留，展开替换并填写新值才替换。不要把 Key 发到聊天或插件表单。
-5. **Review & install**：核对程序目录、内部数据路径、工作目录和首选项，再点 Install YGPT Local。修复先等待本安装的工作完成，保留原连接身份。
-6. **Check connection**：Local tools 是本机引擎，Private tunnel 是专用连接，First ChatGPT task 是首次远端文件读取，三者分别显示。Tunnel 已连接但引擎等待首次请求时，可继续创建插件。技术细节和恢复提示在 Connection details 内。
-7. **Add to ChatGPT**：打开 Plugins → Add → Add custom MCP server。用 Copy name / Copy description；图标选 `plugin-icon-256.png`，小于 10 KB。专用私人连接选择 Tunnel，复制 ID，选择 No authentication；它只省略额外应用层 OAuth，不取消运行凭据与本机保护。公网 HTTPS 使用 OAuth。本人阅读官方风险提示后创建并安装个人插件。
-8. **Try your first task**：在新聊天选 `@YGPT Local`，粘贴 Copy first-task prompt，核对随机标记原文，再点 Check first real tool result。复制后可关闭设置窗口，连接仍在后台维持；清理等待首次验证和窗口退出。
+1. **Choose folders**：选择程序目录和现有工作目录。数据、缓存、更新位于所选程序目录内。图标与授权条选择区默认展开。自动清理及 Auto remove this exact downloaded Setup 默认勾选，显示准确路径和大小，可自行取消。
+2. **Check this PC**：查看 Windows x64、空间和用户加密。已内置 Node、Python、Tunnel Client。登录自启默认开启，端口和代理属高级选项。
+3. **Connection method**：默认专用 Secure MCP Tunnel。展开的 field by field 指引逐项解释名称、描述、组织和工作区；复制按钮就在对应字段旁。创建专用连接后粘贴完整 ID，不要复用其他实例的活动 Tunnel。
+4. **Runtime key**：按默认展开的指引创建专用运行凭据，仅粘贴到本机遮罩框。DPAPI 加密保存；不调用生成模型。旧凭据默认保留。
+5. **Review & install**：核对并安装。安装完成后 Back 再返回，不修改设置时显示 Continue to connection check，不会再次安装；改动后才显示 Apply changed settings。
+6. **Check connection**：本机工具、Tunnel 和首次真实读取分别显示。Tunnel 已连接但引擎等待首次请求时，可继续创建插件；展开详情查看实测错误。
+7. **Add to ChatGPT**：打开 Plugins → Add → Add custom MCP server，按序填写。Open plugin icons folder 只打开 assets/plugin-icons，五款 PNG 均为 256×256 且小于 10,000 字节；其他界面图标保留高清。专用私人 Tunnel 选择 No authentication；公网 HTTPS 使用 OAuth。官方风险提示由本人阅读、决定。
+8. **Browser (optional)**：独立可跳过的日常浏览器配置。可选默认浏览器/Chrome/Edge；选用日常浏览器时有 Open Chrome extensions、Open Edge extensions 跳转按钮，加载 extension 文件夹后在同一浏览器完成配对。也可 Skip for now。
+9. **Verify & finish**：Open ChatGPT with the check ready 在新聊天输入框预填英文安装检查、文件位置/大小与清理请求，由你自行发送。它不模拟键盘、不自动发送、不代点审批。核对 ChatGPT 返回的准确标记。
 
-最后一页的 **Use your daily Chrome or Edge** 可选接入日常浏览器：在对应配置中启用开发者模式，加载程序目录的 `extension`，打开配对页，将令牌填入扩展。各配置单独配对，任务选择使用的配置。YGPT 只操作自己的标签分组，个人浏览器和原标签保留。
+打开草稿后，若认证读取成功且保留默认清理勾选，Setup 会自行关闭并交由安装目录内经过哈希校验的短时助手清理，因此未点击 Finish setup 也可完成。只处理签名计划中登记的准确下载文件及验证标记，不扫 Downloads/Temp。已安装 Settings、运行时、凭据、私人数据、快照和可信回滚保留；被改动、占用、引用或未知文件记录保留原因。收据区分完成、等待和跳过，不将已排程当成已删除。
 
-默认隔离读取在返回前关闭浏览器并删除临时 Profile。多步交互显式设置 `keepAlive=true`，保留 contextToken，结束后关闭标签；30 秒空闲租约兜底释放。rc.17 或更早的旧扩展仍已加载时，每个配置需手动 Reload 一次，保留原配对令牌。
+Windows 剪贴板被其他程序占用时自动重试；持续占用时提示关闭相关剪贴板或远程覆盖层后重试，保留安装进度。安装、验证和更新均有独立反馈；卸载明确报告删除、缺失、修改、受阻与主动保留项，并保存 data/uninstall-report.json。
 
-实际 ChatGPT 展示、真人批准、所有登录账户任务、注销/重启恢复和干净 Windows 安装仍需使用者验收；本地 fixture 不能替代这些结果。
+Advanced maintenance → Review installation leftovers 可查看更新缓存和旧登记审计。验证完整性与健康状态后，仅保留一个可信回滚副本；旧登记备份后清理，开发目录及私人恢复资料不扫除。
 
-安装、首次文件读取验证和更新都有独立完成提示。文件已更新但连接仍在启动时，会明确显示仍在连接；失败可重试，替换文件期间禁止直接关闭窗口。卸载结果分别列出已删除、已不存在、被修改和无法删除的文件；私人数据、未知文件与 `.updates` 恢复资料主动保留，并可打开残余目录、复制详情。结果写入本机 `data/uninstall-report.json`。卸载辅助程序也位于内部 `.updates`，关闭结果窗口后没有辅助后台进程。
+2026 年 10 月 23 日，所有者报告在 ChatGPT Free 免费账户实测成功。这是用户实测证据，与本地自动化 fixture 分开记录，不代表所有账户/工作区均有相同入口或权限。1.0.4 的本机生产安装按用户要求暂缓。
 
-Advanced maintenance → Review installation leftovers 提供完整残留审计和清理结果。验证连接与当前程序完整性后，保留一个可信回滚点、淘汰多余的已验证程序副本；旧登记备份后再移除。未知、修改、联接、共享或被引用的文件逐项说明保留原因。私人数据、快照、迁移恢复资料和开发目录不动。
+[欢迎反馈](https://github.com/jclllycf/ygpt-local/issues/new)：请提供版本、复现步骤、期望与实际结果，可附脱敏截图，不要包含密钥、配对令牌或私人内容。

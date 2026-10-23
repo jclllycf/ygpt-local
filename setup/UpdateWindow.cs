@@ -25,7 +25,7 @@ public class UpdateWindow:Window{
  readonly StackPanel body=new StackPanel();
  readonly TextBlock log=new TextBlock{TextWrapping=TextWrapping.Wrap,FontSize=13,Foreground=B(Muted),Margin=new Thickness(0,12,0,0)};
  readonly Button updateButton=new Button{Content="Update now",MinWidth=140,MinHeight=42,HorizontalAlignment=HorizontalAlignment.Left};
- readonly CheckBox sourceCleanup=new CheckBox{Content="Remove this exact downloaded updater after it closes (after verified first use)",Margin=new Thickness(0,8,0,12),IsChecked=false};
+ readonly CheckBox sourceCleanup=new CheckBox{Content="Remove this exact downloaded updater after it closes (after verified first use)",Margin=new Thickness(0,8,0,12),IsChecked=true};
  readonly ComboBox installChoice=new ComboBox{MinHeight=36,Margin=new Thickness(0,0,0,10)};
  readonly StackPanel pickerHost=new StackPanel();
  readonly StackPanel summary=new StackPanel();
@@ -118,7 +118,7 @@ public class UpdateWindow:Window{
   summary.Children.Add(new TextBlock{Text="Installed: "+installs[index][2]+"   →   This update: "+HostCore.Version,FontSize=14,FontWeight=FontWeights.SemiBold,TextWrapping=TextWrapping.Wrap,Margin=new Thickness(0,0,0,4)});
   summary.Children.Add(new TextBlock{Text=install,FontSize=12,Foreground=B(Muted),TextWrapping=TextWrapping.Wrap,Margin=new Thickness(0,0,0,4)});
   summary.Children.Add(new TextBlock{Text="Kept as-is: settings, encrypted keys, connection identity, snapshots and your ChatGPT plugin.",FontSize=13,Foreground=B(Muted),TextWrapping=TextWrapping.Wrap,Margin=new Thickness(0,0,0,12)});
-  pickerHost.Children.Clear();var appearance=new StackPanel{Margin=new Thickness(0,12,0,0)};BuildPicker(appearance);pickerHost.Children.Add(new Expander{Header="Appearance and approval preview (optional)",Content=appearance,Margin=new Thickness(0,8,0,16)});
+  pickerHost.Children.Clear();var appearance=new StackPanel{Margin=new Thickness(0,12,0,0)};BuildPicker(appearance);pickerHost.Children.Add(new Expander{Header="Appearance and approval preview (optional)",Content=appearance,IsExpanded=true,Margin=new Thickness(0,8,0,16)});
  }
  BitmapSource BrandBitmap(int i){
   string file=Path.Combine(install,"assets","brand",BrandIconFiles[i].Replace("-256.png","-512.png"));if(File.Exists(file)){try{using(var stream=File.OpenRead(file)){var b=new BitmapImage();b.BeginInit();b.CacheOption=BitmapCacheOption.OnLoad;b.StreamSource=stream;b.EndInit();b.Freeze();return b;}}catch{}}

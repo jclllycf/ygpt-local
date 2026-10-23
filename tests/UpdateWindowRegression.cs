@@ -14,7 +14,7 @@ using System.Windows.Threading;
 // Backends deliberately have no process, registry, credential or network effects.
 // Only UpdateWindow.cs is production code in this isolated WPF regression.
 public static class HostCore {
- public const string Version="1.0.3";
+ public const string Version="1.0.4";
  public static readonly JavaScriptSerializer Json=new JavaScriptSerializer();
  public static readonly ManualResetEvent AllowPause=new ManualResetEvent(true),PauseEntered=new ManualResetEvent(false);
  public static readonly ConcurrentQueue<string> Calls=new ConcurrentQueue<string>();
@@ -54,6 +54,8 @@ public static class UpdateWindowRegression {
   var first=Install(args[0],"first",new{brandIcon="ygpt-local-sky-y-256.png",approvalStyle="legacy"});
   var second=Install(args[0],"second",new Dictionary<string,object>());
   var w=new UpdateWindow(new List<string[]>{first,second});w.Show();
+  Check(Field<CheckBox>(w,"sourceCleanup").IsChecked==true,"Exact downloaded updater cleanup defaults on");
+  Check(LogicalTreeHelper.GetChildren(Field<StackPanel>(w,"pickerHost")).OfType<Expander>().Single().IsExpanded,"Updater appearance choices default open");
   var body=Field<StackPanel>(w,"body");int count=body.Children.Count;
   for(int i=0;i<4;i++){Select(w,1);Check(Field<string>(w,"brandIcon")=="plugin-icon-256.png","Brand must reset for an install with no saved choice");Select(w,0);}
   var shell=(DockPanel)w.Content;var update=Field<Button>(w,"updateButton");

@@ -15,7 +15,7 @@ using Microsoft.Win32;
 using Microsoft.Win32.SafeHandles;
 
 public static class HostCore {
- public const string Version="1.0.3";
+ public const string Version="1.0.4";
  public static readonly JavaScriptSerializer Json=new JavaScriptSerializer{MaxJsonLength=32*1024*1024};
  public static string Full(string p){return Path.GetFullPath(p).TrimEnd(Path.DirectorySeparatorChar);}
  // Fresh-install defaults prefer a non-system fixed drive (D: when present)
@@ -138,7 +138,9 @@ public static class InstallCleanup {
  public static Dictionary<string,object> Entry(string file,string generation,string kind,string allowedRoot,bool explicitFileConsent){var e=OwnedFiles.Identity(file);foreach(var pair in new Dictionary<string,object>{{"createdByInstaller",!explicitFileConsent},{"explicitFileConsent",explicitFileConsent},{"allowedRoot",HostCore.Full(allowedRoot)},{"kind",kind},{"sourceVersion",HostCore.Version},{"purpose","installation-only"},{"neededByRuntime",false},{"neededByMaintenance",false},{"neededByRollback",false},{"cleanupEligibility",true},{"createdAt",DateTime.UtcNow.ToString("o")},{"installedGeneration",generation}})e[pair.Key]=pair.Value;return e;}
  public static bool Due(string data){try{var envelope=HostCore.Read(Path.Combine(data,"installation-ownership.json"));if(!HostCore.B(envelope,"authorized"))return false;string receipt=Path.Combine(data,"post-install-cleanup-receipt.json");if(!File.Exists(receipt))return true;var r=HostCore.Read(receipt);return HostCore.S(r,"ownershipMac")!=HostCore.S(envelope,"manifestMac")||!new[]{"complete","review-required"}.Contains(HostCore.S(r,"state"))&&(DateTime.UtcNow-DateTime.Parse(HostCore.S(r,"at")).ToUniversalTime()).TotalMinutes>=5;}catch{return false;}}
  public static void RecordUpdateSource(string data,string install,string source){if(HostCore.Within(source,install))return;string generation=HostCore.S(HostCore.Read(Path.Combine(data,"first-use-challenge.json")),"generation");if(generation=="")throw new Exception("First-use generation is unavailable; downloaded updater kept");var entries=new List<Dictionary<string,object>>();string existing=Path.Combine(data,"installation-ownership.json");if(File.Exists(existing)){var envelope=HostCore.Read(existing);string payload=HostCore.S(envelope,"signedPayload");if(HostCore.S(envelope,"manifestMac")==Mac(payload,HostCore.S(HostCore.Secrets(data),"verificationKey"))){var prior=HostCore.Json.Deserialize<Dictionary<string,object>>(payload);if(HostCore.S(prior,"installedGeneration")==generation&&HostCore.S(prior,"installRoot")==HostCore.Full(install))foreach(object item in (System.Collections.IEnumerable)prior["entries"]){var e=(Dictionary<string,object>)item;if(HostCore.S(e,"normalizedAbsolutePath")!=HostCore.Full(source))entries.Add(e);}}}entries.Add(Entry(source,generation,"update-download",Path.GetDirectoryName(source),true));Record(data,install,generation,entries,true,Process.GetCurrentProcess().Id,Process.GetCurrentProcess().StartTime.ToUniversalTime().Ticks);}
- public static Dictionary<string,object> Run(string data,string install){
+ public static Dictionary<string,object> AfterSetup(string data,string install){DateTime deadline=DateTime.UtcNow.AddSeconds(60);Dictionary<string,object> result=null;do{result=Run(data,install);string state=HostCore.S(result,"state");if(state!="waiting-for-setup-exit"&&state!="already-running")return result;System.Threading.Thread.Sleep(500);}while(DateTime.UtcNow<deadline);return result;}
+ public static Dictionary<string,object> Run(string data,string install){using(var gate=new System.Threading.Mutex(false,"Local\\YGPT-download-cleanup-"+HostCore.OwnerId(data))){bool held=false;try{try{held=gate.WaitOne(0);}catch(System.Threading.AbandonedMutexException){held=true;}if(!held)return new Dictionary<string,object>{{"state","already-running"}};return RunLocked(data,install);}finally{if(held)gate.ReleaseMutex();}}}
+ static Dictionary<string,object> RunLocked(string data,string install){
   var envelope=HostCore.Read(Path.Combine(data,"installation-ownership.json"));string payload=HostCore.S(envelope,"signedPayload");if(HostCore.S(envelope,"manifestMac")!=Mac(payload,HostCore.S(HostCore.Secrets(data),"verificationKey")))throw new Exception("Ownership manifest signature mismatch");var r=HostCore.Json.Deserialize<Dictionary<string,object>>(payload);string generation=HostCore.S(r,"installedGeneration");
   if(!HostCore.B(r,"authorized"))return new Dictionary<string,object>{{"state","not-authorized"}};
   if(HostCore.Full(install)!=HostCore.S(r,"installRoot")||HostCore.Full(data)!=HostCore.S(r,"dataRoot")){
@@ -160,7 +162,7 @@ public static class InstallCleanup {
   var results=new List<object>();long bytes=0;int deleted=0,skipped=0;
   foreach(object value in (System.Collections.IEnumerable)r["entries"]){var e=(Dictionary<string,object>)value;string p=HostCore.S(e,"normalizedAbsolutePath"),why="RETAINED";
    if(!referencesKnown)why="REFERENCE_CHECK_UNAVAILABLE";
-   else if(!new[]{"setup-download","update-download","portable-download","staging","install-cache"}.Contains(HostCore.S(e,"kind")))why="UNKNOWN_KIND";
+   else if(!new[]{"setup-download","update-download","portable-download","staging","install-cache","verification-marker"}.Contains(HostCore.S(e,"kind")))why="UNKNOWN_KIND";
    else if(HostCore.Within(p,Environment.GetFolderPath(Environment.SpecialFolder.Windows))||HostCore.Within(p,Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles))||HostCore.Within(p,Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86)))why="SYSTEM_ROOT";
    else if(references.Any(s=>!String.IsNullOrEmpty(s)&&s.Replace('/','\\').IndexOf(HostCore.Full(p),StringComparison.OrdinalIgnoreCase)>=0))why="LIVE_OR_STARTUP_REFERENCE";
    else if(HostCore.S(e,"installedGeneration")!=generation)why="FOREIGN_GENERATION";
@@ -168,6 +170,7 @@ public static class InstallCleanup {
    else if(!HostCore.B(e,"cleanupEligibility")||HostCore.B(e,"neededByRuntime")||HostCore.B(e,"neededByMaintenance")||HostCore.B(e,"neededByRollback"))why="REQUIRED_REFERENCE";
    else if(HostCore.Within(p,data)||HostCore.Full(p)==HostCore.Full(data)||HostCore.Within(p,install)||HostCore.Full(p)==HostCore.Full(install))why="PERSISTENT_OR_INSTALLED_ROOT";
    else why=OwnedFiles.DeleteExact(e);
+   if((why=="DELETED"||why=="ALREADY_ABSENT")&&HostCore.S(e,"kind")=="verification-marker"){try{string parent=Path.GetDirectoryName(p);HostCore.CheckPath(parent);if(System.Text.RegularExpressions.Regex.IsMatch(Path.GetFileName(parent),"^YGPT-Verification-[a-f0-9]{8}$")&&Directory.Exists(parent)&&!Directory.EnumerateFileSystemEntries(parent).Any())Directory.Delete(parent);}catch{}}
    if(why=="DELETED"){deleted++;bytes+=Convert.ToInt64(e["size"]);}else if(why!="ALREADY_ABSENT")skipped++;
    results.Add(new{entry=results.Count+1,kind=HostCore.S(e,"kind"),outcome=why});
   }

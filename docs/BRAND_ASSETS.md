@@ -1,34 +1,18 @@
-# Current brand artwork
+# Brand assets and plugin upload icons
 
-The source is the owner's sprout-Y and sunrise brand board. The extracted
-`assets/icon-glyph.png` and its HD master `assets/icon-glyph-hd.png` preserve
-that artwork. Earlier hand-drawn SVG interpretations have been retired.
+The current identity preserves the owner's sprout-Y and golden sunrise. HD application artwork and size-limited plugin uploads are separate.
 
-| Surface | Artwork |
+| Surface | Asset |
 | --- | --- |
-| English/Chinese GitHub README headers | `assets/brand/plugin-icon-256.png` |
-| Current approval strip, default/fallback | Same PNG, inlined by `runtime/inline-approval.mjs` |
-| Five owner picker editions | Current board PNG; green y_, sky y_, green Y, signature keepsakes |
-| Picker previews | `assets/brand/preview-new-0.png` through `preview-new-4.png`; classic preview preserved |
-| Extension, plugin upload | `extension/icons/ygpt-256.png`, `plugin/assets/logo.png`; same canonical PNG |
-| Setup/updater rail and resources | Canonical PNG; picker resources retain all five editions |
-| Legacy native approval panel | Canonical PNG loaded by `runtime/approval-panel.ps1` |
-| Windows executable icon | `assets/brand/ygpt-local.ico`, embedded by the build/package recipes |
-| Managed installed shortcut | Targets `YGPTLocal.exe`; explicit `IconLocation` is `assets/ygpt.ico,0` |
+| Application / setup rail / README | assets/brand/ygpt-local-512.png; 256/1024 versions also retained |
+| Current approval strip | Matching 512 px design embedded by runtime/inline-approval.mjs |
+| Five appearance choices | Current sprout, green y_, sky y_, classic green Y, signature; HD 512 px sources |
+| ChatGPT plugin upload | assets/plugin-icons/01…05 PNGs, each 256×256 and strictly below 10,000 bytes |
+| Plugin package logo | plugin/assets/logo.png; matches 01-sprout-256.png |
+| Browser extension | extension/icons/ygpt-256.png; separate full-color asset |
+| Windows executable | assets/brand/ygpt-local.ico, seven frames from 16 through 256 px |
+| Installed shortcut | assets/ygpt-VERSION.ico, refreshed by registration to avoid stale shell caching |
 
-`python3 scripts/make-icons-from-original.py` regenerates the current assets
-with Pillow + libimagequant. Both Node generation entrypoints delegate to it.
-The standalone plugin PNGs stay 256×256 and ≤10 KB. Windows ICOs retain full
-quality at 16, 24, 32, 48, 64, 128 and 256 pixels, independently rendered from
-the HD master; the PNG upload size limit does not apply to ICO frames. The
-four earlier picker editions and all previews are kept intact.
+The setup opens only the plugin-icons folder for uploads. It copies the path of the design matching the selected approval icon. The older assets/brand/plugin-icon-256.png remains a compatibility asset; it is not the wizard's upload target.
 
-The rc.17 audit decoded every ICO frame and compared it with a fresh render:
-all seven were pixel-identical, including 256. No lower-quality downscale was
-found. The managed shortcut previously relied on the executable's implicit
-icon, which can retain a cached rendering across in-place updates. It now
-points directly to the shipped multi-size ICO; setup/update refresh that
-shortcut and notify the shell. Setup manages a Start Menu shortcut, not an
-owner-created Desktop shortcut. The owner's actual `.lnk` and Windows icon
-cache could not be inspected on Linux; desktop appearance still needs Windows
-acceptance. No installer was rebuilt in this round.
+Run python scripts/plugin-icons.py with Pillow to regenerate upload PNGs from the five HD sources. It checks the strict byte limit and writes icons.json with exact dimensions and sizes. scripts/make-icons-from-original.py also runs this export so regeneration cannot replace the upload logo with an oversized HD image. Other artwork retains full quality.

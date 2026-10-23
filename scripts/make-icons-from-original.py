@@ -77,11 +77,13 @@ def main():
     tile(1024).save(os.path.join(brand, 'ygpt-local-light-256.png'), optimize=True)
     tile(256).save(os.path.join(ROOT, 'assets', 'png', 'icon-256.png'), optimize=True)
     with open(os.path.join(ROOT, 'plugin', 'assets', 'logo.png'), 'wb') as f:
-        f.write(open(os.path.join(brand, 'ygpt-local-512.png'), 'rb').read())
+        f.write(data)
     for path in (os.path.join(brand, 'ygpt-local.ico'), os.path.join(ROOT, 'assets', 'ygpt.ico'), os.path.join(ROOT, 'assets', 'ygpt-'+json.load(open(os.path.join(ROOT, 'package.json'), encoding='utf-8'))['version']+'.ico')):
         write_ico(path)
     with open(os.path.join(ROOT, 'extension', 'icons', 'ygpt-256.png'), 'wb') as f:
         f.write(open(os.path.join(brand, 'ygpt-local-256.png'), 'rb').read())
+    import runpy
+    runpy.run_path(os.path.join(ROOT, 'scripts', 'plugin-icons.py'), run_name='__main__')
     print('Plugin upload: %d bytes; full-color app PNGs: 256/512/1024; multi-size ICOs: 16-256' % len(data))
 
 

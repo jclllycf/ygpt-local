@@ -1,0 +1,211 @@
+{
+  "version": "1.0.4",
+  "at": "2026-10-23T18:34:45.670Z",
+  "baseCommit": "653c0069b20666a29c811fcf18d4258da1f5cb79",
+  "sourceDigests": {
+    "setup/HostCore.cs": "89f599cfb36f646ed4154c4ff84e79ce1fabe271b9ae42aa2078d6a632b9ef1f",
+    "setup/SetupWindow.cs": "4a6a5b6545ef5533b553129c0dd178d71eff53ffe8568aecf1c9ed4398d9a30e",
+    "setup/SetupInteractions.cs": "08b4e81a549fae335cf212810ed6e46da1cf39d41ba5c5efec2658824cd60163",
+    "setup/UpdateWindow.cs": "89af7081f4dbb4249e63ca9cbd19f2a02d63c2e5ce95ea24bf05e975df2f4812",
+    "setup/YGPTLocal.cs": "f387f69564000a5c75d168e333fa78e04d182ef739f23affa8ca931f78c944e7",
+    "setup/Watchdog.cs": "5bdd05927b19b61c968f098938b1b89a66612fbcbd7f53a32202818bdc0a6d23",
+    "runtime/config.mjs": "83414d6366fa244aae18719a6a22c56613289948751fdb6674a47e4c4b7d1e70",
+    "runtime/startup-diagnostics.mjs": "92ee33f9a2fadb3ae51df8db6dfb89c341eb6b00d171439d592393ef6895f87d",
+    "service/http-server.mjs": "037b21c6664b65db0d9bd85d1af447e91c91f0177052ee11649eb5137409d4c2",
+    "service/rpc.mjs": "e6021c7c91d6a5089cbf23cb0e587c7fb9ae8e6f0265eb7bcb2dd4332bee6030",
+    "service/supervisor.mjs": "1866f43ee6a53a3474d0344fb18fbd73dc55691fecc992b29a38dde13a204a23",
+    "scripts/plugin-icons.py": "a2fbbb96162a5d194cc61e7ac27dbe6a5a882c1b6da35909114eeabc1ff1b65c"
+  },
+  "tests": {
+    "total": 125,
+    "passed": 120,
+    "failed": 0,
+    "skipped": 5,
+    "scope": "Windows native compiler, real WPF controls, disposable local services and isolated browser fixtures; no human ChatGPT approval implied",
+    "skipReasons": [
+      "Repo-local Roslyn/net48 SDK absent; native Framework C# 5 build did run",
+      "Three POSIX-shebang helper fixtures not applicable to Windows",
+      "python3 command unavailable for one child-environment fixture"
+    ]
+  },
+  "package": {
+    "version": "1.0.4",
+    "manifestFiles": 5880,
+    "manifestMismatches": 0,
+    "forbiddenMembers": 0,
+    "currentRuntimeServiceExtensionMatch": true,
+    "currentNativeBinariesMatch": true,
+    "artifacts": [
+      {
+        "file": "YGPTLocal-Setup-1.0.4-win-x64.exe",
+        "bytes": 94161920,
+        "sha256": "19d8e0995e76f4e408df22ec68be1743d33f27722549456d1d83d0092646639d"
+      },
+      {
+        "file": "YGPTLocal-Update-1.0.4-win-x64.exe",
+        "bytes": 94161920,
+        "sha256": "59f52903e00d8d12020d880bb564f325eb528d757a9e0b82190f51e34e686d08"
+      },
+      {
+        "file": "ygpt-local-portable-1.0.4-win-x64.zip",
+        "bytes": 93184415,
+        "sha256": "3ba90ff220389b30e7a9752d551852be63d28bad65c11ea7878eb2dec4f64137"
+      }
+    ]
+  },
+  "nativeUi": {
+    "compiledWpfRendered": true,
+    "packagedSetupRendered": true,
+    "fixtureOnly": true,
+    "visualPasses": 2,
+    "englishOnly": true,
+    "lowerLeftVersionDockVerified": true,
+    "allNineSteps": true,
+    "screenshots": [
+      {
+        "file": "setup-0.png",
+        "sha256": "bff37f5f29bdeca83e3e4bb0a20802a25e3ac1730f55e6157ae77f64852ce42b"
+      },
+      {
+        "file": "setup-2.png",
+        "sha256": "7e3fdee7113a3f5b6a5863fc4f841a7661d61e0c23dbeaa697edd734acef68c7"
+      },
+      {
+        "file": "setup-3.png",
+        "sha256": "fdaaceb1d29c5db1e4dcc99edb0424c2f6d38a98133a2a085e45c5a788ca49ad"
+      },
+      {
+        "file": "setup-4.png",
+        "sha256": "55ac442b7aac8056366f8107486ea764b56f8262202cb8b5d415fd9a97323e9e"
+      },
+      {
+        "file": "setup-5.png",
+        "sha256": "75f6364a6254c90d090cbd5b8b994db4d1ea51a188deb660113c0355bf7218b0"
+      },
+      {
+        "file": "setup-6.png",
+        "sha256": "b6f793f077bd27112ad107ad597abf6812c759043ffac75a49d6d592b589dd8c"
+      },
+      {
+        "file": "setup-7.png",
+        "sha256": "7d63089c559143bbdcf1707fa858e2d5a0be7903262674bece4d54cc4a27e41a"
+      },
+      {
+        "file": "setup-8.png",
+        "sha256": "0131c8798b3d9963fc15c52696cf20d41f3e1bd6be24f90488aed70734500856"
+      },
+      {
+        "file": "browser-options.png",
+        "sha256": "e1a129e1a2a5799b94cb346c4ff84f029fc851cc1774f21df914a0fce364a7fa"
+      },
+      {
+        "file": "setup-compact.png",
+        "sha256": "2392dd610a78bd5696166c61cc26b14b43b9f496920c1ed0ac438af853d3bd3e"
+      },
+      {
+        "file": "update.png",
+        "sha256": "9946009c20dedc966d66c16781eb63334297c64bf3ad4dba531e14c19f214d62"
+      },
+      {
+        "file": "installation-complete.png",
+        "sha256": "4a3da9a41c5a42e37ae7bf4ebd7db4aaf67065e211e5ba5c537b91c0dc50013f"
+      },
+      {
+        "file": "verification-complete.png",
+        "sha256": "7019d78d0aad06649ca3c24c75d8c619f26b8ff856d5233a688ab511319a7951"
+      },
+      {
+        "file": "update-complete.png",
+        "sha256": "30518795c982e77d30b6d4f25f2062a2bbb50b8c947f8ca98c5a5eff9e0c0905"
+      },
+      {
+        "file": "uninstall-result.png",
+        "sha256": "5f9bf2a298d167fa0a649b6e65a339fa04d43bc9feff3a71a19a4921259efe45"
+      },
+      {
+        "file": "installation-cleanup.png",
+        "sha256": "c67879650e9de98ce4559e522880fbb3a304e6cb1bb6f8b7e189c8c8d3859c99"
+      }
+    ]
+  },
+  "regressions": {
+    "transientClipboardRetry": true,
+    "permanentClipboardFailureRecoverable": true,
+    "ownerClipboardAccessed": false,
+    "unsentDraftUrlRoundTrip": true,
+    "revisitedUnchangedInstallationDoesNotReinstall": true,
+    "changedSettingsExplicitApply": true,
+    "fieldGuidesExpandedAndCopyAdjacent": true,
+    "skippableBrowserBeforeFinish": true,
+    "chromeEdgeExtensionAndPairingButtons": true,
+    "exactDownloadCleanupDefaultsOn": true,
+    "afterExitCleanupWaitsForOriginalProcess": true,
+    "ownedMarkerAndEmptyFolderCleanup": true,
+    "unknownFilesSettingsAndCiphertextRetained": true,
+    "cleanupIdempotent": true
+  },
+  "pluginIcons": [
+    {
+      "file": "01-sprout-256.png",
+      "design": "Current sprout",
+      "width": 256,
+      "height": 256,
+      "bytes": 4501
+    },
+    {
+      "file": "02-green-y-256.png",
+      "design": "Green y_",
+      "width": 256,
+      "height": 256,
+      "bytes": 4376
+    },
+    {
+      "file": "03-sky-y-256.png",
+      "design": "Sky y_",
+      "width": 256,
+      "height": 256,
+      "bytes": 4577
+    },
+    {
+      "file": "04-classic-green-256.png",
+      "design": "Classic green Y",
+      "width": 256,
+      "height": 256,
+      "bytes": 2991
+    },
+    {
+      "file": "05-signature-256.png",
+      "design": "Signature",
+      "width": 256,
+      "height": 256,
+      "bytes": 5306
+    }
+  ],
+  "chatDraft": {
+    "source": "https://developers.openai.com/training/walkthroughs/building-a-shareable-site",
+    "parameter": "prompt",
+    "automaticSubmission": false,
+    "selectedBrowserComposerIndependentlyVerified": false
+  },
+  "freeAccountFieldReport": {
+    "reportedAt": "2026-10-23",
+    "source": "Project owner statement in this conversation",
+    "plan": "ChatGPT Free",
+    "outcome": "Successful real use reported",
+    "independentlyReproduced": false,
+    "testedProductVersion": null,
+    "claimScope": "One owner-reported account; not universal availability"
+  },
+  "production": {
+    "installedThisRelease": false,
+    "state": "deferred-by-owner",
+    "productionServiceRestarted": false,
+    "productionDataChanged": false
+  },
+  "limits": [
+    "Final unsent-draft composer behavior needs confirmation in the selected logged-in browser",
+    "No new real ChatGPT human-approval attestation",
+    "No clean-Windows VM or sign-in/reboot acceptance in this release run",
+    "Not every signed-in browser/account workflow has been accepted"
+  ]
+}

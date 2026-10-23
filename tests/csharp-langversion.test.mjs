@@ -18,13 +18,13 @@ const automation=path.join(local,'downloads/ps51/lib/net461/System.Management.Au
 const available=!!sdk&&fs.existsSync(refs)&&fs.existsSync(path.join(local,'dotnet/dotnet'));
 const names=['mscorlib','System','System.Core','System.Xml','System.Xaml','System.Drawing','System.Windows.Forms','System.Web.Extensions','System.Security','System.Management','System.IO.Compression','System.IO.Compression.FileSystem','Microsoft.CSharp','WindowsBase','PresentationCore','PresentationFramework','UIAutomationTypes','UIAutomationClient','UIAutomationProvider'];
 const targets=[
-  ['setup','winexe',null,['setup/HostCore.cs','setup/YGPTLocal.cs','setup/SetupWindow.cs','setup/UpdateWindow.cs']],
+  ['setup','winexe',null,['setup/HostCore.cs','setup/YGPTLocal.cs','setup/SetupInteractions.cs','setup/SetupWindow.cs','setup/UpdateWindow.cs']],
   ['watchdog','winexe','YGPTWatchdog',['setup/HostCore.cs','setup/Watchdog.cs']],
   ['watchdog-startup-regression','exe','WatchdogStartupRegression',['setup/HostCore.cs','setup/Watchdog.cs','tests/WatchdogStartupRegression.cs']],
   ['ydesktop','exe',null,['engine/windows/YDesktop.cs']],
   ['native-windows','exe','NativeWindows',['setup/HostCore.cs','setup/NativeWindows.cs'],[automation]],
   ['update-window-regression','exe','UpdateWindowRegression',['setup/UpdateWindow.cs','tests/UpdateWindowRegression.cs']],
-  ['install-payload-regression','exe','InstallPayloadRegression',['setup/HostCore.cs','setup/YGPTLocal.cs','tests/InstallPayloadRegression.cs']],
+  ['install-payload-regression','exe','InstallPayloadRegression',['setup/HostCore.cs','setup/YGPTLocal.cs','setup/SetupInteractions.cs','tests/InstallPayloadRegression.cs']],
 ];
 test('Shipped C# compiles as C# 5, like the .NET Framework csc used by the Windows build',{skip:available?false:'repo-local Roslyn SDK / net48 reference assemblies not present'},t=>{
   const out=fs.mkdtempSync(path.join(os.tmpdir(),'ygpt-csc5-'));t.after(()=>fs.rmSync(out,{recursive:true,force:true}));

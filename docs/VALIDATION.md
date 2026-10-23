@@ -1,6 +1,8 @@
-# Current validation: 1.0.3
+# Current validation: 1.0.4
 
-The current stable release is 1.0.3. See the [release handoff](RELEASE_1.0.3.md) and [machine-readable verification](../evidence/housekeeping-1.0.3-verification.json). The 1.0.0 and rc.18 records preserve preceding evidence. The records below describe RC3 only and are retained as history. Stable release status does not claim real ChatGPT human-click, clean-Windows or Windows sign-in acceptance.
+The current stable release is 1.0.4. See the [release notes](RELEASE_1.0.4.md) and [machine-readable verification](../evidence/setup-1.0.4-verification.json). This release tests the compiled WPF flow and bounded after-exit cleanup in disposable fixtures. The owner reported successful real use with a ChatGPT Free account on October 23, 2026; that field result is separate from automated evidence. The final draft composer, human approval, clean-Windows and Windows sign-in acceptance are not established by local fixtures. Production installation of 1.0.4 remains deferred at the owner's request.
+
+Earlier stable and RC records remain historical evidence. The table below describes RC3 only.
 
 ## Historical RC3 validation and owner handoff
 
