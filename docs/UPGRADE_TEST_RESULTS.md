@@ -52,3 +52,12 @@ Environment for everything below: Linux VM (Ubuntu 24.04), Node 24, Roslyn csc f
 - `tests/owner-model.test.mjs`: 2 pass — the file engine writes/reads an absolute path outside its root (a stand-in AppData config on a second volume) while relative escapes still fail `OUT_OF_SCOPE`; the access policy (run against a Windows-shaped owner config) allows the Clash-style AppData write and ordinary document writes, gates credential-adjacent writes, tiers `y_file_trash` (single file allow / batch approve / system path approve / YGPT state deny), gates downloads outside project folders, and flags wildcard and pipelined bulk deletes as high-risk.
 - Portable suites unchanged: `upgrade-portable` 21 pass + 1 skipped, `upgrade-new-tools` 5 pass. Full suite: 44 tests, 31 pass, 11 fail, 2 skipped — the 11 failures are the same Windows-only set as the rc.4 baseline comparison (no regressions). CSP check and public audit pass (211 files).
 - Still owner-only on Windows: the tiered trash executing end-to-end (snapshot -> Recycle Bin -> restore) and an actual AppData config edit through a real chat.
+
+## rc.15 repository review (branch `review/rc15-repair-20261023`), 2026-10-23
+
+Linux (Node 24.22.1); details, commits and rationale in `REVIEW_NOTES.md`.
+
+- Portable suites plus the review's new suites (`owner-model`, `upgrade-portable`, `upgrade-new-tools`, `brand-choice`, `blacklist-rc13`, `extension-takeover`, `extension-safety`, `csharp-langversion`): all pass except the one isolated-browser test that needs the bundled Playwright Chromium (it passes with `YGPT_TEST_CHROMIUM` pointing at a host Chromium). Every take-over fix has a regression test that fails before its fix; `extension-takeover` drives the relay with a real Chromium behind a protocol-faithful fake extension.
+- Full `npm test` at `42d651a`: 88 tests, 72 pass, 11 fail, 5 skipped. The 11 failures are by name the same Windows-only set as the earlier baselines (core catalog/snapshots, http-auth OAuth and 12 handshakes, oauth-state DPAPI, owner-control drain, both ui-csp, both windows-native, both workflows). The 5 skips are Windows-only setup/restore tests and the bundled-Chromium browser test.
+- `tests/csharp-langversion.test.mjs` compiles every shipped C# target at `-langversion:5` with the repo-local Roslyn and net48 references (what the Windows .NET Framework csc accepts).
+- NOT verified here: the installer/updater on Windows, UIA, DPAPI, the extension inside a real Chrome/Edge (including the debugging-bar Cancel path), ChatGPT host behaviour.

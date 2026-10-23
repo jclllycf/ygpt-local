@@ -39,6 +39,9 @@ export async function createEngine(config,{authorize,backupManager,ledger:outerL
   const release=config.mode==='rc9-integrated'?async()=>{}:await lockfile.lock(stateDir,{lockfilePath:path.join(stateDir,'engine-instance.lock'),stale:30000,update:5000,retries:0});
   const file=await YFileEngine.create(root,{snapshot}),terminal=new YTerminalEngine({root,stateDir,allowedExecutables:config.allowedExecutables,authorizeExecutable:config.mode==='rc9-integrated'?config.authorizeExecutable:undefined,maxOutputBytes:2*1024*1024,currentOwner});
   const search=new YSearchEngine(file),browser=new YBrowserFacade({stateDir,...config.browser,currentOwner}),desktop=new YDesktopEngine({stateDir,allowedPids:config.desktopAllowedPids??[],protectedPaths:config.agentProtectedRoots??[],currentOwner}),system=new YSystemEngine({stateDir,physicalDisks:config.physicalDisks}),jobs=new DurableJobs({terminal,stateDir,python:config.python,pythonArgs:config.pythonArgs,ingressId:config.ingressId});
+  // Live service: listen for the paired browser extension from the start (see
+  // YExtensionBrowser.prestart); fixtures never open the relay port.
+  if(config.mode==='rc9-integrated')browser.existing.prestart();
   const ledger=outerLedger??new EngineLedger(stateDir),table=new Map();
   const add=(name,shape,handler,{mutating=false,openWorld=false,description=name}={})=>{
     const schema=z.object({...shape,requestKey:z.string().max(120).optional(),...(config.mode==='rc9-integrated'?{outputToken:z.string().max(128).optional()}:{})}).strict();
@@ -104,7 +107,7 @@ export async function createEngine(config,{authorize,backupManager,ledger:outerL
   add('y_job_status',{id:sid},a=>jobs.status(a.id));add('y_job_logs',{id:sid},a=>jobs.logs(a.id));add('y_job_cancel',{id:sid},a=>jobs.cancel(a.id),{mutating:true});add('y_job_list',{},()=>jobs.list());
   add('y_browser_open',{url:str,target:z.enum(['isolated','existing']).optional()},a=>browser.open(a.url,{target:a.target}),{mutating:true,openWorld:true,description:'Open a page. Ask the owner which browser to use when it matters: target=existing works in their daily Chrome/Edge through the YGPT extension (attach first with y_browser_attach); with no preference answer, omit target — the isolated browser is the default'});
   add('y_browser_attach',{instance:z.string().max(160).optional()},a=>browser.attach(a),{mutating:true,openWorld:true,description:'Take over the owner daily Chrome/Edge (default profile, their real accounts) through the paired YGPT browser extension. If several browsers/profiles are paired, this returns needsChoice with the candidates (browser + profile email) — ask the owner which to use and attach again with that instance; never guess between accounts. Work happens only inside the YGPT tab group: group tabs are created in the background, the owner current tab and window are never disturbed, their own tabs are never read, and detach leaves the browser running with the group in place'});
-  add('y_browser_detach',{},()=>browser.detach(),{description:'Disconnect from the owner existing browser without closing it'});
+  add('y_browser_detach',{},()=>browser.detach(),{description:'Release this chat\'s tabs in the owner daily browser (they stay open in the YGPT group for a later attach). The shared connection closes when no other chat still uses it; the browser itself is never closed'});
   add('y_browser_tabs',{},()=>browser.list());
   add('y_browser_snapshot',{tabId:sid},a=>browser.snapshot(a.tabId));
   add('y_browser_navigate',{tabId:sid,url:str},a=>browser.navigate(a.tabId,a.url),{mutating:true,openWorld:true});

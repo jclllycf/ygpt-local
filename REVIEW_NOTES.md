@@ -65,24 +65,98 @@ only (nothing pushed).
    (identical in production; made the isolated-browser test fail with a real
    Chromium).
 4. `848a9e7` fix(policy): partial revert of `2ed39e7` (see table).
+5. `b356368` fix(extension): 20 s keepalive (MV3 worker otherwise stops after
+   ~30 s idle, the socket closes and the chat loses its tabs); CDP events
+   forwarded synchronously again (7427ee9's async check let responses overtake
+   events); per-tab command dispatch in arrival order.
+6. `67a39d5` fix(relay): per-tab in-order check + dispatch (the per-command
+   group round trip let mouse released overtake pressed); unknown CDP session
+   ids get Chrome's -32001 error instead of `{}`.
+7. `71f31d9` fix(take-over): live service starts the relay with the engine;
+   first attach waits up to 15 s while the relay is fresh; accurate
+   "still reconnecting" error; `y_browser_detach` is per chat (shared
+   connection closes with the last chat); attach while connected adopts
+   unowned group tabs; `y_close_context` releases the chat's daily-browser tabs.
+8. `f4c19e8` fix(relay): CDP endpoint requires a per-process secret header
+   (memory only), so other local programs cannot drive the owner's logged-in
+   group tabs while bound.
+
+9. `2487467` fix(snapshots): restores kept lowercased paths (canonical() is
+   the lowercase comparison key) and NTFS replace-renames take the supplied
+   case, so `y_backup_restore` renamed `MyFile.md` → `myfile.md`; the Git
+   checkpoint skipped every path with a capital; the Recycle Bin recorded
+   lowercased locations. New `resolvedPath()` (case-preserving) for writers.
+   Folder deletes had NO snapshot content (entries store file contents only)
+   although approval text/docs promised restore: `trashPlan()` now snapshots
+   folder trees file by file within bounds and reports Recycle-Bin-only items;
+   a single >32 MB file or link now asks a human instead of failing.
+   Windows-only end-to-end restore-case test added (skipped on Linux).
+
+10. `45e4b9c` docs(readme): the interrupted README edit (found uncommitted
+    after the machine restart) was verified claim by claim against the code
+    and committed, with the default-drive wording made exact (D:, else the
+    largest other non-system fixed drive).
+11. `ad01bc7` docs: UPGRADE_USER_GUIDE was headed rc.12 and still said Agent
+    windows are always refused, the isolated browser is "Playwright Edge" and
+    YGPT state / G: vault are hard denies — all contradicted by the code
+    since rc.13 (gates, Chrome default). Security note scoped to rc.15 with
+    the relay access controls. zh README synced. CHANGELOG entry for this
+    pass; `scripts/package.mjs` now ships CHANGELOG.md (both READMEs link it;
+    the manifest is generated from the stage folder, installers not rebuilt).
+
+12. `42d651a` fix(take-over): Chrome-ended debugger sessions (owner presses
+    Cancel on the "started debugging" bar, or a tab becomes undebuggable)
+    were never reported: the relay kept the session and the next command
+    silently re-attached a blank one without Playwright's enabled domains
+    (calls time out). Extension reports `detached`; relay ends that tab's
+    sessions (`Target.detachedFromTarget`, Playwright drops the page, the
+    tab is re-adopted fresh); Cancel ends the take-over (unbind; tabs, group,
+    pairing stay). Popup Save with an empty token field wiped the pairing
+    (the token is never shown) — empty now keeps it. New group tabs ask for
+    the last focused NORMAL window and group where Chrome placed the tab
+    (a focused popup made y_browser_open fail). 5 tests, each failing before.
+
+13. `c9b9bf3` fix(take-over): pages appearing after attach (popup from a
+    group tab, re-adopted tab, tab moved into the group) all went to the
+    FIRST attaching chat (closure) — chat B's popup went to chat A, and after
+    A detached new pages still went to A and could never be adopted. Now:
+    extension reports `openerTabId` (only when the opener is a group tab),
+    relay maps it to CDP `openerId`; engine tracks the chats holding the
+    shared connection — new page → opener's chat, else the only holder,
+    else unowned until a chat's attach adopts it. Detach keeps the
+    connection while any chat holds it. 5 tests, each failing before
+    (incl. a real-Playwright popup e2e).
+
+All take-over fixes have regression tests in `tests/extension-safety.test.mjs`
+(each verified to fail before the fix) and the real-Chromium e2e test
+`tests/extension-takeover.test.mjs` passes. A real Chrome/Edge with the
+unpacked extension is still NOT verified here. After updating YGPT the owner
+must press Reload on the extension in chrome://extensions (unpacked
+extensions do not pick up new files on their own) — to document.
 
 ## In progress / next
 
-- Take-over robustness (highest user impact, in progress):
-  - Relay starts lazily on the first `y_browser_attach`, which then waits only
-    ~4.7 s; the extension reconnects on a backoff/alarm of up to ~30 s, so the
-    first attach after YGPT starts usually fails with a misleading "extension
-    not installed" message.
-  - No extension keepalive: the MV3 service worker can be stopped after ~30 s
-    without WebSocket traffic, closing the socket; the relay unbinds and the
-    chat loses its tabs.
-  - `debugger.onEvent` awaits two Chrome API calls before forwarding each CDP
-    event, so events can arrive after the response to the command that caused
-    them (ordering Playwright relies on). Use the synchronous `attached` set.
-  - `y_browser_detach` from any chat disconnects the shared take-over browser
-    for every chat.
-- Then: docs/packaging consistency (README, CHANGELOG, UPGRADE_USER_GUIDE,
-  UPGRADE_SECURITY_NOTE vs. the code above), full-suite comparison.
+- Approval path reviewed (callTool/executeApproved, ledger create/decide/
+  claim, in-chat strip `handleBar`, owner-control drain): no defect found.
+  The owner-control drain sets `ownerDraining` after its inventory, but the
+  watchdog-provided `maintenance-request` barrier already rejects new calls
+  before drain runs, so there is no race in production.
+- Docs/packaging consistency: done (`45e4b9c`, `ad01bc7`). Portable suites
+  at `7c73fcc`: 54 tests (incl. extension-safety, csharp-langversion), 53
+  pass, 1 skip.
+- Extension robustness: done (`42d651a`).
+- Full suite at `42d651a`: 88 tests, 72 pass, 11 fail, 5 skip. Failure
+  NAMES identical to the baseline list above (no new failures). Skips:
+  4 Windows-only setup/restore tests + the bundled-Chromium browser test.
+  Recorded in `docs/UPGRADE_TEST_RESULTS.md`.
+- Portable set after `c9b9bf3`: 64 tests, 63 pass, 1 skip; the skipped
+  isolated-browser test passes with `YGPT_TEST_CHROMIUM`.
+- Next: updater (`setup/UpdateWindow.cs`) end to end, then service
+  lifecycle (`service/`, relay start/stop with the engine).
+- Reviewed, no defect: file engine write path (per-file lock chain cannot
+  cycle; preimage hash re-checked inside the atomic writer before rename;
+  `move` refuses to overwrite and keeps the source snapshot) and the vendored
+  atomic writer (exclusive temp names, fsync before rename).
 
 ## Open items (not changed; owner decision or later work)
 
@@ -94,5 +168,42 @@ only (nothing pushed).
   to a gate. Behaviour matches "reads are automatic"; the comment misleads.
 - `y_project_inspect` still gates protected/credential-adjacent targets
   (`native-extension.mjs`), unlike the other reads.
-- Setup leaves `<install>.previous-<ticks>` folders after every successful
-  update/repair (a full app copy each time); nothing removes them.
+- Setup keeps `<install>.previous-<ticks>` after every successful
+  update/repair. README says this is intended ("Updates preserve the previous
+  program folder"), but nothing ever removes older copies (a full app copy per
+  update). Suggest keeping only the newest; needs a Windows test.
+- `executeApproved` throws a plain error when the policy turns `deny` between
+  approval and execution; the operation stays `approved` (later `unknown`)
+  without a recorded reason. Only malformed requests deny now, so rare.
+- A partially failed multi-path `y_file_trash` returns `unknown`; the message
+  now lists the paths already moved.
+
+## Assistant completion pass (2026-10-23, after Claude's session limit)
+
+Claude's continuation run ended on its session limit at `4fcfa94` with a clean
+tree. The owner directed the assistant to finish the pass along the same line:
+
+- Baselines re-verified at `4fcfa94`: portable set 64 tests, 63 pass, 0 fail,
+  1 skip; full suite 93 tests, 77 pass, 11 fail, 5 skip — the 11 failure
+  NAMES are identical to the recorded Windows-only baseline. No new failures.
+- Updater end to end (the remaining "next" item): `UpdateWindow.cs`,
+  `YGPTApp.InstallPayload`, `HostCore.PrepareOwnedRepair`/`Pause`/`Start`
+  reviewed. Pause is fail-closed (drain, then health + owned-process proof;
+  the barrier is removed when the pause itself refuses); the payload swap is
+  integrity-verified with the ownership marker committed before the move and
+  a rollback path that reports a retained folder; the brand save cannot fail
+  the core update; restart is verified against watchdog health (ownerId,
+  version, freshness, not stopped); failure recovery only resumes a pause
+  this run created. Discovery stays adaptive (registry, Start Menu shortcut,
+  defaults, fixed-drive roots). No defect found that warrants a change.
+- Service lifecycle (the other remaining item): `supervisor.mjs` stop path
+  (interval cleared, tunnel killed, gateway and broker closed, stopped
+  health written) and the relay lifecycle in `browser-engine.mjs`
+  (`ensureRelay` memoizes and resets on failure, `prestart` warms it in the
+  live service only, `close()` settles attach, disconnects and stops the
+  relay; `ExtensionRelay.stop()` rejects pending calls and closes both
+  servers) reviewed. No defect found.
+- The two open items above stay open as owner decisions (vault/credential
+  read approvals; `.previous-*` retention). Neither blocks this release.
+- Owner then directed: version bump to `1.0.0-rc.16`, installer rebuild,
+  full GitHub push and a GitHub Release with the Setup and Update packages.

@@ -7,10 +7,10 @@ import {execFileSync} from 'node:child_process';
 import {AsyncLocalStorage} from 'node:async_hooks';
 import {vault} from './secure-state.mjs';
 import {config} from './config.mjs';
-import {canonical, route, within} from './access-policy.mjs';
+import {canonical, resolvedPath, route, within, SNAPSHOT_MAX_FILE} from './access-policy.mjs';
 
 const hash = data => createHash('sha256').update(data).digest('hex');
-const MAX_FILE = 32 * 1024 * 1024; // fail closed, no huge memory / disk copies
+const MAX_FILE = SNAPSHOT_MAX_FILE; // 32 MiB; fail closed, no huge memory / disk copies
 const MAX_BATCH = 128 * 1024 * 1024;
 const gitEnv = index => ({...process.env, GIT_INDEX_FILE:index, GIT_OPTIONAL_LOCKS:'0', GIT_TERMINAL_PROMPT:'0'});
 const looksCredentialBearing = raw => raw.includes(0) || /-----BEGIN (?:[A-Z ]+ )?PRIVATE KEY-----|(?:api[_-]?key|secret|access[_-]?token|password|authorization)\s*[=:]\s*["']?(?:Bearer\s+)?[A-Za-z0-9+/_.-]{16,}/i.test(raw.toString('utf8'));
@@ -22,6 +22,47 @@ const regular = p => {
   } catch(e) {if(e.code==='ENOENT')return null;throw e;}
 };
 const metaFile = (dir) => path.join(dir,'manifest.json');
+// A directory delete (y_file_trash) snapshots every file in the tree, so its
+// snapshot id really restores them. A tree beyond these bounds, or one that
+// holds links or special files, is recorded as the directory alone; the
+// caller then reports that only the Windows Recycle Bin holds its contents.
+export const MAX_TREE_ENTRIES = 2000;
+export function snapshotTree(dir,{maxEntries=MAX_TREE_ENTRIES,maxBytes=MAX_BATCH}={}){
+  const paths=[dir];let files=0,bytes=0;
+  const walk=d=>{
+    for(const entry of fs.readdirSync(d,{withFileTypes:true})){
+      if(paths.length>=maxEntries)return 'it has more than '+maxEntries+' entries';
+      const p=path.join(d,entry.name),s=fs.lstatSync(p);
+      if(s.isSymbolicLink()||(!s.isFile()&&!s.isDirectory())||(s.isFile()&&s.nlink!==1))return 'it contains a link, junction or special file';
+      paths.push(p);
+      if(s.isDirectory()){const reason=walk(p);if(reason)return reason;continue;}
+      files++;bytes+=s.size;if(s.size>MAX_FILE||bytes>maxBytes)return 'it is larger than the protected snapshot limit ('+Math.round(maxBytes/1048576)+' MB, '+Math.round(MAX_FILE/1048576)+' MB per file)';
+    }
+    return null;
+  };
+  let reason;try{reason=walk(dir);}catch(e){reason='it could not be read completely ('+(e.code??e.message)+')';}
+  return reason?{paths:[dir],complete:false,files,bytes,reason}:{paths,complete:true,files,bytes};
+}
+// Which y_file_trash targets the snapshot can really restore. Covered items
+// contribute their files (one shared 128 MB budget); uncovered ones add
+// nothing, so a restore never recreates an empty stand-in folder next to the
+// Recycle Bin copy. Paths keep their real letter case for the Recycle Bin.
+export function trashPlan(paths,{resolve=resolvedPath}={}){
+  let budget=MAX_BATCH;
+  return paths.map(input=>{
+    const target=resolve(input);let s=null;
+    try{s=fs.lstatSync(target);}catch(e){if(e.code!=='ENOENT')throw e;}
+    if(!s)return {path:target,kind:'absent',covered:true,snapshotPaths:[target]}; // the move reports the missing file
+    if(s.isSymbolicLink()||(!s.isFile()&&!s.isDirectory())||(s.isFile()&&s.nlink!==1))return {path:target,kind:'link',covered:false,reason:'it is a link or special file',snapshotPaths:[]};
+    if(s.isFile()){
+      if(s.size>MAX_FILE||s.size>budget)return {path:target,kind:'file',covered:false,reason:'it is larger than the protected snapshot limit',snapshotPaths:[]};
+      budget-=s.size;return {path:target,kind:'file',covered:true,snapshotPaths:[target]};
+    }
+    const tree=snapshotTree(target,{maxBytes:budget});
+    if(!tree.complete)return {path:target,kind:'directory',covered:false,reason:tree.reason,snapshotPaths:[]};
+    budget-=tree.bytes;return {path:target,kind:'directory',covered:true,files:tree.files,snapshotPaths:tree.paths};
+  });
+}
 export function snapshotTargetAllowed(target,{reviewed=false}={}){
   const c=route(target);
   // Policy gates belong to the broker. An exact human-approved operation may
@@ -103,7 +144,7 @@ export class BackupManager {
     const run=(cwd,args,env)=>execFileSync(this.git,['-c','core.hooksPath=NUL',...args],{cwd,env,encoding:'utf8',timeout:10000,windowsHide:true,stdio:['ignore','pipe','ignore']}).trim();
     try{
       const root=run(path.dirname(entries[0].path),['rev-parse','--show-toplevel']);
-      if(!root || entries.some(e=>!within(e.path,canonical(root))))return {status:'different-repos'};
+      if(!root || entries.some(e=>!within(canonical(e.path),canonical(root))))return {status:'different-repos'};
       const parent=run(root,['rev-parse','--verify','HEAD']);
       const index=path.join(dir,'isolated-git.index');const env=gitEnv(index);
       run(root,['read-tree',parent],env);
@@ -162,9 +203,12 @@ export class BackupManager {
     }
     return count;
   }
-  create(operation,targets){
-    const unique=[...new Set(targets.map(canonical))];
-    if(!unique.length || unique.length>100)throw Error('Unsupported snapshot target count');
+  create(operation,targets,{maxTargets=100}={}){
+    // Deduplicate on the lowercase key, but record the real letter case:
+    // restore and the Git checkpoint write these paths back.
+    const unique=[],seen=new Set();
+    for(const t of targets){const key=canonical(t);if(!seen.has(key)){seen.add(key);unique.push(resolvedPath(t));}}
+    if(!unique.length || unique.length>Math.min(maxTargets,MAX_TREE_ENTRIES*20))throw Error('Unsupported snapshot target count');
     const entries=[];let size=0;
     for(const p of unique){
       if(!snapshotTargetAllowed(p,{reviewed:this.reviewScope.getStore()===true}))

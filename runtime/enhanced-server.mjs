@@ -17,7 +17,7 @@ import {validateSource,validateDestination,checksum} from './safe-actions.mjs';
 import {describeOperation} from './operation-description.mjs';
 import {chatScope} from './chat-scope.mjs';
 import {profileSummary} from './permission-profiles.mjs';
-import {BackupManager} from './backup-manager.mjs';
+import {BackupManager,trashPlan} from './backup-manager.mjs';
 import {jobSnapshotTargets as planTerminalSnapshots} from './terminal-snapshots.mjs';
 import {createNativeExtension} from './native-extension.mjs';
 import {barTools,barEnabled,uiEnabled,barResource,approvalResourceUris,INSPECTION_URI,approvalCenterTool,approvalCenterResult,chatApprovalResult,handleBar,previewTool,previewResult} from './inline-approval.mjs';
@@ -54,7 +54,7 @@ const additions=[
  ['y_recent_calls','Recent call IDs and states with tool name, time, a short chat label and transport; no arguments, results or tokens.',obj({limit:integer})],
  ['y_usage_report','Usage statistics for this instance over a bounded window (1 hour to 30 days, default 7 days): totals by state, per-tool counts, error codes, latency percentiles and per-chat/transport counts. Chat labels are server-issued; host type is never guessed. No arguments, results or secrets are included.',obj({windowHours:{type:'integer',minimum:1,maximum:720}})],
  ['y_resource_owner','Read-only ownership view: the resources (jobs, browser tabs, process sessions, UIA bindings) that belong to THIS chat, and how many belong to other chats. Listing never grants control over any resource.',obj()],
- ['y_file_trash','Move 1 to 20 files or folders to the Windows Recycle Bin. A single ordinary file is deleted by default: a verified protected snapshot is taken first (its snapshotId restores it with y_backup_restore) and the Recycle Bin keeps its own copy; if the snapshot fails nothing is deleted. Batch deletes, directories, project roots, system paths, YGPT runtime/state and the vault require a human decision first.',obj({paths:{type:'array',minItems:1,maxItems:20,items:str}},['paths'])],
+ ['y_file_trash','Move 1 to 20 files or folders to the Windows Recycle Bin. A single ordinary file is deleted by default: a verified protected snapshot is taken first (its snapshotId restores it with y_backup_restore) and the Recycle Bin keeps its own copy; if the snapshot fails nothing is deleted. Batch deletes, directories, project roots, system paths, YGPT runtime/state, the vault and files too large for a snapshot (over 32 MB) require a human decision first. Folders are snapshotted file by file up to 2,000 entries and 128 MB in total; the result lists anything that only the Recycle Bin holds.',obj({paths:{type:'array',minItems:1,maxItems:20,items:str}},['paths'])],
  ,['y_backup_list','List protected pre-write snapshots; contents and credentials are not included.',obj({limit:integer})]
  ,['y_backup_diff','Get path/hash differences and Git checkpoint status for a snapshot.',obj({id},['id'])]
  ,['y_backup_restore','Conflict-checked restore of a completed file snapshot; creates its own undo snapshot.',obj({id},['id'])]
@@ -274,19 +274,28 @@ async function dispatchScoped(name,args,operationId,reviewed=false){
   }
   if(name==='y_file_trash'){
     if(process.platform!=='win32')throw Object.assign(Error('The Recycle Bin is only available on Windows'),{code:'TRASH_UNAVAILABLE',effectStarted:false});
-    await ensureBackups();const saved=backups.create(name,args.paths);backups.verify(saved.id);
+    await ensureBackups();
+    // Snapshot what it can really restore (folder trees included); anything
+    // else goes only after a human decision and is reported as Recycle-Bin-only.
+    const plan=trashPlan(args.paths);
+    if(!reviewed&&plan.some(item=>!item.covered))throw Object.assign(Error('A target cannot be held by a protected snapshot ('+plan.filter(item=>!item.covered).map(item=>item.path+': '+item.reason).join('; ')+'). Nothing was deleted; ask again for the owner\'s decision.'),{code:'APPROVAL_REQUIRED',effectStarted:false});
+    const snapshotPaths=plan.flatMap(item=>item.snapshotPaths);
+    const saved=snapshotPaths.length?backups.create(name,snapshotPaths,{maxTargets:snapshotPaths.length}):null;if(saved)backups.verify(saved.id);
     const exe=path.join(process.env.SystemRoot??'C:\\Windows','System32','WindowsPowerShell','v1.0','powershell.exe');
     const script='Add-Type -AssemblyName Microsoft.VisualBasic;$p=$env:YGPT_TRASH_PATH;if([IO.Directory]::Exists($p)){[Microsoft.VisualBasic.FileIO.FileSystem]::DeleteDirectory($p,[Microsoft.VisualBasic.FileIO.UIOption]::OnlyErrorDialogs,[Microsoft.VisualBasic.FileIO.RecycleOption]::SendToRecycleBin)}else{[Microsoft.VisualBasic.FileIO.FileSystem]::DeleteFile($p,[Microsoft.VisualBasic.FileIO.UIOption]::OnlyErrorDialogs,[Microsoft.VisualBasic.FileIO.RecycleOption]::SendToRecycleBin)}';
     const results=[];
-    try{for(const p of args.paths){const target=canonical(p);
+    try{for(const item of plan){const target=item.path; // real letter case: the Recycle Bin records it as the original location
       await new Promise((resolve,reject)=>{const child=spawn(exe,['-NoProfile','-NonInteractive','-Command',script],{env:{...cleanEnv(),YGPT_TRASH_PATH:target},windowsHide:true,stdio:['ignore','ignore','pipe']});let err='';child.stderr.on('data',b=>{err+=b;});child.once('error',reject);child.once('exit',c=>c===0?resolve():reject(Object.assign(Error('Recycle Bin move failed for '+target+': '+String(err).slice(0,300)),{code:'TRASH_FAILED'})));setTimeout(()=>{try{child.kill();}catch{}reject(Object.assign(Error('Recycle Bin move timed out'),{code:'TRASH_FAILED'}));},30000).unref();});
-      results.push({path:target,trashed:true});}
-    }catch(e){backups.finish(saved.id,false);e.snapshotId=saved.id;throw e;}
-    backups.finish(saved.id,true);
+      results.push({path:target,trashed:true,snapshot:item.covered?'covered':'recycle-bin-only',...(item.covered?{}:{reason:item.reason})});}
+    }catch(e){if(saved)backups.finish(saved.id,false);e.snapshotId=saved?.id;if(results.length)e.message+='; already moved to the Recycle Bin: '+results.map(r=>r.path).join(', ');throw e;}
+    if(saved)backups.finish(saved.id,true);
     const manifestPath=path.join(config.stateDir,'trash-manifest.json');let manifest=[];try{manifest=JSON.parse(fs.readFileSync(manifestPath,'utf8'));}catch{}
-    for(const r of results)manifest.push({snapshotId:saved.id,path:r.path,at:new Date().toISOString()});
+    for(const r of results)manifest.push({snapshotId:r.snapshot==='covered'?saved?.id??null:null,path:r.path,at:new Date().toISOString()});
     fs.writeFileSync(manifestPath,JSON.stringify(manifest,null,2));
-    const value={snapshotId:saved.id,results,restore:'Restore with y_backup_restore using this snapshotId after owner review; the Recycle Bin also keeps its own copy.'};
+    const uncovered=plan.filter(item=>!item.covered);
+    const value={snapshotId:saved?.id??null,results,coverage:uncovered.length?(saved?'partial':'none'):'complete',
+      restore:saved?'Restore the covered files with y_backup_restore using this snapshotId after owner review; the Recycle Bin also keeps its own copy.':'No protected snapshot holds these items; restore them from the Windows Recycle Bin.',
+      ...(uncovered.length?{recycleBinOnly:uncovered.map(item=>({path:item.path,reason:item.reason})),recycleBinNote:'Not in the protected snapshot: restore these from the Windows Recycle Bin (Windows may purge it when it is full).'}:{})};
     return {content:[{type:'text',text:JSON.stringify(value)}],structuredContent:value};
   }
   if(name==='y_download_file'){

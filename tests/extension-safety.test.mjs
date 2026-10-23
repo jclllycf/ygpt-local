@@ -10,19 +10,19 @@ import {WebSocket} from 'ws';
 import {ExtensionRelay} from '../engine/src/extension-relay.mjs';
 import {YBrowserFacade,YExtensionBrowser} from '../engine/src/browser-engine.mjs';
 
-async function extensionFixture(t){
-  const calls=[],responses=[],listeners={};
+async function extensionFixture(t,saved={}){
+  const calls=[],responses=[],listeners={},store={ygptInstanceId:'fixture',...saved};
   const event=name=>({addListener(fn){listeners[name]=fn;}});
   const tabs=new Map([[1,{id:1,groupId:-1,windowId:1,url:'https://personal.invalid/private',title:'Personal secret'}],[2,{id:2,groupId:7,windowId:1,url:'https://work.invalid/',title:'Work'}]]);
   const chrome={
-    storage:{local:{get:async()=>({ygptInstanceId:'fixture'}),set:async()=>{}}},
+    storage:{local:{get:async()=>({...store}),set:async o=>{Object.assign(store,JSON.parse(JSON.stringify(o)));}}},
     identity:{getProfileUserInfo:async()=>({})},
     windows:{getLastFocused:async()=>({id:1})},
     tabs:{query:async()=>[...tabs.values()],get:async id=>{if(!tabs.has(id))throw Error('missing');return tabs.get(id);},
       create:async()=>{const tab={id:3,windowId:1,groupId:-1};tabs.set(3,tab);return tab;},
       group:async()=>7,remove:async id=>{calls.push(['remove',id]);tabs.delete(id);},
       onCreated:event('tabCreated'),onUpdated:event('tabUpdated'),onRemoved:event('tabRemoved')},
-    tabGroups:{query:async()=>[{id:7,windowId:1,title:'YGPT'}],update:async()=>{},onCreated:event('groupCreated'),onRemoved:event('groupRemoved'),onUpdated:event('groupUpdated')},
+    tabGroups:{query:async q=>[{id:7,windowId:1,title:'YGPT'}].filter(g=>q?.windowId==null||g.windowId===q.windowId),update:async()=>{},onCreated:event('groupCreated'),onRemoved:event('groupRemoved'),onUpdated:event('groupUpdated')},
     debugger:{attach:async target=>{calls.push(['attach',target.tabId]);},detach:async target=>{calls.push(['detach',target.tabId]);},sendCommand:async(target,method)=>{calls.push(['send',target.tabId,method]);return {};},onEvent:event('debuggerEvent'),onDetach:event('debuggerDetach')},
     alarms:{create(){},onAlarm:event('alarm')},runtime:{onInstalled:event('installed'),onStartup:event('startup'),onMessage:event('message')}
   };
@@ -35,7 +35,7 @@ async function extensionFixture(t){
   vm.runInContext('ws=transport',context);
   t.after(()=>{for(const timer of timers)clearTimeout(timer);});
   const request=async(method,params={})=>{context.requestArg=JSON.stringify({type:'req',reqId:responses.length+1,method,params});await vm.runInContext('onRequest(requestArg)',context);return responses.at(-1);};
-  return {request,calls,tabs,chrome,listeners,context};
+  return {request,calls,tabs,chrome,listeners,context,store};
 }
 
 test('Extension counts personal tabs without returning their metadata; commands stay in the group',async t=>{
@@ -98,6 +98,52 @@ test('Extension sends a keepalive while connected and stops when the socket is r
   tick();assert.deepEqual(sent,['ping'],'a replaced socket gets no keepalive');assert.ok(cleared>0);
 });
 
+test('Extension reports a group tab opener only when the opener is a group tab too',async t=>{
+  const f=await extensionFixture(t);
+  f.tabs.set(4,{id:4,groupId:7,windowId:1,openerTabId:2,url:'https://work.invalid/popup',title:'Popup'});
+  f.tabs.set(5,{id:5,groupId:7,windowId:1,openerTabId:1,url:'https://work.invalid/from-personal',title:'From personal'});
+  const listed=await f.request('tabs.list');
+  assert.deepEqual(listed.result.tabs.map(t=>[t.tabId,t.openerTabId]),[[2,null],[4,2],[5,null]]);
+});
+
+test('Popup Save with an empty token field keeps the saved pairing',async t=>{
+  const f=await extensionFixture(t,{ygptSettings:{host:'127.0.0.1',port:19341,token:'paired-token',groupName:'YGPT'}});
+  const save=settings=>new Promise(r=>f.listeners.message({kind:'save-settings',settings},{},r));
+  await save({host:'127.0.0.1',port:19342,token:''});
+  assert.equal(f.store.ygptSettings.token,'paired-token','the popup never shows the token, so empty means keep it');
+  assert.equal(f.store.ygptSettings.port,19342);
+  await save({host:'127.0.0.1',port:19342,token:'new-token'});
+  assert.equal(f.store.ygptSettings.token,'new-token');
+});
+
+test('Extension opens group tabs in a normal window and groups them where Chrome placed them',async t=>{
+  const f=await extensionFixture(t);
+  let asked,grouped;
+  // A focused popup (id 9): Chrome opens the tab in a normal window (4) instead.
+  f.chrome.windows.getLastFocused=async q=>{asked=JSON.parse(JSON.stringify(q??null));return {id:9};};
+  f.chrome.tabs.create=async()=>{const tab={id:5,windowId:4,groupId:-1};f.tabs.set(5,tab);return tab;};
+  f.chrome.tabs.group=async p=>{grouped=JSON.parse(JSON.stringify(p));return 8;};
+  const created=await f.request('tabs.create',{url:'https://work.invalid/'});
+  assert.equal(created.ok,true,created.error);
+  assert.deepEqual(asked,{windowTypes:['normal']});
+  assert.deepEqual(grouped,{createProperties:{windowId:4},tabIds:[5]});
+  assert.equal(created.result.windowId,4);
+});
+
+test('Extension reports a debugger session Chrome ended, once, and never one it detached itself',async t=>{
+  const f=await extensionFixture(t);
+  const events=[];const original=f.context.transport.send;
+  f.context.transport.send=raw=>{const m=JSON.parse(raw);if(m.kind==='detached')events.push(m);original(raw);};
+  await f.request('debugger.attach',{tabId:2});
+  f.listeners.debuggerDetach({tabId:2},'canceled_by_user');
+  f.listeners.debuggerDetach({tabId:2},'canceled_by_user');
+  f.listeners.debuggerDetach({tabId:1},'target_closed');
+  assert.deepEqual(events,[{type:'event',kind:'detached',tabId:2,reason:'canceled_by_user'}]);
+  await f.request('debugger.attach',{tabId:2});await f.request('debugger.detach',{tabId:2});
+  f.listeners.debuggerDetach({tabId:2},'target_closed');
+  assert.equal(events.length,1,'a detach the relay asked for is not reported back');
+});
+
 async function relayFixture(t){
   const stateDir=await fs.mkdtemp(path.join(os.tmpdir(),'ygpt-relay-safety-'));
   const relay=new ExtensionRelay({stateDir,port:0});await relay.start();
@@ -121,7 +167,7 @@ async function fakeExtension(relay,id='fixture'){
   return {ws,calls,tabs,failClose:()=>{failClose=true;}};
 }
 async function cdpClient(relay){
-  const ws=new WebSocket(relay.endpoint().replace('http:','ws:')+'/devtools/browser/ygpt');
+  const ws=new WebSocket(relay.endpoint().replace('http:','ws:')+'/devtools/browser/ygpt',{headers:relay.cdpHeaders()});
   const pending=new Map();let seq=0;
   ws.on('message',raw=>{const m=JSON.parse(raw);if(m.id){pending.get(m.id)?.(m);pending.delete(m.id);}});
   await once(ws,'open');
@@ -156,6 +202,32 @@ test('Relay dispatches one tab\'s commands in arrival order and rejects unknown 
   assert.equal((await c.send('Target.detachFromTarget',{},'ygpt-session-unknown')).error,undefined,'detaching an unknown session stays harmless');
 });
 
+test('Relay ends sessions Chrome detached; Cancel on the debugging bar ends the take-over',async t=>{
+  const relay=await relayFixture(t),ext=await fakeExtension(relay);relay.bind('fixture');const c=await cdpClient(relay);
+  const events=[];c.ws.on('message',raw=>{const m=JSON.parse(raw);if(m.method)events.push(m);});
+  const sid=(await c.send('Target.attachToTarget',{targetId:'2'})).result.sessionId;
+  ext.ws.send(JSON.stringify({type:'event',kind:'detached',tabId:2,reason:'target_closed'}));
+  for(let i=0;i<200&&!events.some(e=>e.method==='Target.detachedFromTarget');i++)await new Promise(r=>setTimeout(r,5));
+  assert.deepEqual(events.find(e=>e.method==='Target.detachedFromTarget')?.params,{sessionId:sid,targetId:'fixture-frame-2'});
+  assert.equal((await c.send('Runtime.evaluate',{expression:'1'},sid)).error?.code,-32001,'the dead session is gone, not silently re-attached');
+  assert.equal(relay.boundId,'fixture','a single tab detaching keeps the take-over');
+  const again=(await c.send('Target.attachToTarget',{targetId:'fixture-frame-2'})).result.sessionId;
+  assert.ok(again&&again!==sid,'the tab can be attached again with a fresh session');
+  const closed=once(c.ws,'close');
+  ext.ws.send(JSON.stringify({type:'event',kind:'detached',tabId:2,reason:'canceled_by_user'}));
+  await closed;
+  assert.equal(relay.boundId,null,'Cancel on the debugging bar ends the take-over');
+  assert.ok(relay.instances.has('fixture'),'the extension stays paired');
+});
+
+test('Relay names a popup\'s group-tab opener so Playwright keeps it with that chat',async t=>{
+  const relay=await relayFixture(t),ext=await fakeExtension(relay);relay.bind('fixture');const c=await cdpClient(relay);
+  ext.tabs.push({tabId:3,inGroup:true,openerTabId:2,title:'Popup',url:'https://work.invalid/popup'},{tabId:4,inGroup:true,openerTabId:null,title:'Other',url:'https://work.invalid/other'});
+  const infos=(await c.send('Target.getTargets')).result.targetInfos;
+  assert.equal(infos.find(i=>i.targetId==='fixture-frame-3').openerId,'fixture-frame-2');
+  assert.equal('openerId' in infos.find(i=>i.targetId==='fixture-frame-4'),false);
+});
+
 test('Relay replacement retains the new extension, disconnects old CDP clients and clears frame IDs',async t=>{
   const relay=await relayFixture(t);await fakeExtension(relay);relay.bind('fixture');const c=await cdpClient(relay);
   await c.send('Target.attachToTarget',{targetId:'2'});assert.equal(relay.frameIds.size,1);
@@ -176,6 +248,22 @@ test('Relay blocks hostile web origins and DNS rebinding hosts',async t=>{
   const page=await fetch(relay.endpoint()+'/');assert.equal(page.status,200);assert.equal(page.headers.get('cache-control'),'no-store');
 });
 
+test('Relay CDP endpoint answers only the engine holding this process secret',async t=>{
+  const relay=await relayFixture(t);
+  for(const headers of [{},{'x-ygpt-relay':'guess'},{'x-ygpt-relay':relay.cdpSecret+'x'}]){
+    assert.equal((await fetch(relay.endpoint()+'/json/version',{headers})).status,401);
+    assert.equal((await fetch(relay.endpoint()+'/json/list',{headers})).status,401);
+    const ws=new WebSocket(relay.endpoint().replace('http:','ws:')+'/devtools/browser/ygpt',{headers});
+    await assert.rejects(once(ws,'open'));
+  }
+  const version=await (await fetch(relay.endpoint()+'/json/version',{headers:relay.cdpHeaders()})).json();
+  assert.match(version.webSocketDebuggerUrl,/\/devtools\/browser\/ygpt$/);
+  const c=await cdpClient(relay);assert.equal((await c.send('Browser.getVersion')).result.product,'Chrome/YGPT-Extension');
+  // The pairing page never shows the CDP secret; it is not stored in the state folder.
+  assert.ok(!(await (await fetch(relay.endpoint()+'/')).text()).includes(relay.cdpSecret));
+  assert.ok(!(await fs.readFile(path.join(relay.stateDir,'extension-pairing.json'),'utf8')).includes(relay.cdpSecret));
+});
+
 test('Relay startup retries after a busy port; facade shutdown releases the listener',async t=>{
   const busy=http.createServer();busy.listen(0,'127.0.0.1');await once(busy,'listening');
   const stateDir=await fs.mkdtemp(path.join(os.tmpdir(),'ygpt-relay-retry-'));
@@ -193,4 +281,70 @@ test('Attached status exposes only the calling chat tabs and account selectors n
   owner='chat-b';assert.deepEqual(engine.status().tabs,[]);
   engine.ensureRelay=async()=>{};engine.relay.instancesList=()=>[{id:'a',browser:'Chrome',profileEmail:'a@example.com'},{id:'b',browser:'Chrome',profileEmail:'b@example.com'}];
   const result=await engine.attach({instance:'Chrome'});assert.equal(result.needsChoice,true);assert.equal(result.candidates.length,2);
+});
+
+function stubPage(url,opener=null){const handlers={};return {url:()=>url,isClosed:()=>false,opener:async()=>opener,on(name,fn){handlers[name]=fn;},close(){handlers.close?.();}};}
+test('Pages that appear after attach follow their opener; without one they are never guessed between chats',async()=>{
+  let owner='chat-a';const engine=new YExtensionBrowser({stateDir:'/unused',currentOwner:()=>owner});
+  const pages=[];let closed=0;
+  engine.browser={contexts:()=>[{pages:()=>pages}],close:async()=>{closed++;}};engine.relay.unbind=()=>{};
+  const settle=()=>new Promise(r=>setImmediate(r));
+  owner='chat-a';await engine.attach({});owner='chat-b';await engine.attach({});
+  const bPage=stubPage('https://b.invalid/');pages.push(bPage);engine.track(bPage,'chat-b');
+  const popup=stubPage('https://b.invalid/popup',bPage);pages.push(popup);engine.onNewPage(popup);await settle();
+  owner='chat-b';assert.ok(engine.status().tabs.some(t=>t.url==='https://b.invalid/popup'),'a popup stays with the chat whose tab opened it');
+  owner='chat-a';assert.deepEqual(engine.status().tabs,[]);
+  const orphan=stubPage('https://moved-into-group.invalid/');pages.push(orphan);engine.onNewPage(orphan);await settle();
+  assert.equal([...engine.tabs.values()].some(t=>t.page===orphan),false,'two chats hold the connection: nobody gets it by guess');
+  owner='chat-a';assert.equal((await engine.attach({})).adopted,1,'an explicit attach adopts it');
+  owner='chat-a';const left=await engine.detach();assert.equal(left.sharedConnectionKept,true);
+  const later=stubPage('https://later.invalid/');pages.push(later);engine.onNewPage(later);await settle();
+  owner='chat-b';assert.ok(engine.status().tabs.some(t=>t.url==='https://later.invalid/'),'the only remaining holder gets it, not the chat that left');
+  assert.equal(closed,0);
+});
+test('A chat that attached without tabs keeps the shared connection when another chat detaches',async()=>{
+  let owner='chat-a';const engine=new YExtensionBrowser({stateDir:'/unused',currentOwner:()=>owner});
+  let closed=0;engine.browser={contexts:()=>[{pages:()=>[]}],close:async()=>{closed++;}};engine.relay.unbind=()=>{};
+  await engine.attach({});owner='chat-b';await engine.attach({});
+  owner='chat-a';assert.equal((await engine.detach()).sharedConnectionKept,true);assert.equal(closed,0);
+  owner='chat-b';assert.equal((await engine.detach()).sharedConnectionKept,undefined);assert.equal(closed,1);
+});
+test('Take-over detach is per chat: the shared connection stays for other chats and closes with the last',async()=>{
+  let owner='chat-a';const engine=new YExtensionBrowser({stateDir:'/unused',currentOwner:()=>owner});
+  const pages=[stubPage('https://a.invalid/'),stubPage('https://b.invalid/'),stubPage('https://left-over.invalid/')];let closed=0,unbound=0;
+  engine.browser={contexts:()=>[{pages:()=>pages}],close:async()=>{closed++;}};engine.relay.unbind=()=>{unbound++;};
+  const a=engine.track(pages[0],'chat-a'),b=engine.track(pages[1],'chat-b');
+  owner='chat-a';const first=await engine.detach();
+  assert.equal(first.sharedConnectionKept,true);assert.equal(first.released,1);assert.equal(closed+unbound,0,'chat B keeps the shared connection');
+  owner='chat-b';assert.equal(engine.page(b),pages[1]);assert.equal(engine.has(a),false);
+  // A later attach adopts group tabs no chat holds (released or left over).
+  const again=await engine.attach({});assert.equal(again.adopted,2);assert.deepEqual(again.tabs.map(t=>t.url).sort(),['https://a.invalid/','https://b.invalid/','https://left-over.invalid/']);
+  const last=await engine.detach();assert.equal(last.sharedConnectionKept,undefined);assert.equal(closed,1);assert.equal(unbound,1);assert.equal(engine.browser,null);
+});
+
+test('Closing a chat context releases its daily-browser tabs without closing them',async()=>{
+  const stateDir=await fs.mkdtemp(path.join(os.tmpdir(),'ygpt-facade-release-'));
+  let owner='chat-a';const facade=new YBrowserFacade({stateDir,currentOwner:()=>owner,extension:{port:0}});
+  try{
+    const page=stubPage('https://work.invalid/');let pageClosed=false;page.close=()=>{pageClosed=true;};
+    facade.existing.browser={contexts:()=>[{pages:()=>[page]}],close:async()=>{}};
+    const id=facade.existing.track(page,'chat-a');
+    const r=await facade.closeContext('chat-a');
+    assert.equal(r.dailyBrowserTabsReleased,1);assert.equal(facade.existing.has(id),false);assert.equal(pageClosed,false);
+    owner='chat-b';assert.equal((await facade.existing.attach({})).adopted,1,'the released tab can be adopted again');
+  }finally{facade.existing.browser=null;await facade.close();await fs.rm(stateDir,{recursive:true,force:true});}
+});
+
+test('The first attach after the relay starts waits for a paired extension that reconnects late',async t=>{
+  const stateDir=await fs.mkdtemp(path.join(os.tmpdir(),'ygpt-late-extension-'));
+  const engine=new YExtensionBrowser({stateDir,port:0});
+  t.after(async()=>{await engine.close();await fs.rm(stateDir,{recursive:true,force:true});});
+  await engine.ensureRelay();
+  // The extension's alarm/backoff brings it back several seconds later than
+  // the old 4.7 s attach window.
+  setTimeout(()=>{void fakeExtension(engine.relay,'late');},5500);
+  const started=Date.now(),attached=await engine.attach({});
+  assert.equal(attached.attached,true);assert.equal(attached.identity.instance,'late');
+  assert.ok(Date.now()-started>=5000);
+  await engine.detach();
 });

@@ -28,6 +28,11 @@ export class ExtensionRelay {
     this.boundId=null;         // instance chosen by the engine (one at a time)
     this.cdpClients=new Set(); // {ws,sessions:Map,sessionsByTab:Map,autoAttach}
     this.tabOrder=new Map();   // tabId -> tail of the in-order dispatch chain
+    // CDP endpoint credential for this process only (never written to disk).
+    // The Origin check keeps web pages out; this keeps other local programs
+    // (including project scripts YGPT runs) from driving the owner's
+    // logged-in group tabs. Playwright sends it on /json/version and the upgrade.
+    this.cdpSecret=crypto.randomBytes(24).toString('base64url');
     this.reqSeq=0;
   }
   async pairing(){
@@ -52,12 +57,12 @@ export class ExtensionRelay {
       if(!this.localRequest(req)){socket.destroy();return;}
       const url=new URL(req.url,'http://127.0.0.1');
       if(url.pathname==='/ext'){if(url.searchParams.get('token')!==this.token||req.headers.origin&&!/^chrome-extension:\/\/[a-p]{32}$/.test(req.headers.origin)){socket.destroy();return;}this.wssExt.handleUpgrade(req,socket,head,ws=>this.onExtension(ws));}
-      else if(url.pathname==='/devtools/browser/ygpt'&&!req.headers.origin){this.wssCdp.handleUpgrade(req,socket,head,ws=>this.onCdpClient(ws));}
+      else if(url.pathname==='/devtools/browser/ygpt'&&!req.headers.origin&&this.cdpAuthorized(req)){this.wssCdp.handleUpgrade(req,socket,head,ws=>this.onCdpClient(ws));}
       else socket.destroy();
     });
     try{await new Promise((resolve,reject)=>{const fail=e=>reject(e);this.server.once('error',fail);this.server.listen(this.port,'127.0.0.1',()=>{this.server.off('error',fail);resolve();});});}
     catch(e){this.server=null;this.wssExt.close();this.wssCdp.close();throw e;}
-    this.port=this.server.address().port;
+    this.port=this.server.address().port;this.startedAt=Date.now();
     this.log('extension relay listening on 127.0.0.1:'+this.port);
   }
   async stop(){
@@ -73,12 +78,15 @@ export class ExtensionRelay {
   }
   endpoint(){return 'http://127.0.0.1:'+this.port;}
   localRequest(req){return ['127.0.0.1:'+this.port,'localhost:'+this.port].includes(req.headers.host);}
+  cdpAuthorized(req){const got=Buffer.from(String(req.headers['x-ygpt-relay']??'')),want=Buffer.from(this.cdpSecret);return got.length===want.length&&crypto.timingSafeEqual(got,want);}
+  cdpHeaders(){return {'x-ygpt-relay':this.cdpSecret};}
   async http(req,res){
     if(!this.localRequest(req)||req.headers.origin&&req.headers.origin!==this.endpoint()&&req.headers.origin!=='http://localhost:'+this.port){res.writeHead(403);res.end();return;}
     res.setHeader('Cache-Control','no-store');
     res.setHeader('Content-Security-Policy',"default-src 'none'; style-src 'unsafe-inline'; frame-ancestors 'none'");
     const url=new URL(req.url,'http://127.0.0.1');
     let pathname=url.pathname;if(pathname.length>1&&pathname.endsWith('/'))pathname=pathname.slice(0,-1); // Playwright asks for /json/version/ with a trailing slash
+    if(pathname.startsWith('/json')&&!this.cdpAuthorized(req)){res.writeHead(401);res.end();return;}
     if(pathname==='/json/version'){return json(res,{Browser:'YGPT Extension Relay',ProtocolVersion:'1.3','Protocol-Version':'1.3',webSocketDebuggerUrl:'ws://127.0.0.1:'+this.port+'/devtools/browser/ygpt',UserAgent:'YGPT-Relay'});}
     if(pathname==='/json/list'||pathname==='/json'){const tabs=await this.boundGroupTabs().catch(()=>[]);return json(res,tabs.map(t=>({id:String(t.tabId),type:'page',title:t.title??'',url:t.url??'',webSocketDebuggerUrl:'ws://127.0.0.1:'+this.port+'/devtools/page/'+t.tabId})));}
     if(pathname==='/'){return html(res,pairingPage({token:this.token,port:this.port,instances:this.instancesList()}));}
@@ -103,6 +111,7 @@ export class ExtensionRelay {
       else if(msg.type==='event'&&msg.kind==='cdp'){this.forwardCdpEvent(inst,msg.tabId,msg.method,msg.params);}
       else if(msg.type==='event'&&msg.kind==='tabsChanged'){if(typeof msg.totalTabs==='number')inst.totalTabs=msg.totalTabs;this.emitTargetChanges();}
       else if(msg.type==='event'&&msg.kind==='tabRemoved'){this.onTabRemoved(inst,msg.tabId);}
+      else if(msg.type==='event'&&msg.kind==='detached'){this.onDebuggerDetached(inst,msg.tabId,msg.reason);}
     });
     const cleanup=()=>{if(inst){if(this.instances.get(inst.id)===inst){this.instances.delete(inst.id);if(this.boundId===inst.id)this.unbind();}for(const p of inst.pending.values())p.reject(new Error('extension disconnected'));inst.pending.clear();}};
     ws.on('close',cleanup);ws.on('error',cleanup);
@@ -122,7 +131,9 @@ export class ExtensionRelay {
   async boundGroupTabs(){const inst=this.bound();if(!inst)return [];const {tabs,totalTabs}=await this.callExtension(inst,'tabs.list',{groupName:this.groupName});if(this.bound()!==inst)throw new Error('extension instance changed');if(typeof totalTabs==='number')inst.totalTabs=totalTabs;return tabs.filter(t=>t.inGroup);}
   async requireGroupTab(inst,tabId){const tabs=await this.boundGroupTabs();if(this.bound()!==inst||!tabs.some(t=>t.tabId===tabId))throw new Error('Tab is no longer in the YGPT group');}
   async boundTotalTabs(){const inst=this.bound();if(!inst)return 0;const {tabs,totalTabs}=await this.callExtension(inst,'tabs.list',{groupName:this.groupName});if(typeof totalTabs==='number')inst.totalTabs=totalTabs;return inst.totalTabs;}
-  targetInfo(tab){return {targetId:this.frameIds.get(tab.tabId)??String(tab.tabId),type:'page',title:tab.title??'',url:tab.url??'',attached:false,browserContextId:'ygpt',canAccessOpener:false};}
+  // openerId lets Playwright link a popup to the group tab that opened it (so
+  // it stays with that chat); only a resolved group tab can be an opener.
+  targetInfo(tab){const openerId=tab.openerTabId!=null?this.frameIds.get(tab.openerTabId):undefined;return {targetId:this.frameIds.get(tab.tabId)??String(tab.tabId),type:'page',title:tab.title??'',url:tab.url??'',attached:false,browserContextId:'ygpt',canAccessOpener:false,...(openerId?{openerId}:{})};}
   async frameIdFor(inst,tabId){
     const cached=this.frameIds.get(tabId);if(cached)return cached;
     const tree=await this.callExtension(inst,'debugger.send',{tabId,method:'Page.getFrameTree',params:{}});
@@ -269,6 +280,16 @@ export class ExtensionRelay {
       if(sid){this.emit(c,'Target.detachedFromTarget',{sessionId:sid,targetId});c.sessions.delete(sid);c.byTab.delete(tabId);}
       this.emit(c,'Target.targetDestroyed',{targetId});
     }
+  }
+  // Chrome ended the tab's debugger session itself, taking every enabled CDP
+  // domain with it: end the sessions (Playwright drops the page) so a later
+  // attach starts clean. Cancel on Chrome's "started debugging" bar is the
+  // owner stopping the take-over: drop the binding; tabs and group stay.
+  onDebuggerDetached(inst,tabId,reason){
+    if(this.boundId!==inst.id)return;
+    if(reason==='canceled_by_user'){this.log('owner canceled debugging in '+inst.browser+'; take-over disconnected');this.unbind();return;}
+    const targetId=this.frameIds.get(tabId)??String(tabId);
+    for(const c of this.cdpClients){const sid=c.byTab.get(tabId);if(sid){this.emit(c,'Target.detachedFromTarget',{sessionId:sid,targetId});c.sessions.delete(sid);c.byTab.delete(tabId);}}
   }
   emitTargetChanges(){void (async()=>{const inst=this.bound();if(!inst)return;const tabs=await this.boundGroupTabs();for(const c of this.cdpClients){for(const tabId of c.byTab.keys())if(!tabs.some(t=>t.tabId===tabId))this.onTabRemoved(inst,tabId);for(const t of tabs)this.emit(c,'Target.targetInfoChanged',{targetInfo:this.targetInfo(t)});if(c.autoAttach)await this.autoAttachAll(c);}})().catch(()=>{});}
   forwardCdpEvent(inst,tabId,method,params){

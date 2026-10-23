@@ -98,6 +98,11 @@ export class YBrowserEngine {
 // are counted, never exposed, read, moved or closed.
 import {ExtensionRelay} from './extension-relay.mjs';
 export class YExtensionBrowser {
+  // A paired extension reconnects on its own schedule (MV3 alarm/backoff, up
+  // to about 30 s) after YGPT or the browser starts. While the relay is that
+  // new, attach waits longer for the first announcement; the total stays
+  // under the 30 s HTTP request limit even with the 10 s CDP connect.
+  static FRESH_RELAY_MS=35000;static FRESH_WAIT_MS=15000;static SETTLED_WAIT_MS=4000;
   constructor({stateDir,currentOwner=()=>'local',port=19341,groupName='YGPT',validateUrl}={}){
     this.stateDir=stateDir;this.owner=()=>currentOwner()??'local';
     this.groupName=groupName||'YGPT';
@@ -105,8 +110,13 @@ export class YExtensionBrowser {
     this.relay=new ExtensionRelay({stateDir,port,groupName:this.groupName});
     this.relayReady=null;
     this.browser=null;this.tabs=new Map();this.identity=null;
+    this.holders=new Set(); // chats currently attached to the shared connection
   }
   async ensureRelay(){if(!this.relayReady)this.relayReady=this.relay.start().catch(e=>{this.relayReady=null;throw e;});await this.relayReady;}
+  // Production starts the relay with the service, so a paired extension is
+  // normally connected long before the first y_browser_attach. A busy port is
+  // not fatal here; attach retries and reports it.
+  prestart(){void this.ensureRelay().catch(()=>{});}
   pairingUrl(){return this.relay.endpoint()+'/';}
   async attach({instance}={}){
     if(this.attaching){await this.attaching;return this.attach({instance});}
@@ -114,11 +124,15 @@ export class YExtensionBrowser {
     try{return await this.attaching;}finally{this.attaching=null;}
   }
   async attachBrowser({instance}={}){
-    if(this.browser)return this.status();
+    // The take-over connection is shared by every chat. A later attach adopts
+    // group tabs no chat holds (left over, or released by a detach).
+    if(this.browser){this.holders.add(this.owner());const adopted=this.adoptUnowned(this.owner());return {...this.status(),adopted};}
     await this.ensureRelay();
     let candidates=this.relay.instancesList();
-    for(let i=0;i<8&&candidates.length===0;i++){await new Promise(r=>setTimeout(r,500));candidates=this.relay.instancesList();}
-    if(candidates.length===0)throw new EngineError('BROWSER_EXTENSION_MISSING','The YGPT browser extension is not connected, so there is no daily browser to take over. Ask the owner to: (1) load the YGPT extension from the "extension" folder of their YGPT Local installation (chrome://extensions or edge://extensions, Developer mode, Load unpacked), (2) open '+this.pairingUrl()+' in that browser and copy the pairing token, (3) paste it into the extension popup. Nothing was changed.');
+    const fresh=Date.now()-(this.relay.startedAt??0)<YExtensionBrowser.FRESH_RELAY_MS;
+    const deadline=Date.now()+(fresh?YExtensionBrowser.FRESH_WAIT_MS:YExtensionBrowser.SETTLED_WAIT_MS);
+    while(candidates.length===0&&Date.now()<deadline){await new Promise(r=>setTimeout(r,250));candidates=this.relay.instancesList();}
+    if(candidates.length===0)throw new EngineError('BROWSER_EXTENSION_MISSING','The YGPT browser extension is not connected, so there is no daily browser to take over. If the owner already installed and paired it, the browser may be closed or may still be reconnecting (it retries about every 30 seconds after YGPT or the browser starts): wait briefly and call y_browser_attach again. Otherwise ask the owner to: (1) load the YGPT extension from the "extension" folder of their YGPT Local installation (chrome://extensions or edge://extensions, Developer mode, Load unpacked), (2) open '+this.pairingUrl()+' in that browser and copy the pairing token, (3) paste it into the extension popup. Nothing was changed.');
     // Pairing announcements can arrive in a burst (several browsers
     // reconnecting when the service starts). With exactly one candidate and
     // no explicit choice, settle briefly so a second profile that is pairing
@@ -131,15 +145,28 @@ export class YExtensionBrowser {
     else chosen=candidates[0];
     this.relay.bind(chosen.id);
     let browser;
-    try{browser=await chromium.connectOverCDP(this.relay.endpoint(),{timeout:10000});}
+    try{browser=await chromium.connectOverCDP(this.relay.endpoint(),{timeout:10000,headers:this.relay.cdpHeaders()});}
     catch{this.relay.unbind();throw new EngineError('BROWSER_ATTACH_FAILED','The paired browser stopped answering before the connection completed. Nothing was changed.');}
     this.browser=browser;
     this.identity={via:'YGPT browser extension',browser:chosen.browser,profileEmail:chosen.profileEmail,instance:chosen.id};
-    browser.on('disconnected',()=>{if(this.browser===browser){this.browser=null;this.tabs.clear();}});
+    browser.on('disconnected',()=>{if(this.browser===browser){this.browser=null;this.tabs.clear();this.identity=null;this.holders.clear();}});
     let adopted=0;
-    const owner=this.owner();
-    for(const ctx of browser.contexts()){ctx.on('page',pg=>{void pg.opener().then(opener=>{const parent=[...this.tabs.values()].find(t=>t.page===opener);this.track(pg,parent?.owner??owner);}).catch(()=>{});});for(const pg of ctx.pages()){this.track(pg,owner);adopted++;}}
+    const owner=this.owner();this.holders=new Set([owner]);
+    for(const ctx of browser.contexts()){ctx.on('page',pg=>this.onNewPage(pg));for(const pg of ctx.pages()){this.track(pg,owner);adopted++;}}
     return {...this.status(),adopted};
+  }
+  // A page that appears after attach (a popup or link opened by a group tab,
+  // a tab re-adopted after Chrome ended its session, a tab the owner moved
+  // into the group) belongs to its opener's chat. Without a known opener it
+  // goes to the only chat holding the connection; with several it stays
+  // unowned for the next y_browser_attach — never guessed between chats.
+  onNewPage(pg){
+    void pg.opener().then(opener=>{
+      if(pg.isClosed()||[...this.tabs.values()].some(t=>t.page===pg))return; // createGroupTab claimed it
+      const parent=opener?[...this.tabs.values()].find(t=>t.page===opener):null;
+      const owner=parent?.owner??(this.holders.size===1?[...this.holders][0]:null);
+      if(owner!=null)this.track(pg,owner);
+    }).catch(()=>{});
   }
   status(){const mine=[...this.tabs].filter(([,t])=>t.owner===this.owner());return {attached:!!this.browser,identity:this.identity,group:this.browser?{name:this.groupName,tabs:mine.length}:null,pairingUrl:this.pairingUrl(),tabs:mine.map(([tabId,t])=>({tabId,url:t.page.url()}))};}
   track(page,owner=this.owner(),claim=false){
@@ -148,6 +175,10 @@ export class YExtensionBrowser {
     page.on('close',()=>{this.tabs.delete(id);});
     return id;
   }
+  adoptUnowned(owner){let n=0;if(!this.browser)return n;for(const ctx of this.browser.contexts())for(const pg of ctx.pages())if(!pg.isClosed()&&![...this.tabs.values()].some(t=>t.page===pg)){this.track(pg,owner);n++;}return n;}
+  // Forget this chat's tabs without closing them; they stay in the YGPT group
+  // for a later attach. Used by detach and by y_close_context.
+  release(owner=this.owner()){this.holders.delete(owner);let n=0;for(const [id,t] of this.tabs)if(t.owner===owner){this.tabs.delete(id);n++;}return n;}
   has(id){return this.tabs.has(id);}
   page(id){
     const t=this.tabs.get(id),owner=this.owner();
@@ -162,7 +193,7 @@ export class YExtensionBrowser {
     // The relay always creates that target in the background YGPT group;
     // set-difference matching races with concurrent opens and page popups.
     const page=await ctx.newPage();
-    this.track(page,this.owner(),true);
+    this.holders.add(this.owner());this.track(page,this.owner(),true);
     await page.goto(url,{waitUntil:'domcontentloaded',timeout:15000});
     return page;
   }
@@ -196,8 +227,17 @@ export class YExtensionBrowser {
   }
   async closeTab(id){await this.page(id).close();return {closed:id};}
   owned(owner=this.owner()){return [...this.tabs].filter(([,t])=>t.owner===owner).map(([tabId,t])=>({tabId,url:t.page.url(),mode:'existing'}));}
-  async detach(){await this.attaching?.catch(()=>{});const b=this.browser;this.browser=null;this.tabs.clear();await b?.close().catch(()=>{});this.relay.unbind();return {detached:true,note:'Disconnected. The daily browser was left running, the extension stays paired, and the YGPT tab group was left in place for the next attach'};}
-  async close(){await this.detach().catch(()=>{});await this.relay.stop().catch(()=>{});this.relayReady=null;}
+  // Chat-scoped: one chat detaching must not cut off another chat that still
+  // works in the daily browser. The shared connection closes with the last.
+  async detach(){
+    await this.attaching?.catch(()=>{});
+    const released=this.release(this.owner());
+    if(this.browser&&(this.holders.size||this.tabs.size))return {detached:true,released,sharedConnectionKept:true,note:'This chat released its YGPT group tabs; they stay open in the group. Another chat is still working in the daily browser, so the shared connection stays open. Nothing was closed.'};
+    await this.disconnect();
+    return {detached:true,released,note:'Disconnected. The daily browser was left running, the extension stays paired, and the YGPT tab group was left in place for the next attach'};
+  }
+  async disconnect(){const b=this.browser;this.browser=null;this.tabs.clear();this.identity=null;this.holders.clear();await b?.close().catch(()=>{});this.relay.unbind();}
+  async close(){await this.attaching?.catch(()=>{});await this.disconnect().catch(()=>{});await this.relay.stop().catch(()=>{});this.relayReady=null;}
 }
 
 export class YBrowserFacade {
@@ -221,7 +261,7 @@ export class YBrowserFacade {
   async screenshot(id){return this.engineFor(id).screenshot(id);}
   async download(id,target){return this.engineFor(id).download(id,target);}
   async closeTab(id){return this.engineFor(id).closeTab(id);}
-  async closeContext(owner){return this.isolated.closeContext(owner);}
+  async closeContext(owner){const released=this.existing.release(owner);return {...await this.isolated.closeContext(owner),...(released?{dailyBrowserTabsReleased:released}:{})};}
   owned(owner){return [...this.isolated.owned(owner),...this.existing.owned(owner)];}
   async close(){await Promise.allSettled([this.isolated.close(),this.existing.close()]);}
 }

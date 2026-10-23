@@ -83,7 +83,9 @@ async function ygGroupIds(windowId){
 async function listTabs(){
   const tabs=await chrome.tabs.query({});
   const groupIdSet=new Set(await ygGroupIds());
-  return {totalTabs:tabs.length,tabs:tabs.filter(t=>groupIdSet.has(t.groupId)).map(t=>({tabId:t.id,url:t.url||'',title:t.title||'',windowId:t.windowId,groupId:t.groupId,active:!!t.active,inGroup:true}))};
+  const group=tabs.filter(t=>groupIdSet.has(t.groupId)),groupIds=new Set(group.map(t=>t.id));
+  // An opener is reported only when it is itself a group tab.
+  return {totalTabs:tabs.length,tabs:group.map(t=>({tabId:t.id,url:t.url||'',title:t.title||'',windowId:t.windowId,groupId:t.groupId,active:!!t.active,inGroup:true,openerTabId:groupIds.has(t.openerTabId)?t.openerTabId:null}))};
 }
 async function requireGroupTab(tabId){
   const tab=await chrome.tabs.get(tabId);
@@ -100,9 +102,12 @@ async function attachTab(tabId){
   await attaching.get(tabId);
 }
 async function createGroupTab(url){
-  const win=await chrome.windows.getLastFocused().catch(()=>null);
-  const windowId=win?.id;
-  const tab=await chrome.tabs.create({windowId,url,active:false});
+  // Only normal windows hold tab groups. A focused popup would otherwise get
+  // the request, Chrome would open the tab in another window and grouping
+  // into the popup would fail; group in the window the tab really landed in.
+  const win=await chrome.windows.getLastFocused({windowTypes:['normal']}).catch(()=>null);
+  const tab=await chrome.tabs.create({...(win?.id!=null?{windowId:win.id}:{}),url,active:false});
+  const windowId=tab.windowId;
   try{
   const existing=await ygGroupIds(windowId);
   let groupId;
@@ -170,15 +175,26 @@ chrome.tabGroups.onUpdated.addListener(notifyTabsChanged);
 // attached through attachTab (group members when attached) produce events,
 // and notifyTabsChanged detaches tabs that leave the group.
 chrome.debugger.onEvent.addListener((source,method,params)=>{if(attached.has(source.tabId))send({type:'event',kind:'cdp',tabId:source.tabId,method,params});});
-chrome.debugger.onDetach.addListener(source=>{if(source.tabId!=null)attached.delete(source.tabId);});
+// Chrome ended a session itself (the owner pressed Cancel on the "started
+// debugging this browser" bar, or the tab became undebuggable). The tab's
+// CDP domains are gone with it, so the relay must end its sessions too
+// instead of letting the next command silently attach a blank one.
+chrome.debugger.onDetach.addListener((source,reason)=>{if(source.tabId!=null&&attached.delete(source.tabId))send({type:'event',kind:'detached',tabId:source.tabId,reason:String(reason??'')});});
 chrome.alarms.create('ygpt-keepalive',{periodInMinutes:0.5});
 chrome.alarms.onAlarm.addListener(()=>{if(!ws)void connect();});
 chrome.runtime.onInstalled.addListener(()=>{void loadSettings().then(connect);});
 chrome.runtime.onStartup.addListener(()=>{void loadSettings().then(connect);});
 chrome.runtime.onMessage.addListener((msg,sender,respond)=>{
   if(msg?.kind==='save-settings'){
-    settings={...DEFAULTS,...msg.settings};
-    void chrome.storage.local.set({ygptSettings:settings}).then(async()=>{const old=ws;ws=null;try{old?.close();}catch{}await detachAll();await connect();respond({ok:true});});
+    void (async()=>{
+      // The popup never shows the saved token, so an empty field means "keep
+      // the pairing" (e.g. only the port changed). Load first: a worker woken
+      // by this message has not read storage yet.
+      await loadSettings();
+      const next={...DEFAULTS,...msg.settings};if(!next.token)next.token=settings.token;
+      settings=next;await chrome.storage.local.set({ygptSettings:settings});
+      const old=ws;ws=null;try{old?.close();}catch{}await detachAll();await connect();respond({ok:true});
+    })();
     return true;
   }
   if(msg?.kind==='status'){

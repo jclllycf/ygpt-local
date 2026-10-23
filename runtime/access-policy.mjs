@@ -14,6 +14,8 @@ const privateRoots=[config.stateDir,INSTALL,config.configFile,...config.protecte
 const ownWriteRoots=[INSTALL,config.stateDir,config.configFile,...config.protectedRoots].map(canonical);
 const sensitive=/(?:^|\\)(?:\.ssh|\.gnupg|\.aws|\.azure|\.kube|\.codex|\.agents|\.mcp-auth|\.git|\.env(?:\.[^\\]+)?|\.npmrc|\.netrc|credentials[^\\]*|cookies[^\\]*|login data|local state|id_rsa|id_ed25519|private\.key|authorized_keys|startup)(?:\\|$)|\\appdata\\|\.(?:pem|p12|pfx|kdbx|reg)$|\\(?:sam|security|system|ntuser\.dat)$/i;
 export const within=(p,r)=>p===r||p.startsWith(r+'\\');
+// Largest single file a protected pre-write snapshot holds (backup-manager).
+export const SNAPSHOT_MAX_FILE=32*1024*1024;
 export const agentRoots=agentProtectedRoots(process.env,config.agentProtectedRoots);
 // Retired in rc.13 by the owner's explicit directive: there is no longer a
 // ChatGPT Desktop Agent boundary. Agent folders/processes follow the same
@@ -26,7 +28,12 @@ function sensitivePath(target){
   const probe=config.blacklistDefaultAllow?target.replace(/\\appdata(?=\\)/gi,'\\user-app-data').replace(/\\\.git(?=\\|$)/gi,'\\git-metadata'):target;
   return sensitive.test(probe);
 }
-export function canonical(input){
+// canonical() is the comparison key (lowercase). Anything that WRITES a path
+// back to disk (snapshot restore, Recycle Bin) must use resolvedPath(): the
+// same validation and link resolution, but the on-disk/input letter case, so
+// a restore never renames MyFile.md to myfile.md.
+export function canonical(input){return resolvedPath(input).toLowerCase();}
+export function resolvedPath(input){
   if(typeof input!=='string'||!input||/[\x00-\x1f]/.test(input)||!w.isAbsolute(input)||!/^([a-z]:)[\\/]/i.test(input))throw Error('Expected absolute local drive path');
   const normalized=w.normalize(input);
   if(normalized.slice(2).includes(':'))throw Error('NTFS alternate streams are not allowed');
@@ -36,7 +43,7 @@ export function canonical(input){
   if(fs.existsSync(current))current=fs.realpathSync.native(current);
   const full=w.resolve(current,...missing);
   if(!/^[a-z]:\\/i.test(full))throw Error('Resolved UNC or device target is not allowed');
-  return full.replace(/\\+$/,'').toLowerCase();
+  return full.replace(/\\+$/,'');
 }
 export function route(input){
   const target=canonical(input);
@@ -164,10 +171,15 @@ function authorizeImpl(name,a={}){
     const targets=paths.map(route);
     // The only refused set: YGPT's own runtime/state/credentials and the vault —
     // deleting them would destroy the approval and rollback machinery itself.
-    if(targets.some(t=>ownWriteRoots.some(r=>within(t.target,r)||within(r,t.target))||t.permission==='private'||t.permission==='vault'))return gate('filesystem-trash',JSON.stringify({tool:name,paths:targets.map(t=>t.target)}),'These paths are inside YGPT runtime/state or the vault: deleting them can break the connection and its rollback store. A verified owner decision is required; a protected snapshot is taken first.',{targets:targets.map(t=>t.target)});
+    const coverage='A protected snapshot of the files is taken first (folders up to 2,000 entries and 128 MB in total, 32 MB per file); anything larger, or containing links, can then be recovered only from the Windows Recycle Bin. The result lists the coverage.';
+    if(targets.some(t=>ownWriteRoots.some(r=>within(t.target,r)||within(r,t.target))||t.permission==='private'||t.permission==='vault'))return gate('filesystem-trash',JSON.stringify({tool:name,paths:targets.map(t=>t.target)}),'These paths are inside YGPT runtime/state or the vault: deleting them can break the connection and its rollback store. A verified owner decision is required. '+coverage,{targets:targets.map(t=>t.target)});
     const isDir=t=>{try{return fs.statSync(t).isDirectory();}catch{return false;}};
     const gated=targets.length>1||targets.some(t=>t.system||t.sensitive||t.secretAdjacent||/^[a-z]:\\?$/.test(t.target)||projectRoots.includes(t.target)||isDir(t.target));
-    if(gated)return gate('filesystem-trash',JSON.stringify({tool:name,paths:targets.map(t=>t.target)}),'Batch, directory or system delete: explicit owner decision required. A protected snapshot is taken first and its id restores the files.',{targets:targets.map(t=>t.target)});
+    if(gated)return gate('filesystem-trash',JSON.stringify({tool:name,paths:targets.map(t=>t.target)}),'Batch, directory or system delete: explicit owner decision required. '+coverage,{targets:targets.map(t=>t.target)});
+    // A file the snapshot cannot hold would lose its rollback handle: ask a
+    // human instead of failing (the Recycle Bin then keeps the only copy).
+    const unsnapshotable=t=>{try{const s=fs.lstatSync(t);return s.isSymbolicLink()||s.isFile()&&(s.size>SNAPSHOT_MAX_FILE||s.nlink!==1);}catch{return false;}};
+    if(targets.some(t=>unsnapshotable(t.target)))return gate('filesystem-trash',JSON.stringify({tool:name,paths:targets.map(t=>t.target)}),'This file is too large for a protected snapshot (32 MB) or is a link: after deletion only the Windows Recycle Bin keeps a copy. A verified owner decision is required.',{targets:targets.map(t=>t.target)});
     // Owner model: a single working-directory file delete proceeds by default
     // ONLY because the handler takes a verified protected snapshot before
     // deleting (the snapshot id is the rollback handle; if the snapshot fails

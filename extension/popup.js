@@ -3,6 +3,7 @@ async function refresh(){
   const st=await chrome.runtime.sendMessage({kind:'status'}).catch(()=>null);
   if(!st)return;
   $('host').value=st.settings.host;$('port').value=st.settings.port;
+  if(st.settings.hasToken)$('token').placeholder='saved; leave empty to keep it';
   const stateTxt={open:'Connected ✓',connecting:'Connecting…',closed:'Not connected',error:'Connection error','needs-token':'Paste the pairing token, then Save & connect'}[st.state]||st.state;
   $('status').textContent=stateTxt+(st.profile?.email?'\nProfile: '+st.profile.email:'\nProfile: not signed in to the browser');
 }

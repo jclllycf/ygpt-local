@@ -49,6 +49,12 @@ class FakeExtension {
     this.tabs.set(++this.seq,{page:prev,inGroup:true,session:null});
   }
   send(obj){this.ws.send(JSON.stringify(obj));}
+  // What Chrome does when the owner presses Cancel on the debugging bar or a
+  // tab becomes undebuggable: the session ends and onDetach fires.
+  // A tab a group tab opened (link with target=_blank): Chrome puts it in the group.
+  async openFromGroupTab(openerTabId,url){const page=await this.context.newPage();await page.goto(url);const tabId=++this.seq;this.tabs.set(tabId,{page,inGroup:true,session:null,openerTabId});this.send({type:'event',kind:'tabsChanged',totalTabs:this.tabs.size});return tabId;}
+  tabIdFor(url){for(const [tabId,t] of this.tabs)if(t.page.url()===url)return tabId;return null;}
+  async chromeDetach(tabId,reason){const t=this.tabs.get(tabId);await t?.session?.detach().catch(()=>{});if(t)t.session=null;this.send({type:'event',kind:'detached',tabId,reason});}
   hello(){this.send({type:'hello',id:this.id,browser:'Chrome',version:'fake',profile:{email:this.email,id:'id-'+this.id},totalTabs:this.tabs.size});}
   async onMessage(msg){
     if(msg.type!=='req')return;
@@ -57,7 +63,7 @@ class FakeExtension {
       const p=msg.params||{};
       if(msg.method==='tabs.list'){
         const tabs=[];
-        for(const [tabId,t] of this.tabs)tabs.push({tabId,url:t.page.url(),title:await t.page.title().catch(()=>''),windowId:1,groupId:t.inGroup?7:-1,active:false,inGroup:t.inGroup});
+        for(const [tabId,t] of this.tabs)tabs.push({tabId,url:t.page.url(),title:await t.page.title().catch(()=>''),windowId:1,groupId:t.inGroup?7:-1,active:false,inGroup:t.inGroup,openerTabId:t.openerTabId??null});
         return reply(true,{tabs,totalTabs:tabs.length});
       }
       if(msg.method==='tabs.create'){
@@ -121,8 +127,14 @@ test('Extension takeover: pairing, choice, group discipline, detach',{skip:!avai
     assert.equal(chatA.url,base+'/work');assert.equal(chatB.url,base+'/previous');
     assert.deepEqual(scope.run('chat-a',()=>engine.status()).tabs.map(t=>t.tabId),[chatA.tabId]);
     await assert.rejects(scope.run('chat-a',()=>engine.snapshot(chatB.tabId)),{code:'SESSION_FOREIGN'});
+    // Detach is per chat: the shared connection stays while another chat works.
+    const partial=await scope.run('chat-a',()=>engine.detach());
+    assert.equal(partial.sharedConnectionKept,true,'chat A detaching keeps chat B connected');
+    assert.match((await scope.run('chat-b',()=>engine.snapshot(chatB.tabId))).aria,/earlier/,'chat B still works after chat A detached');
+    await scope.run('chat-b',()=>engine.detach());
     // Second profile pairs: a fresh attach must not guess between accounts.
-    await engine.detach();
+    const full=await engine.detach();
+    assert.equal(full.sharedConnectionKept,undefined,'the last chat to detach closes the shared connection');
     const fakeB=new FakeExtension(null,engine.relay.endpoint(),token,{id:'inst-b',email:'second@example.com'});
     await fakeB.init(browserB);fakeB.hello();
     const choice=await engine.attach({});
@@ -137,5 +149,60 @@ test('Extension takeover: pairing, choice, group discipline, detach',{skip:!avai
   }finally{
     await engine.close().catch(()=>{});
     await browserA.close().catch(()=>{});await browserB.close().catch(()=>{});
+  }
+});
+
+test('Extension takeover: a session Chrome ended is dropped and re-adopted; Cancel ends the take-over',{skip:!available&&'no chromium on this host',timeout:120000},async()=>{
+  const {YExtensionBrowser}=await import('../engine/src/browser-engine.mjs');
+  const {chromium}=await import('playwright');
+  const engine=new YExtensionBrowser({stateDir:tmp(),port:await freePort()});
+  const browser=await chromium.launch({executablePath:CHROME,args:['--no-sandbox']});
+  const until=async(check,what)=>{for(let i=0;i<200;i++){if(await check())return;await new Promise(r=>setTimeout(r,25));}assert.fail('timed out waiting for '+what);};
+  try{
+    await engine.ensureRelay();
+    const {token}=await engine.relay.pairing();
+    const fake=new FakeExtension(null,engine.relay.endpoint(),token,{id:'inst-d',email:'owner@example.com'});
+    await fake.init(browser);fake.hello();
+    await engine.attach({});
+    const opened=await engine.open('https://fixture.invalid/work');
+    const fakeTab=fake.seq;
+    await fake.chromeDetach(fakeTab,'target_closed');
+    await until(()=>!engine.has(opened.tabId),'Playwright to drop the detached page');
+    await assert.rejects(engine.snapshot(opened.tabId),{code:'NO_TAB'});
+    fake.send({type:'event',kind:'tabsChanged',totalTabs:fake.tabs.size});
+    await until(async()=>(await engine.list()).tabs.some(t=>t.url.endsWith('/work')),'the group tab to be adopted again');
+    const readopted=(await engine.list()).tabs.find(t=>t.url.endsWith('/work'));
+    assert.match((await engine.snapshot(readopted.tabId)).aria,/Add one/,'the fresh session works');
+    await fake.chromeDetach(fakeTab,'canceled_by_user');
+    await until(()=>!engine.status().attached,'the take-over to end');
+    assert.ok(browser.isConnected(),'the daily browser keeps running');
+    assert.equal(engine.relay.instancesList().length,1,'the extension stays paired');
+    assert.equal((await engine.attach({})).attached,true,'a later attach works again');
+  }finally{
+    await engine.close().catch(()=>{});await browser.close().catch(()=>{});
+  }
+});
+
+test('Extension takeover: a popup opened by one chat\'s group tab stays with that chat',{skip:!available&&'no chromium on this host',timeout:120000},async()=>{
+  const {YExtensionBrowser}=await import('../engine/src/browser-engine.mjs');
+  const {chromium}=await import('playwright');
+  const scope=new AsyncLocalStorage();
+  const engine=new YExtensionBrowser({stateDir:tmp(),port:await freePort(),currentOwner:()=>scope.getStore()??'local'});
+  const browser=await chromium.launch({executablePath:CHROME,args:['--no-sandbox']});
+  const until=async(check,what)=>{for(let i=0;i<200;i++){if(await check())return;await new Promise(r=>setTimeout(r,25));}assert.fail('timed out waiting for '+what);};
+  try{
+    await engine.ensureRelay();
+    const {token}=await engine.relay.pairing();
+    const fake=new FakeExtension(null,engine.relay.endpoint(),token,{id:'inst-p',email:'owner@example.com'});
+    await fake.init(browser);fake.hello();
+    await scope.run('chat-a',()=>engine.attach({}));
+    await scope.run('chat-b',()=>engine.attach({}));
+    await scope.run('chat-a',()=>engine.open('https://fixture.invalid/a-tab'));
+    await scope.run('chat-b',()=>engine.open('https://fixture.invalid/b-tab'));
+    await fake.openFromGroupTab(fake.tabIdFor('https://fixture.invalid/b-tab'),'https://fixture.invalid/b-popup');
+    await until(()=>scope.run('chat-b',()=>engine.status()).tabs.some(t=>t.url.endsWith('/b-popup')),'chat B to own its popup');
+    assert.ok(!scope.run('chat-a',()=>engine.status()).tabs.some(t=>t.url.endsWith('/b-popup')),'chat A never sees chat B\'s popup');
+  }finally{
+    await engine.close().catch(()=>{});await browser.close().catch(()=>{});
   }
 });

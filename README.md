@@ -4,11 +4,11 @@
 
 Connect ChatGPT to files and tools on your own Windows PC, with protected snapshots, conflict-aware recovery and scoped approval.
 
-**1.0.0-rc.3 is ready for owner testing, with English-only UI.** The repository is private; no accepted public installer download exists yet. Remaining tests are owner-run. [中文](README.zh-CN.md) · [Setup guide](docs/SETUP_GUIDE.md) · [Validation](docs/VALIDATION.md) · [Security](docs/SECURITY.md)
+**1.0.0-rc.16 is the current candidate for owner testing, with English-only UI.** The repository is private; the installers are distributed through this repository's Releases page. Remaining tests are owner-run. What changed since rc.3: [CHANGELOG](CHANGELOG.md) · [upgrade guide](docs/UPGRADE_USER_GUIDE.md) · [security note](docs/UPGRADE_SECURITY_NOTE.md). [中文](README.zh-CN.md) · [Setup guide](docs/SETUP_GUIDE.md) · [Validation](docs/VALIDATION.md) · [Security](docs/SECURITY.md)
 
 ## Install
 
-1. Obtain `YGPTLocal-Setup-1.0.0-rc.3-win-x64.exe` and compare its SHA-256 with `SHA256SUMS.txt`. This candidate is unsigned.
+1. Obtain `YGPTLocal-Setup-1.0.0-rc.16-win-x64.exe` and compare its SHA-256 with `SHA256SUMS.txt`. This candidate is unsigned. Already installed? Run `YGPTLocal-Update-1.0.0-rc.16-win-x64.exe` instead: it updates in place and keeps your data folder, keys, connection identity, snapshots and ChatGPT plugin ([upgrade guide](docs/UPGRADE_USER_GUIDE.md)).
 2. Run the eight-step native Windows wizard. Choose an application folder and an authorized working folder. Node, Python and the official Tunnel Client are bundled; normal installation needs no developer tools or administrator privileges.
 3. Keep **OpenAI Secure MCP Tunnel** selected. Create a dedicated Tunnel in your eligible Platform organization and associate the intended ChatGPT workspace. Do not reuse a Tunnel already run by another installation.
 4. Enter the full ID and a dedicated runtime API key in the masked local field. DPAPI encrypts it for your Windows user. It authenticates the Tunnel Client; setup does not call generation models or create keys.
@@ -42,15 +42,17 @@ The cleaner checks identity, size, SHA-256, ancestry, links, open handles, proce
 
 It keeps runtimes, Watchdog, Tunnel, dormant Settings/update/uninstall, DPAPI credentials, owner/OAuth state, databases, approval ledger, snapshots and rollback data. Installed Settings can reconfigure its verified runtime after Setup removal. A damaged runtime or version upgrade requires the full installer.
 
-Default application: `%LOCALAPPDATA%\Programs\YGPTLocal`; private data: `%LOCALAPPDATA%\YGPTLocal`. Open Settings from Start when needed; no tray GUI must remain running. Maintenance blocks new calls and checks owned work before replacement. Active jobs/approvals prevent unsafe maintenance. Updates preserve the previous program folder and private state. Uninstall is a separate confirmation that disconnects the service and retains private data, changed and unknown files. See [migration](docs/MIGRATION.md).
+Default application: `D:\YGPTLocal` and private data `D:\YGPTLocalData` (or the same folders on the largest other non-system fixed drive when there is no D:), otherwise `%LOCALAPPDATA%\Programs\YGPTLocal` and `%LOCALAPPDATA%\YGPTLocal`. Open Settings from Start when needed; no tray GUI must remain running. Maintenance blocks new calls and checks owned work before replacement. Active jobs/approvals prevent unsafe maintenance. Updates preserve the previous program folder and private state. Uninstall is a separate confirmation that disconnects the service and retains private data, changed and unknown files. See [migration](docs/MIGRATION.md).
 
 RC3 development leaves existing working production Tunnels running. Different Tunnel identities are separate owners, not automatic duplicate-cleanup targets.
 
 ## Tools and recovery
 
-Prefer `y_file_read`, `y_file_edit`, `y_search_text`, `y_sqlite_read`, `y_backup_diff` and `y_backup_restore`. The full local catalog was measured at **92 public + 2 App-only tools**; actual ChatGPT discovery needs independent verification.
+Prefer `y_file_read`, `y_file_edit`, `y_search_text`, `y_sqlite_read`, `y_backup_diff` and `y_backup_restore`. One canonical `y_` catalog is served; `y_ping` reports it by group, and retired names answer `NO_TOOL` with their replacement. Actual ChatGPT discovery needs independent verification.
 
-Ordinary authorized reads/development use the owner policy. Bulk deletion, system/security/disk changes and protected credentials require scoped approval. Cards offer **Allow once**, **Always allow in this chat** and **Deny** where scope permits. Wait for the original result rather than replaying the operation.
+Permission model (owner blacklist): everything is allowed by default — reads and clean writes need no approval. Destructive, privileged, system or credential-adjacent operations, batch/folder deletes and writes into YGPT's own state or the G: vault ask for a human decision instead of being refused; there are no hard-denied targets. Cards offer **Allow once**, **Always allow in this chat** and **Deny** where scope permits. Wait for the original result rather than replaying the operation. `y_policy` shows the active rules.
+
+Browser: an isolated browser by default (fresh per chat, Chrome unless configured), or the owner's daily Chrome/Edge through the bundled YGPT extension (`extension/`, loaded unpacked), confined to a "YGPT" tab group. After updating YGPT, press **Reload** on the extension in `chrome://extensions` / `edge://extensions`; unpacked extensions do not pick up new files by themselves.
 
 Restore refuses newer conflicting edits with `CONFLICT / executed:false / filesRestored:0` and creates an undo snapshot on success. Batch operations are not atomic. Terminal snapshots cannot undo every external effect, new file or database transaction. These protections are not an OS sandbox. The outer ChatGPT Opened/CSP shell is controlled by the host.
 
