@@ -1,35 +1,24 @@
 #!/usr/bin/env python3
-"""Regenerate the shipped icon set from the owner's ORIGINAL artwork.
+"""Build icons from the reference-derived transparent master.
 
-Source of truth: assets/icon-glyph-hd.png (built by scripts/make-glyph-hd.py
-from the glyph extracted out of the owner's brand board). Shipped PNG icons
-follow the owner's spec: every standalone icon is 256x256 and at most 10 KB
-(the ChatGPT plugin form's upload limit) while staying crisp — the 256 is
-palette-optimized with libimagequant from the HD master. The Windows .ico
-files keep their multi-size frames (16-256) generated in memory from the
-master; there are no loose multi-size PNG files anymore.
-
-Usage: python3 scripts/make-icons-from-original.py   (requires Pillow)
-Outputs: assets/brand/ygpt-local-256.png, ygpt-local-light-256.png,
-plugin-icon-256.png, ygpt-local.ico; assets/png/icon-256.png, assets/ygpt.ico;
-plugin/assets/logo.png; extension/icons/ygpt-256.png. The .ico files are written by hand below so every
-size entry is explicit; the shipped ICO was verified entry by entry (7 PNG
-frames, the 256 frame pixel-identical to the HD render). The setup also
-nudges the Windows icon cache after install, which otherwise keeps serving
-the first rendering it cached for the app's path.
+Only plugin-icon-256.png is palette compressed for the <10 KB upload form.
+Application PNGs and all seven Windows ICO sizes retain full color.
+The shell also gets a versioned ICO path to avoid stale icon-cache entries.
+Requires Pillow. The source master is never synthesized by this script.
 """
 import io
+import json
 import os
 from PIL import Image, ImageDraw
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-GLYPH = Image.open(os.path.join(ROOT, 'assets', 'icon-glyph-hd.png')).convert('RGBA')
+GLYPH = Image.open(os.path.join(ROOT, 'assets', 'brand', 'ygpt-glyph-master.png')).convert('RGBA')
 ICO_SIZES = [16, 24, 32, 48, 64, 128, 256]
 MAX_PNG_BYTES = 10240
 
 
 def tile(size):
-    glyph_scale = 0.86 if size <= 32 else 0.78
+    glyph_scale = 0.98 if size <= 32 else 0.96
     img = Image.new('RGBA', (size, size), (0, 0, 0, 0))
     draw = ImageDraw.Draw(img)
     radius = max(2, round(size * 0.19))
@@ -39,7 +28,7 @@ def tile(size):
     glyph = GLYPH.resize((gw, gh), Image.LANCZOS)
     x = (size - gw) // 2
     # Optical centre slightly below the middle (owner: the mark rode too high).
-    y = round(size * 0.145) if size > 32 else max(1, round(size * 0.51 - gh / 2))
+    y = max(0, (size - gh) // 2)
     img.alpha_composite(glyph, (x, y))
     return img
 
@@ -48,7 +37,7 @@ def optimized_256():
     """The one canonical shipped PNG: 256x256, <=10 KB, from the HD master."""
     img = tile(256)
     for colors in (256, 192, 160, 128, 112, 96):
-        q = img.quantize(colors=colors, method=3, dither=Image.FLOYDSTEINBERG)
+        q = img.quantize(colors=colors, method=Image.FASTOCTREE, dither=Image.FLOYDSTEINBERG)
         buf = io.BytesIO()
         q.save(buf, format='PNG', optimize=True)
         data = buf.getvalue()
@@ -79,18 +68,21 @@ def write_ico(path):
 def main():
     data = optimized_256()
     brand = os.path.join(ROOT, 'assets', 'brand')
-    for name in ('ygpt-local-256.png', 'ygpt-local-light-256.png', 'plugin-icon-256.png'):
+    for name in ('plugin-icon-256.png',):
         with open(os.path.join(brand, name), 'wb') as f:
             f.write(data)
-    with open(os.path.join(ROOT, 'assets', 'png', 'icon-256.png'), 'wb') as f:
-        f.write(data)
+    os.makedirs(os.path.join(ROOT, 'assets', 'png'), exist_ok=True)
+    for size in (256, 512, 1024):
+        tile(size).save(os.path.join(brand, 'ygpt-local-%d.png' % size), optimize=True)
+    tile(1024).save(os.path.join(brand, 'ygpt-local-light-256.png'), optimize=True)
+    tile(256).save(os.path.join(ROOT, 'assets', 'png', 'icon-256.png'), optimize=True)
     with open(os.path.join(ROOT, 'plugin', 'assets', 'logo.png'), 'wb') as f:
-        f.write(data)
-    for path in (os.path.join(brand, 'ygpt-local.ico'), os.path.join(ROOT, 'assets', 'ygpt.ico')):
+        f.write(open(os.path.join(brand, 'ygpt-local-512.png'), 'rb').read())
+    for path in (os.path.join(brand, 'ygpt-local.ico'), os.path.join(ROOT, 'assets', 'ygpt.ico'), os.path.join(ROOT, 'assets', 'ygpt-'+json.load(open(os.path.join(ROOT, 'package.json'), encoding='utf-8'))['version']+'.ico')):
         write_ico(path)
     with open(os.path.join(ROOT, 'extension', 'icons', 'ygpt-256.png'), 'wb') as f:
-        f.write(data)
-    print('shipped icons: one canonical 256x256 PNG (%d bytes) + multi-size ICOs' % len(data))
+        f.write(open(os.path.join(brand, 'ygpt-local-256.png'), 'rb').read())
+    print('Plugin upload: %d bytes; full-color app PNGs: 256/512/1024; multi-size ICOs: 16-256' % len(data))
 
 
 if __name__ == '__main__':

@@ -1,3 +1,4 @@
+import {isolateVault} from './fixtures/vault-fs.mjs';
 // Owner blacklist-model tests (portable): default allow, gates instead of
 // refusals, snapshot-guaranteed deletes. Exercises the real file engine and
 // the real access policy with a temp owner configuration. The policy speaks
@@ -59,7 +60,7 @@ test('Access policy: trash tiers, downloads and document writes follow the owner
   assert.equal(highRiskCommand('Remove-Item .\\one.txt'),false);
 });
 
-test('Owner read policy: typed reads are automatic everywhere; writes and commands into state or the vault gate',async()=>{
+test('Owner read policy: typed reads are automatic everywhere; writes and commands into state or the vault gate',async t=>{isolateVault(t);
   const {authorize}=await import('../runtime/access-policy.mjs');
   // Owner policy since the rc.2 baseline: no human decision for typed reads,
   // YGPT's own folders, credential-adjacent files and the vault included
@@ -80,7 +81,7 @@ test('Owner read policy: typed reads are automatic everywhere; writes and comman
     assert.equal(authorize('job_submit',{cwd:'D:\\work',argv:[ps,'-NoProfile','-Command','Set-Content "'+target+'" y']}).decision,'approve',target);
 });
 
-test('Connector-state review is once-only; ordinary HTTPS downloads and reviewed destinations work',async t=>{
+test('Connector-state review is once-only; ordinary HTTPS downloads and reviewed destinations work',async t=>{isolateVault(t);
   const {reviewScope}=await import('../runtime/chat-review.mjs');
   const {validateSource,validateDestination,checksum}=await import('../runtime/safe-actions.mjs');
   // The live connector's own state never gets a conversation-wide grant.

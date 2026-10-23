@@ -1,3 +1,4 @@
+import {pathToFileURL} from 'node:url';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import childProcess from 'node:child_process';
@@ -22,7 +23,7 @@ import {spawnSync} from 'node:child_process';
 test('A real bootstrap audit failure reaches service health before any MCP port or response exists',t=>{
   const dir=fs.mkdtempSync(path.join(os.tmpdir(),'ygpt-startup-health-'));t.after(()=>fs.rmSync(dir,{recursive:true,force:true}));
   const config=path.join(dir,'ygpt.config.json'),diagnostic=path.join(dir,'startup.json');fs.writeFileSync(config,JSON.stringify({startupDiagnostics:diagnostic}));
-  const result=spawnSync(process.execPath,['--import',path.resolve('tests/fixtures/startup-failure-hook.mjs'),'runtime/bootstrap.mjs'],{env:{...process.env,YGPT_CONFIG:config,YGPT_SETUP_DATA_DIR:dir},encoding:'utf8',timeout:15000});
+  const result=spawnSync(process.execPath,['--import',pathToFileURL(path.resolve('tests/fixtures/startup-failure-hook.mjs')).href,'runtime/bootstrap.mjs'],{env:{...process.env,YGPT_CONFIG:config,YGPT_SETUP_DATA_DIR:dir},encoding:'utf8',timeout:15000});
   assert.equal(result.status,1,result.stderr);assert.equal(result.stdout,'','failure must not be MCP stdout');
   const report=JSON.parse(fs.readFileSync(diagnostic,'utf8'));
   assert.equal(report.code,'STATE_LINK_REFUSED');assert.equal(report.path,'D:\\YGPT state\\link');assert.equal(report.target,'\\??\\D:\\wrong');

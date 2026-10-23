@@ -32,6 +32,6 @@ test('Updater sweeps retained backups only after a verified update, identity-gat
 
 test('Install payload moves the retained copy inside the application folder', () => {
   const a = flat(app);
-  assert.ok(a.includes('MoveDirectoryWithRetry(previous,Path.Combine(install,".previous-"+previousTicks))'),
+  assert.ok(a.includes('Path.Combine(install,".updates",Guid.NewGuid().ToString("N"))'),
     'retained copy is renamed into <install>/.previous-<ticks>, not left beside the install');
 });

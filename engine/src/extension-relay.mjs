@@ -16,6 +16,7 @@ import path from 'node:path';
 import {WebSocketServer, WebSocket} from 'ws';
 
 const silent=()=>{};
+const EXTENSION_VERSION=JSON.parse(await fs.readFile(new URL('../../extension/manifest.json',import.meta.url),'utf8')).version;
 export class ExtensionRelay {
   constructor({stateDir,port=19341,groupName='YGPT',log=silent}={}){
     this.stateDir=stateDir;this.port=port;this.groupName=groupName;this.log=log;
@@ -25,7 +26,8 @@ export class ExtensionRelay {
                                // targetId IS its main frame's id, and Playwright
                                // looks sessions up by frame id — so tab ids must
                                // never be exposed as targetIds.
-    this.boundId=null;         // instance chosen by the engine (one at a time)
+    this.boundId=null;
+    this.profileRelays=new Map(); // separate CDP state for each paired profile
     this.cdpClients=new Set(); // {ws,sessions:Map,sessionsByTab:Map,autoAttach}
     this.tabOrder=new Map();   // tabId -> tail of the in-order dispatch chain
     // CDP endpoint credential for this process only (never written to disk).
@@ -57,7 +59,7 @@ export class ExtensionRelay {
       if(!this.localRequest(req)){socket.destroy();return;}
       const url=new URL(req.url,'http://127.0.0.1');
       if(url.pathname==='/ext'){if(url.searchParams.get('token')!==this.token||req.headers.origin&&!/^chrome-extension:\/\/[a-p]{32}$/.test(req.headers.origin)){socket.destroy();return;}this.wssExt.handleUpgrade(req,socket,head,ws=>this.onExtension(ws));}
-      else if(url.pathname==='/devtools/browser/ygpt'&&!req.headers.origin&&this.cdpAuthorized(req)){this.wssCdp.handleUpgrade(req,socket,head,ws=>this.onCdpClient(ws));}
+      else if(url.pathname==='/devtools/browser/ygpt'&&!req.headers.origin&&this.cdpAuthorized(req)){const relay=url.searchParams.has('instance')?this.profileRelays.get(url.searchParams.get('instance')):this;if(!relay||url.searchParams.has('instance')&&!relay.bound()){socket.destroy();return;}this.wssCdp.handleUpgrade(req,socket,head,ws=>relay.onCdpClient(ws));}
       else socket.destroy();
     });
     try{await new Promise((resolve,reject)=>{const fail=e=>reject(e);this.server.once('error',fail);this.server.listen(this.port,'127.0.0.1',()=>{this.server.off('error',fail);resolve();});});}
@@ -68,6 +70,7 @@ export class ExtensionRelay {
   async stop(){
     await this.starting?.catch(()=>{});
     this.unbind();
+    for(const relay of this.profileRelays.values())relay.unbind();this.profileRelays.clear();
     for(const inst of this.instances.values()){for(const p of inst.pending.values())p.reject(new Error('relay stopped'));inst.pending.clear();inst.ws.terminate();}
     for(const ws of this.wssExt?.clients??[])ws.terminate();
     for(const ws of this.wssCdp?.clients??[])ws.terminate();
@@ -101,24 +104,24 @@ export class ExtensionRelay {
       let msg;try{msg=JSON.parse(raw.toString());}catch{return;}
       if(msg.type==='hello'){
         if(inst)return;
-        inst={id:String(msg.id||crypto.randomUUID()),browser:msg.browser??'Chromium',version:msg.version??'',profileEmail:profileEmail(msg.profile),profileId:msg.profile?.id??null,ws,pending:new Map(),totalTabs:msg.totalTabs??0,connectedAt:Date.now()};
+        inst={id:String(msg.id||crypto.randomUUID()),browser:msg.browser??'Chromium',version:msg.version??'',profileEmail:profileEmail(msg.profile),profileId:msg.profile?.id??null,customLabel:String(msg.profileLabel??'').slice(0,80),extensionVersion:msg.extensionVersion??'unknown',ws,pending:new Map(),totalTabs:msg.totalTabs??0,connectedAt:Date.now()};
         const previous=this.instances.get(inst.id);
-        if(previous){if(this.boundId===inst.id)this.unbind();for(const p of previous.pending.values())p.reject(new Error('extension reconnected'));previous.pending.clear();previous.ws.terminate();}
+        if(previous){for(const relay of this.relaysFor(inst))relay.unbind();for(const p of previous.pending.values())p.reject(new Error('extension reconnected'));previous.pending.clear();previous.ws.terminate();}
         inst.profileLabel=instanceLabel(inst);
         this.instances.set(inst.id,inst);
-        ws.send(JSON.stringify({type:'registered',id:inst.id,profileLabel:inst.profileLabel}));
+        ws.send(JSON.stringify({type:'registered',id:inst.id,profileLabel:inst.profileLabel,extensionVersion:EXTENSION_VERSION}));
         this.log('extension instance connected: '+inst.id+' '+(inst.profileEmail??''));
         return;
       }
       if(!inst||this.instances.get(inst.id)!==inst)return;
       if(msg.type==='profile'){inst.profileEmail=profileEmail(msg.profile);inst.profileId=msg.profile?.id??null;inst.profileLabel=instanceLabel(inst);}
       else if(msg.type==='res'){const p=inst.pending.get(msg.reqId);if(p){inst.pending.delete(msg.reqId);msg.ok?p.resolve(msg.result):p.reject(new Error(msg.error??'extension error'));}}
-      else if(msg.type==='event'&&msg.kind==='cdp'){this.forwardCdpEvent(inst,msg.tabId,msg.method,msg.params);}
-      else if(msg.type==='event'&&msg.kind==='tabsChanged'){if(typeof msg.totalTabs==='number')inst.totalTabs=msg.totalTabs;this.emitTargetChanges();}
-      else if(msg.type==='event'&&msg.kind==='tabRemoved'){this.onTabRemoved(inst,msg.tabId);}
-      else if(msg.type==='event'&&msg.kind==='detached'){this.onDebuggerDetached(inst,msg.tabId,msg.reason);}
+      else if(msg.type==='event'&&msg.kind==='cdp'){for(const relay of this.relaysFor(inst))relay.forwardCdpEvent(inst,msg.tabId,msg.method,msg.params);}
+      else if(msg.type==='event'&&msg.kind==='tabsChanged'){if(typeof msg.totalTabs==='number')inst.totalTabs=msg.totalTabs;for(const relay of this.relaysFor(inst))relay.emitTargetChanges();}
+      else if(msg.type==='event'&&msg.kind==='tabRemoved'){for(const relay of this.relaysFor(inst))relay.onTabRemoved(inst,msg.tabId);}
+      else if(msg.type==='event'&&msg.kind==='detached'){for(const relay of this.relaysFor(inst))relay.onDebuggerDetached(inst,msg.tabId,msg.reason);}
     });
-    const cleanup=()=>{if(inst){if(this.instances.get(inst.id)===inst){this.instances.delete(inst.id);if(this.boundId===inst.id)this.unbind();}for(const p of inst.pending.values())p.reject(new Error('extension disconnected'));inst.pending.clear();}};
+    const cleanup=()=>{if(inst){if(this.instances.get(inst.id)===inst){for(const relay of this.relaysFor(inst))relay.unbind();this.instances.delete(inst.id);}for(const p of inst.pending.values())p.reject(new Error('extension disconnected'));inst.pending.clear();}};
     ws.on('close',cleanup);ws.on('error',cleanup);
   }
   callExtension(inst,method,params={},timeoutMs=20000){
@@ -129,7 +132,17 @@ export class ExtensionRelay {
       try{inst.ws.send(JSON.stringify({type:'req',reqId,method,params}),e=>{if(e){const p=inst.pending.get(reqId);inst.pending.delete(reqId);p?.reject(e);}});}catch(e){inst.pending.delete(reqId);clearTimeout(timer);reject(e);}
     });
   }
-  instancesList(){return [...this.instances.values()].map(i=>({id:i.id,browser:i.browser,version:i.version,profileEmail:i.profileEmail,profileLabel:i.profileLabel,totalTabs:i.totalTabs,connectedAt:i.connectedAt}));}
+  instancesList(){return [...this.instances.values()].map(i=>({id:i.id,browser:i.browser,version:i.version,profileEmail:i.profileEmail,profileLabel:i.profileLabel,extensionVersion:i.extensionVersion,totalTabs:i.totalTabs,connectedAt:i.connectedAt}));}
+  relaysFor(inst){return [this,...this.profileRelays.values()].filter(r=>r.boundId===inst.id);}
+  profileRelay(id){
+    if(this.profileRelays.has(id))return this.profileRelays.get(id);
+    const relay=Object.create(this);relay.boundId=null;relay.frameIds=new Map();relay.cdpClients=new Set();relay.tabOrder=new Map();
+    // Sequence numbers must be unique across all profile transports.
+    Object.defineProperty(relay,'reqSeq',{get:()=>this.reqSeq,set:n=>{this.reqSeq=n;}});
+    relay.start=()=>this.start();relay.stop=async()=>relay.unbind();
+    relay.cdpEndpoint=()=>this.endpoint().replace('http:','ws:')+'/devtools/browser/ygpt?instance='+encodeURIComponent(id);
+    this.profileRelays.set(id,relay);return relay;
+  }
   bind(id){const inst=this.instances.get(id);if(!inst)throw new Error('extension instance is not connected');if(this.boundId!==id)this.unbind();this.boundId=id;return inst;}
   bound(){return this.boundId?this.instances.get(this.boundId)??null:null;}
   unbind(){this.boundId=null;this.frameIds.clear();for(const c of this.cdpClients)c.ws.terminate();}
@@ -311,7 +324,7 @@ function pairingPage({token,port,instances}){
 function escapeHtml(s){return String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
 
 function profileEmail(profile){return typeof profile?.email==='string'&&profile.email.trim()?profile.email.trim():null;}
-function instanceLabel(i){return i.profileEmail||i.browser+' profile '+i.id;}
+function instanceLabel(i){return i.customLabel||i.profileEmail||i.browser+' profile '+i.id;}
 
 const PAIRING_SCRIPT=`async function refresh(){
   try{

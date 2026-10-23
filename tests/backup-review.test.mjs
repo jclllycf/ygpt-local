@@ -1,3 +1,4 @@
+import {isolateVault} from './fixtures/vault-fs.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -9,6 +10,7 @@ const {BackupManager,snapshotTargetAllowed}=await import('../runtime/backup-mana
 const fakeSealer={seal:s=>s,open:s=>s};
 
 test('Protected snapshots honor exact review without widening concurrent operations',async t=>{
+  isolateVault(t);
   const dir=fs.mkdtempSync(path.join(os.tmpdir(),'ygpt-reviewed-backup-'));
   t.after(()=>fs.rmSync(dir,{recursive:true,force:true}));
   const manager=new BackupManager({stateDir:dir,sealer:fakeSealer,git:null});
@@ -63,7 +65,7 @@ test('Trash plan: folder trees are snapshotted file by file; what the snapshot c
   assert.deepEqual(tree.paths.map(p=>path.relative(root,p)).sort(),['Notes','Notes/A.md','Notes/Sub','Notes/Sub/B.md','Notes/Sub/Empty'].map(p=>p.split('/').join(path.sep)).sort());
   assert.equal(snapshotTree(notes,{maxEntries:3}).complete,false);
   assert.match(snapshotTree(notes,{maxBytes:2}).reason,/larger than/);
-  const linked=path.join(root,'Linked');fs.mkdirSync(linked);fs.symlinkSync(notes,path.join(linked,'to-notes'));
+  const linked=path.join(root,'Linked');fs.mkdirSync(linked);fs.symlinkSync(notes,path.join(linked,'to-notes'),'junction');
   assert.match(snapshotTree(linked).reason,/link/);
   const big=path.join(root,'Big.bin');fs.writeFileSync(big,'');fs.truncateSync(big,33*1024*1024); // sparse
   const small=path.join(root,'Small.txt');fs.writeFileSync(small,'x');

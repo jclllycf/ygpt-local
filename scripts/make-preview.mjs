@@ -23,10 +23,7 @@ const exe=process.env.PREVIEW_CHROMIUM;
 const browser=await chromium.launch(exe?{executablePath:exe,headless:true,args:['--no-sandbox']}:{channel:'msedge',headless:true});
 const page=await browser.newPage({viewport:{width:760,height:460},deviceScaleFactor:2});
 async function shoot(html,fill,out){
-  // Preview-only: drop the widget CSP meta so the inlined icon data URL can
-  // paint in a standalone page (the real host enforces its own widget CSP,
-  // under which the icon renders — verified on the owner's machine).
-  html=html.replace(/<meta[^>]*Content-Security-Policy[^>]*>/,'');
+  // Render the served CSP as-is; fixture content is filled only for the preview.
   await page.route('https://fixture.invalid/**',r=>r.fulfill({contentType:'text/html;charset=utf-8',body:html}));
   await page.goto('https://fixture.invalid/preview');
   await page.waitForTimeout(600);

@@ -6,7 +6,7 @@ import path from 'node:path';
 import {YFileEngine,sha256} from '../engine/src/file-engine.mjs';
 import {createEngine} from '../engine/src/engine.mjs';
 const snapshot=Object.assign(async()=>({id:'fixture',durable:true}),{finish:()=>{}});
-async function fixture(t){const root=await fs.mkdtemp(path.join(os.tmpdir(),'ygpt-integrity-'));t.after(()=>fs.rm(root,{recursive:true,force:true}));return root;}
+async function fixture(t,cleanup=true){const root=await fs.mkdtemp(path.join(os.tmpdir(),'ygpt-integrity-'));if(cleanup)t.after(()=>fs.rm(root,{recursive:true,force:true,maxRetries:8,retryDelay:100}));return root;}
 
 test('Exact edits preserve literal replacement metacharacters and UTF-8 BOM bytes',async t=>{
   const root=await fixture(t),file=await YFileEngine.create(root,{snapshot});
@@ -19,10 +19,10 @@ test('Exact edits preserve literal replacement metacharacters and UTF-8 BOM byte
 });
 
 test('Patch dry run and commit preserve BOM and report hashes of exact bytes',async t=>{
-  const root=await fixture(t);
+  const root=await fixture(t,false);
   await fs.writeFile(path.join(root,'.ygpt-engine-fixture'),'YGPT disposable fixture\n');
   const engine=await createEngine({mode:'fixture',root,stateDir:path.join(root,'state')},{protectState:async()=>{}});
-  t.after(()=>engine.close());
+  t.after(async()=>{await engine.close();await fs.rm(root,{recursive:true,force:true,maxRetries:8,retryDelay:100});});
   const original='\uFEFFhello\r\n',expected='\uFEFF$&\r\n';
   await fs.writeFile(path.join(root,'patch.txt'),original);
   const request={path:'patch.txt',expectedSha256:sha256(original),hunks:[{oldText:'hello',newText:'$&'}]};

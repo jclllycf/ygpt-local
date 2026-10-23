@@ -9,7 +9,8 @@
 // The profile's signed-in account (chrome.identity) is reported at connect
 // time so the service can tell several browsers/accounts apart and let the
 // owner designate the right one.
-const DEFAULTS={host:'127.0.0.1',port:19341,token:'',groupName:'YGPT'};
+const BUILD=chrome.runtime.getManifest?.()?.version??'1.0.18';
+const DEFAULTS={host:'127.0.0.1',port:19341,token:'',groupName:'YGPT',profileLabel:''};
 let settings={...DEFAULTS};
 let ws=null,wsState='closed',backoff=2000,instanceId=null,attached=new Set();
 const attaching=new Map(),commandOrder=new Map();
@@ -51,7 +52,7 @@ async function connectOnce(){
     startKeepalive(socket);
     // Pairing identifies a profile, even without Chrome sign-in. Neither
     // optional browser API may hold up hello (or the popup's status reply).
-    send({type:'hello',id:instanceId,browser:browserKind(),version:(navigator.userAgent.match(/(?:Chrome|Edg)\/([\d.]+)/)||[])[1]||'',profile:cachedProfile,totalTabs:0},socket);
+    send({type:'hello',id:instanceId,browser:browserKind(),extensionVersion:BUILD,profileLabel:settings.profileLabel,version:(navigator.userAgent.match(/(?:Chrome|Edg)\/([\d.]+)/)||[])[1]||'',profile:cachedProfile,totalTabs:0},socket);
     clearTimeout(registrationTimer);registrationTimer=setTimeout(()=>registrationExpired(socket),10000);
     void profileInfo().then(profile=>{if(ws!==socket)return;cachedProfile=profile;send({type:'profile',profile},socket);});
     void totalTabs().then(count=>send({type:'event',kind:'tabsChanged',totalTabs:count},socket));
@@ -61,7 +62,7 @@ async function connectOnce(){
   socket.onerror=()=>{try{socket.close();}catch{}};
 }
 function registrationExpired(socket){if(ws!==socket||wsState==='registered')return;wsState='registration-timeout';socket.close();}
-function profileLabel(){return cachedProfile.email||browserKind()+' profile '+instanceId;}
+function profileLabel(){return settings.profileLabel||cachedProfile.email||browserKind()+' profile '+instanceId;}
 function startKeepalive(socket){stopKeepalive();keepaliveTimer=setInterval(()=>{if(ws!==socket){stopKeepalive();return;}send({type:'ping'},socket);},KEEPALIVE_MS);}
 function stopKeepalive(){clearInterval(keepaliveTimer);keepaliveTimer=null;}
 // Commands for one tab reach chrome.debugger in the order the relay sent
@@ -129,7 +130,15 @@ async function createGroupTab(url){
 // ---------- service requests ----------
 async function onRequest(raw,socket=ws){
   let msg;try{msg=JSON.parse(raw);}catch{return;}
-  if(msg.type==='registered'&&msg.id===instanceId){clearTimeout(registrationTimer);wsState='registered';return;}
+  if(msg.type==='registered'&&msg.id===instanceId){
+    clearTimeout(registrationTimer);wsState='registered';
+    if(msg.extensionVersion&&msg.extensionVersion!==BUILD){
+      const saved=await chrome.storage.local.get(['ygptReloadFor']);
+      if(saved.ygptReloadFor!==msg.extensionVersion){await chrome.storage.local.set({ygptReloadFor:msg.extensionVersion});chrome.runtime.reload?.();}
+      else wsState='update-required';
+    }
+    return;
+  }
   if(msg.type!=='req')return;
   const reply=(ok,payload)=>send({type:'res',reqId:msg.reqId,ok,...(ok?{result:payload}:{error:String(payload?.message??payload)})},socket);
   try{
@@ -199,13 +208,16 @@ chrome.runtime.onMessage.addListener((msg,sender,respond)=>{
       // by this message has not read storage yet.
       await loadSettings();
       const next={...DEFAULTS,...msg.settings};if(!next.token)next.token=settings.token;
+      if(!['127.0.0.1','localhost'].includes(next.host)||!Number.isInteger(next.port)||next.port<1024||next.port>65535){respond({ok:false,error:'Use localhost and a port between 1024 and 65535'});return;}
+      next.profileLabel=String(next.profileLabel??'').trim().slice(0,80);
+      await connecting?.catch(()=>{});
       settings=next;await chrome.storage.local.set({ygptSettings:settings});
       clearTimeout(reconnectTimer);clearTimeout(registrationTimer);stopKeepalive();const old=ws;ws=null;try{old?.close();}catch{}await detachAll();await connect();respond({ok:true});
     })();
     return true;
   }
   if(msg?.kind==='status'){
-    void (async()=>{await loadSettings();respond({state:wsState,profile:cachedProfile,profileLabel:profileLabel(),settings:{host:settings.host,port:settings.port,hasToken:!!settings.token,groupName:settings.groupName}});})();
+    void (async()=>{await loadSettings();respond({state:wsState,extensionVersion:BUILD,profile:cachedProfile,profileLabel:profileLabel(),settings:{host:settings.host,port:settings.port,hasToken:!!settings.token,groupName:settings.groupName,profileLabel:settings.profileLabel}});})();
     return true;
   }
   return false;

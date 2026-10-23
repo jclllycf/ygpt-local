@@ -24,7 +24,7 @@ public static class InstallPayloadRegression {
   stream.Position=0;return stream;
  }
  public static int Main(string[] args){
-  string root=args[0],install=Path.Combine(root,"application"),data=Path.Combine(root,"private-data");Directory.CreateDirectory(install);Directory.CreateDirectory(data);
+  string root=args[0],install=Path.Combine(root,"application"),data=Path.Combine(root,"private-data");Directory.CreateDirectory(install);Directory.CreateDirectory(data);Directory.CreateDirectory(Path.Combine(install,"data"));File.WriteAllText(Path.Combine(install,"data","nested-sentinel.txt"),"nested private data");
   File.WriteAllText(Path.Combine(install,"original.txt"),"old application");File.WriteAllText(Path.Combine(data,"sentinel.txt"),"private fixture data");
   HostCore.Save(Path.Combine(install,".ygpt-install.json"),new{product="YGPT Local",version="old",installRoot=install});
   foreach(string mode in new[]{"bad-hash","unsafe-entry","wrong-version","marker-write-failure"}){
@@ -39,12 +39,14 @@ public static class InstallPayloadRegression {
   using(var payload=Payload("valid"))YGPTApp.InstallPayload(install,payload);
   Check(File.ReadAllText(Path.Combine(install,"app.txt"))=="new application","New application missing");
   var marker=HostCore.Read(Path.Combine(install,".ygpt-install.json"));Check(HostCore.S(marker,"version")==HostCore.Version&&HostCore.S(marker,"installRoot")==install,"New ownership missing or incorrect");
-  var retained=Directory.GetDirectories(root,"application.previous-*");Check(retained.Length==1&&File.ReadAllText(Path.Combine(retained[0],"original.txt"))=="old application","Rollback application not retained");
+  var retained=Directory.GetDirectories(root,"application.previous-*");Check(retained.Length==0,"Rollback must never escape the installation root");
+  var internalBackups=Directory.GetFiles(Path.Combine(install,".updates"),".ygpt-install.json",SearchOption.AllDirectories);Check(internalBackups.Length==1,"Rollback ownership not retained inside the installation");
+  Check(File.ReadAllText(Path.Combine(install,"original.txt"))=="old application","Unknown user file was replaced");
   Check(Directory.GetDirectories(root,"application.staging-*").Length==0,"Successful update leaked staging");
-  Check(File.ReadAllText(Path.Combine(data,"sentinel.txt"))=="private fixture data","Private data changed");
+  Check(File.ReadAllText(Path.Combine(data,"sentinel.txt"))=="private fixture data","Private data changed");Check(File.ReadAllText(Path.Combine(install,"data","nested-sentinel.txt"))=="nested private data","Nested data changed during update");
   // A disposable shell shortcut: verify the actual .lnk icon property, never
   // write to the owner's Start Menu or Desktop in a regression fixture.
-  string icon=Path.Combine(install,"assets","ygpt.ico"),shortcut=Path.Combine(root,"fixture.lnk");Directory.CreateDirectory(Path.GetDirectoryName(icon));
+  string icon=Path.Combine(install,"assets","ygpt-"+HostCore.Version+".ico"),shortcut=Path.Combine(root,"fixture.lnk");Directory.CreateDirectory(Path.GetDirectoryName(icon));
   File.Copy(Path.Combine(Environment.CurrentDirectory,"assets","ygpt.ico"),icon);
   YGPTApp.Shortcut(install,data,shortcut);
   dynamic shell=Activator.CreateInstance(Type.GetTypeFromProgID("WScript.Shell"));dynamic link=shell.CreateShortcut(shortcut);

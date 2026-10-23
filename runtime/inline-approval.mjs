@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {config,RUNTIME,INSTALL} from './config.mjs';
 // New resource URI forces hosts to fetch the revised CSP and bridge bundle.
-export const BAR_URI='ui://ygpt/approval/strip-v3.html';
+export const BAR_URI='ui://ygpt/approval/strip-v4-rc18.html';
 // The prior ChatGPT tool catalog can retain this URI across conversations.
 // Serve the NEW strip at this legacy address rather than the retired large card.
 export const LEGACY_BAR_URI='ui://ygpt/approval/card-v1.html';
@@ -11,7 +11,7 @@ export const LEGACY_BAR_URI='ui://ygpt/approval/card-v1.html';
 export const INSPECTION_URI=config.chatAppConsent?'ui://ygpt/approval/compact-v1-rc2.html':'ui://ygpt/approval/inspection-v1.html';
 // Resource addresses are protocol identifiers, not display branding. Old chats
 // retain these exact addresses and must still receive the current component.
-const knownResources=[BAR_URI,LEGACY_BAR_URI,INSPECTION_URI,...['compact-v11-3','interactive-v11-2c','interactive-v11-2b','interactive-v11-2','interactive-v11-1','interactive-v11','inspection-v1'].map(n=>'ui://ygpt/approval/'+n+'.html')];
+const knownResources=[BAR_URI,LEGACY_BAR_URI,INSPECTION_URI,'ui://ygpt/approval/strip-v3.html',...['compact-v11-3','interactive-v11-2c','interactive-v11-2b','interactive-v11-2','interactive-v11-1','interactive-v11','inspection-v1'].map(n=>'ui://ygpt/approval/'+n+'.html')];
 export function approvalResourceUris(){
  const modern=config.rc10Candidate?knownResources:!config.rc9Candidate&&uiEnabled()?(barEnabled()?[BAR_URI,LEGACY_BAR_URI]:[BAR_URI]):[];
  return [...new Set(modern)];
@@ -75,7 +75,7 @@ const BRAND_ICON_FILES=['plugin-icon-256.png','ygpt-local-green-y-256.png','ygpt
 // The strip cannot load external images (its CSP allows none), so the owner's
 // chosen icon is inlined as a data URL when the resource is served. Default
 // and fallback: the current sprout (assets/brand/plugin-icon-256.png).
-function brandIconDataUrl(){const name=BRAND_ICON_FILES.includes(config.brandIcon)?config.brandIcon:'plugin-icon-256.png';for(const candidate of [name,'plugin-icon-256.png']){try{return 'data:image/png;base64,'+fs.readFileSync(path.join(INSTALL,'assets','brand',candidate)).toString('base64');}catch{}}return 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFAAH/qp5gaQAAAABJRU5ErkJggg==';}
+function brandIconDataUrl(){const name=BRAND_ICON_FILES.includes(config.brandIcon)?config.brandIcon:'plugin-icon-256.png';for(const candidate of [name==='plugin-icon-256.png'?'ygpt-local-512.png':name.replace('-256.png','-512.png'),'ygpt-local-512.png','plugin-icon-256.png']){try{return 'data:image/png;base64,'+fs.readFileSync(path.join(INSTALL,'assets','brand',candidate)).toString('base64');}catch{}}return 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFAAH/qp5gaQAAAABJRU5ErkJggg==';}
 // The strip's accent colors follow the chosen icon's family (owner rule: keep
 // blue and green clearly apart). Green-family icons re-skin the top edge, the
 // primary button, the status accent and the icon tile to a fresh green; the
@@ -86,14 +86,14 @@ function brandIconDataUrl(){const name=BRAND_ICON_FILES.includes(config.brandIco
 const GREEN_ICON_FILES=['ygpt-local-green-y-256.png','ygpt-local-green-256.png'];
 const GREEN_THEME=[['--accent:#0369a1','--accent:#15803d'],['--sky1:#38bdf8','--sky1:#4ade80'],['--sky2:#0284c7','--sky2:#16a34a'],['--act1:#0284c7','--act1:#16a34a'],['--act2:#075985','--act2:#166534'],['--tint:#e0f2fe','--tint:#dcfce7'],['--tint-line:#bae6fd','--tint-line:#bbf7d0'],['--tint-ink:#075985','--tint-ink:#166534'],['--ring:rgba(56,189,248,.22)','--ring:rgba(34,197,94,.22)'],['--lift:rgba(2,132,199,.10)','--lift:rgba(22,163,74,.12)'],['#eff8fe','#f0fdf4'],['#d5e6f2','#bbf7d0'],['#0ea5e9','#22c55e'],['--accent:#7dd3fc','--accent:#86efac'],['--sky2:#0369a1','--sky2:#15803d'],['--tint:#0f3550','--tint:#14532d'],['--tint-line:#1d5a80','--tint-line:#166534'],['--tint-ink:#bae6fd','--tint-ink:#bbf7d0'],['--ring:rgba(56,189,248,.3)','--ring:rgba(34,197,94,.3)']];
 function rehashCsp(text){
- const hash=v=>createHash('sha256').update(v).digest('base64');
+ const hash=v=>createHash('sha256').update(v.replace(/\r\n?/g,'\n')).digest('base64');
  const grab=(open,close)=>{const a=text.indexOf(open),b=a<0?-1:text.indexOf(close,a+open.length);return a<0||b<0?null:text.slice(a+open.length,b);};
  const script=grab('<script>','</script>'),style=grab('<style>','</style>');
  if(script===null||style===null)return text;
  const patch=(src,kind,h)=>{const marker=kind+"-src 'sha256-",i=src.indexOf(marker);if(i<0)return src;const j=src.indexOf("'",i+marker.length);return src.slice(0,i+marker.length)+h+src.slice(j);};
  return patch(patch(text,'script',hash(script)),'style',hash(style));
 }
-export function barResource(uri=BAR_URI){const legacy=config.approvalStyle==='legacy';let text=fs.readFileSync(path.join(RUNTIME,legacy?'approval-bar-legacy.html':'approval-bar.html'),'utf8');if(!legacy){text=text.replace('__YGPT_BRAND_ICON__',brandIconDataUrl());if(GREEN_ICON_FILES.includes(config.brandIcon))for(const [from,to] of GREEN_THEME)text=text.replace(from,to);text=rehashCsp(text);}return {uri,name:legacy?'YGPT compact approval strip (classic)':'YGPT compact approval strip',mimeType:'text/html;profile=mcp-app',text,_meta:{ui:{prefersBorder:false,csp:{connectDomains:[],resourceDomains:[],frameDomains:[]}},'openai/widgetPrefersBorder':false,'openai/widgetCSP':{connect_domains:[],resource_domains:[]}}};}
+export function barResource(uri=BAR_URI){const legacy=config.approvalStyle==='legacy';let text=fs.readFileSync(path.join(RUNTIME,legacy?'approval-bar-legacy.html':'approval-bar.html'),'utf8');text=text.replace("img-src 'none'","img-src data:");if(!legacy){text=text.replace('__YGPT_BRAND_ICON__',brandIconDataUrl());if(GREEN_ICON_FILES.includes(config.brandIcon))for(const [from,to] of GREEN_THEME)text=text.replace(from,to);text=rehashCsp(text);}return {uri,name:legacy?'YGPT compact approval strip (classic)':'YGPT compact approval strip',mimeType:'text/html;profile=mcp-app',text,_meta:{ui:{prefersBorder:false,csp:{connectDomains:[],resourceDomains:[],frameDomains:[]}},'openai/widgetPrefersBorder':false,'openai/widgetCSP':{connect_domains:[],resource_domains:[]}}};}
 // Test hook: the exact HTML a host receives for the current configuration.
 export function barHtmlForTest(){return barResource(BAR_URI).text;}
 export function handleBar(name,args,ledger,onApproved,isWaiting=()=>false){

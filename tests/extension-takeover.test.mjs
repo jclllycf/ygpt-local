@@ -244,3 +244,25 @@ test('Extension takeover: unsigned Chrome profiles attach by stable identity and
     assert.equal((await engine.list()).ownerTabsNotTouched,1);
   }finally{await engine.close().catch(()=>{});await a.close();await b.close();}
 });
+
+test('Two chats concurrently control two profiles with overlapping Chrome tab ids without crossing accounts',{skip:!available&&'no chromium on this host',timeout:120000},async()=>{
+  const {YBrowserFacade}=await import('../engine/src/browser-engine.mjs');
+  const {chromium}=await import('playwright');const scope=new AsyncLocalStorage();
+  const facade=new YBrowserFacade({stateDir:tmp(),currentOwner:()=>scope.getStore()??'local',extension:{port:0}});
+  const browsers=await Promise.all([chromium.launch({executablePath:CHROME}),chromium.launch({executablePath:CHROME})]);
+  try{
+    await facade.existing.ensureRelay();const relay=facade.existing.relay;
+    const fakes=await Promise.all(browsers.map(async(browser,i)=>{const fake=new FakeExtension(null,relay.endpoint(),relay.token,{id:'profile-'+i,email:''});await fake.init(browser);fake.hello();return fake;}));
+    for(let i=0;i<100&&relay.instancesList().length<2;i++)await new Promise(r=>setTimeout(r,20));
+    assert.equal((await scope.run('unselected',()=>facade.attach())).needsChoice,true);
+    await Promise.all([scope.run('chat-a',()=>facade.attach({instance:'profile-0'})),scope.run('chat-b',()=>facade.attach({instance:'profile-1'}))]);
+    const [a,b]=await Promise.all([scope.run('chat-a',()=>facade.open('https://fixture.invalid/work',{target:'existing'})),scope.run('chat-b',()=>facade.open('https://fixture.invalid/work',{target:'existing'}))]);
+    await scope.run('chat-a',()=>facade.act(a.tabId,'click',{role:'button',name:'Add one'}));
+    assert.match((await scope.run('chat-a',()=>facade.snapshot(a.tabId))).aria,/1/);
+    assert.match((await scope.run('chat-b',()=>facade.snapshot(b.tabId))).aria,/0/);
+    await assert.rejects(scope.run('chat-a',()=>facade.snapshot(b.tabId)),{code:'SESSION_FOREIGN'});
+    await scope.run('chat-a',()=>facade.detach());assert.equal(scope.run('chat-b',()=>facade.attachStatus()).identity.instance,'profile-1');
+    assert.equal(fakes[0].createCalls.length,1);assert.equal(fakes[1].createCalls.length,1);
+    assert.ok(browsers.every(b=>b.isConnected()),'personal browsers remain running');
+  }finally{await facade.close();await Promise.all(browsers.map(b=>b.close()));}
+});

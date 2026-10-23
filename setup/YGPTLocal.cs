@@ -33,16 +33,18 @@ public static class YGPTApp {
  [STAThread] public static void Main(string[] args){try{
   Thread.CurrentThread.CurrentUICulture=System.Globalization.CultureInfo.GetCultureInfo("en-US");Thread.CurrentThread.CurrentCulture=System.Globalization.CultureInfo.GetCultureInfo("en-US");
   AppContext.SetSwitch("Switch.UseLegacyAccessibilityFeatures",false);AppContext.SetSwitch("Switch.UseLegacyAccessibilityFeatures.2",false);AppContext.SetSwitch("Switch.UseLegacyAccessibilityFeatures.3",false);
-  string data=Arg(args,"--data-dir",DefaultData);
+  string selectedInstall=Arg(args,"--install-dir",File.Exists(Path.Combine(Base,".ygpt-install.json"))?Base:HostCore.DefaultInstallDir());
+  string data=Arg(args,"--data-dir",HostCore.DataDir(selectedInstall));
+  if(args.Contains("--apply-update")){ApplyUpdate(Arg(args,"--install-dir",Base),data);return;}
   if(args.Contains("--background")){Background(data);return;}
   if(args.Contains("--uninstall-worker")){RemoveInstall(Arg(args,"--install-dir",Base),data);return;}
   if(args.Contains("--self-test")){var b=Encoding.UTF8.GetBytes("YGPT fixture");if(!b.SequenceEqual(ProtectedData.Unprotect(ProtectedData.Protect(b,null,DataProtectionScope.CurrentUser),null,DataProtectionScope.CurrentUser)))Environment.Exit(2);return;}
   bool ownSetup;using(var setupOwner=new Mutex(true,"Local\\YGPT-setup-"+HostCore.OwnerId(data),out ownSetup)){if(!ownSetup)return;
   if(args.Contains("--update")||Path.GetFileNameWithoutExtension(Assembly.GetExecutingAssembly().Location).IndexOf("Update",StringComparison.OrdinalIgnoreCase)>=0){ServicePointManager.SecurityProtocol=SecurityProtocolType.Tls12;var updateApp=new Application();updateApp.Run(new UpdateWindow());return;}
   ServicePointManager.SecurityProtocol=SecurityProtocolType.Tls12;
-  var app=new Application();var w=new SetupWindow(data,Arg(args,"--install-dir",File.Exists(Path.Combine(Base,".ygpt-install.json"))?Base:HostCore.DefaultInstallDir()));
+  var app=new Application();var w=new SetupWindow(data,selectedInstall);
   if(args.Contains("--uninstall"))w.Loaded+=(s,e)=>w.Uninstall();app.Run(w);}
- }catch(Exception ex){MessageBox.Show(ex.Message,"YGPT Local",MessageBoxButton.OK,MessageBoxImage.Error);Environment.ExitCode=1;}}
+ }catch(Exception ex){if(args.Contains("--apply-update")){try{string target=Arg(args,"--install-dir",Base),errors=Path.Combine(target,".updates");Directory.CreateDirectory(errors);HostCore.Save(Path.Combine(errors,"last-update-error.json"),new{product="YGPT Local",version=Version,message=ex.Message,at=DateTime.UtcNow.ToString("o")});}catch{}Environment.ExitCode=1;return;}MessageBox.Show(ex.Message,"YGPT Local",MessageBoxButton.OK,MessageBoxImage.Error);Environment.ExitCode=1;}}
  public static string Hash(string file){using(var s=File.OpenRead(file))using(var h=SHA256.Create())return BitConverter.ToString(h.ComputeHash(s)).Replace("-","").ToLowerInvariant();}
  public static string RandomKey(){var b=new byte[32];using(var r=RandomNumberGenerator.Create())r.GetBytes(b);return Convert.ToBase64String(b).TrimEnd('=').Replace('+','-').Replace('/','_');}
  public static Dictionary<string,object> Read(string p){return Json.Deserialize<Dictionary<string,object>>(File.ReadAllText(p));}
@@ -52,6 +54,24 @@ public static class YGPTApp {
  public static void SaveSecrets(string data,Dictionary<string,object> s){PrivateDirectory(data);string p=Path.Combine(data,"credentials.dpapi");if(File.Exists(p)){if(Json.Serialize(Secrets(data))==Json.Serialize(s))return;File.Copy(p,p+".before-"+DateTime.UtcNow.Ticks);}HostCore.SaveText(p,"dpapi:"+Convert.ToBase64String(ProtectedData.Protect(Encoding.UTF8.GetBytes(Json.Serialize(s)),null,DataProtectionScope.CurrentUser)));}
  public static string Node(string install,string script,string arg,string input){var si=new ProcessStartInfo(Path.Combine(install,"runtimes","node","node.exe"),Q(Path.Combine(install,script))+" "+(String.IsNullOrEmpty(arg)?"":Q(arg))){UseShellExecute=false,CreateNoWindow=true,RedirectStandardOutput=true,RedirectStandardError=true,RedirectStandardInput=true,WorkingDirectory=install};si.EnvironmentVariables["PYTHONDONTWRITEBYTECODE"]="1";si.EnvironmentVariables["PATH"]=Path.Combine(install,"runtimes","node")+";"+si.EnvironmentVariables["PATH"];using(var p=Process.Start(si)){var err=p.StandardError.ReadToEndAsync();var read=p.StandardOutput.ReadToEndAsync();if(input!=null)p.StandardInput.Write(input);p.StandardInput.Close();if(!p.WaitForExit(180000)){p.Kill();throw new Exception("Setup timed out. Inspect configuration before retrying; external resource creation may need reconciliation.");}string output=read.Result.Trim();if(String.IsNullOrEmpty(output))throw new Exception("Local component failed. Check runtime files and Windows permissions.");return output;}}
  public static void StartBackground(string install,string data){HostCore.Start(install,data);}
+ public static string UpgradeData(string install,string data){
+  bool startup=HostCore.B(HostCore.Read(Path.Combine(data,"connection.json")),"autoStart");
+  bool moved=!String.Equals(HostCore.Full(data),HostCore.Full(HostCore.DataDir(install)),StringComparison.OrdinalIgnoreCase);
+  if(moved)HostCore.RegisterTask(install,data,false);
+  try{
+   var r=ReadUpgradeResult(Node(install,"service/upgrade.mjs",null,Json.Serialize(new{install=install,data=data})));
+   string next=HostCore.S(r,"data");Register(install,next,startup);
+   if(moved){string key="Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\YGPTLocal-"+HostCore.OwnerId(data).Substring(0,12);bool owned=false;using(var k=Registry.CurrentUser.OpenSubKey(key)){owned=k!=null&&String.Equals(Convert.ToString(k.GetValue("InstallLocation")),install,StringComparison.OrdinalIgnoreCase);}if(owned)Registry.CurrentUser.DeleteSubKeyTree(key,false);string old=ShortcutPath(data);if(old!=ShortcutPath(next)&&File.Exists(old))File.Delete(old);}
+   return next;
+  }catch{if(moved&&Directory.Exists(data))HostCore.RegisterTask(install,data,startup);throw;}
+ }
+ static Dictionary<string,object> ReadUpgradeResult(string value){var r=Json.Deserialize<Dictionary<string,object>>(value);if(!HostCore.B(r,"ok"))throw new Exception(HostCore.S(r,"message","Data upgrade failed"));return r;}
+ public static void ApplyUpdate(string install,string data){
+  bool wasPaused=File.Exists(Path.Combine(data,"paused"));ValidateInstallTarget(install);HostCore.PrepareOwnedRepair(install,data);
+  string current=data;
+  try{InstallPayload(install);current=UpgradeData(install,data);HostCore.Start(install,current);HostCore.Save(Path.Combine(install,".updates","last-update.json"),new{product="YGPT Local",version=Version,data=current,started=true,at=DateTime.UtcNow.ToString("o")});}
+  catch{if(!Directory.Exists(current)&&Directory.Exists(HostCore.DataDir(install)))current=HostCore.DataDir(install);if(!wasPaused&&Directory.Exists(current)&&File.Exists(Path.Combine(current,"ygpt.config.json")))HostCore.Start(install,current);throw;}
+ }
  public static Dictionary<string,object> LocalRequest(string data,string route,bool post){var c=Read(Path.Combine(data,"ygpt.config.json"));var s=Secrets(data);var req=(HttpWebRequest)WebRequest.Create("http://127.0.0.1:"+Convert.ToString(c["port"])+route);req.Timeout=15000;req.Headers["Authorization"]="Bearer "+s["localKey"];if(post){req.Method="POST";req.ContentLength=0;}using(var r=req.GetResponse())using(var reader=new StreamReader(r.GetResponseStream()))return Json.Deserialize<Dictionary<string,object>>(reader.ReadToEnd());}
  public static bool IsOwnService(string data,int port){try{var c=Read(Path.Combine(data,"ygpt.config.json"));return Convert.ToInt32(c["port"])==port&&Convert.ToString(LocalRequest(data,"/healthz",false)["product"])=="YGPT Local";}catch{return false;}}
  public static void StopForMaintenance(string data){if(File.Exists(Path.Combine(data,"connection.json"))&&HostCore.S(HostCore.Read(Path.Combine(data,"connection.json")),"architecture").StartsWith("watchdog-")){HostCore.Pause(data);return;}if(!File.Exists(Path.Combine(data,"ygpt.config.json")))return;bool connected=false;try{LocalRequest(data,"/healthz",false);connected=true;}catch(WebException ex){if(ex.Status!=WebExceptionStatus.ConnectFailure)throw new Exception("Could not confirm the existing local service identity. Close active tasks and retry.");}
@@ -59,7 +79,7 @@ public static class YGPTApp {
   for(int i=0;i<150;i++){bool stopped=false;try{var p=Path.Combine(data,"service-health.json");stopped=File.Exists(p)&&File.GetLastWriteTimeUtc(p)>=requested&&Read(p).ContainsKey("stopped")&&(bool)Read(p)["stopped"];}catch{}if(stopped||!connected){Thread.Sleep(1200);return;}Thread.Sleep(200);}throw new Exception("The existing service has not stopped safely. No application files were replaced.");}
  public static void Background(string data){HostCore.Start(Base,data);}
  public static string ShortcutPath(string data){return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.StartMenu),"Programs","YGPT Local"+(String.Equals(Path.GetFullPath(data),Path.GetFullPath(DefaultData),StringComparison.OrdinalIgnoreCase)?"":" - "+HostCore.OwnerId(data).Substring(0,8))+".lnk");}
- public static void Shortcut(string install,string data,string shortcutPath=null){string p=shortcutPath??ShortcutPath(data);object shell=Activator.CreateInstance(Type.GetTypeFromProgID("WScript.Shell"));object link=shell.GetType().InvokeMember("CreateShortcut",BindingFlags.InvokeMethod,null,shell,new object[]{p});var t=link.GetType();t.InvokeMember("TargetPath",BindingFlags.SetProperty,null,link,new object[]{Path.Combine(install,"YGPTLocal.exe")});t.InvokeMember("Arguments",BindingFlags.SetProperty,null,link,new object[]{"--data-dir "+Q(data)});t.InvokeMember("IconLocation",BindingFlags.SetProperty,null,link,new object[]{Path.Combine(install,"assets","ygpt.ico")+",0"});t.InvokeMember("Save",BindingFlags.InvokeMethod,null,link,null);}
+ public static void Shortcut(string install,string data,string shortcutPath=null){string p=shortcutPath??ShortcutPath(data);object shell=Activator.CreateInstance(Type.GetTypeFromProgID("WScript.Shell"));object link=shell.GetType().InvokeMember("CreateShortcut",BindingFlags.InvokeMethod,null,shell,new object[]{p});var t=link.GetType();t.InvokeMember("TargetPath",BindingFlags.SetProperty,null,link,new object[]{Path.Combine(install,"YGPTLocal.exe")});t.InvokeMember("Arguments",BindingFlags.SetProperty,null,link,new object[]{"--data-dir "+Q(data)});t.InvokeMember("IconLocation",BindingFlags.SetProperty,null,link,new object[]{Path.Combine(install,"assets","ygpt-"+Version+".ico")+",0"});t.InvokeMember("Save",BindingFlags.InvokeMethod,null,link,null);}
  public static void Register(string install,string data,bool startup){string id=HostCore.OwnerId(data).Substring(0,12);using(var k=Registry.CurrentUser.CreateSubKey("Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\YGPTLocal-"+id)){k.SetValue("DisplayName","YGPT Local");k.SetValue("DisplayVersion",Version);k.SetValue("DisplayIcon",Path.Combine(install,"YGPTLocal.exe"));k.SetValue("InstallLocation",install);k.SetValue("UninstallString",Q(Path.Combine(install,"YGPTLocal.exe"))+" --uninstall --data-dir "+Q(data));}HostCore.RegisterTask(install,data,startup);Shortcut(install,data);RefreshIconCache();}
  public static void ValidateInstallTarget(string target){
   CheckPath(target);string marker=Path.Combine(target,".ygpt-install.json");
@@ -83,13 +103,15 @@ public static class YGPTApp {
    foreach(object item in (System.Collections.IEnumerable)existing["files"]){var f=(Dictionary<string,object>)item;string file=Path.GetFullPath(Path.Combine(install,(string)f["path"]));HostCore.CheckPath(file);if(!HostCore.Within(file,install)||!File.Exists(file)||Hash(file)!=(string)f["sha256"])throw new Exception("Runtime integrity needs repair using the full Setup package.");}
    return;
   }
-  string stage=install+".staging-"+Guid.NewGuid().ToString("N");
+  string transaction=Path.Combine(install,".updates",Guid.NewGuid().ToString("N"));
+  string stage=Path.Combine(transaction,"staging"),previous=Path.Combine(transaction,"previous");
   try{
    CheckPath(stage);Directory.CreateDirectory(stage);long total=0;
    using(var zip=new ZipArchive(payload,ZipArchiveMode.Read,true)){
     foreach(var e in zip.Entries){
      if(e.FullName.EndsWith("/")||e.FullName.EndsWith("\\"))continue;
      string rel=e.FullName.Replace('/','\\'),target=Path.GetFullPath(Path.Combine(stage,rel));
+     string first=rel.Split('\\')[0];if(String.Equals(first,"data",StringComparison.OrdinalIgnoreCase)||first.StartsWith(".",StringComparison.Ordinal)&&first!=".ygpt-install.json")throw new Exception("Reserved installation path in payload");
      if(!target.StartsWith(Path.GetFullPath(stage)+"\\",StringComparison.OrdinalIgnoreCase)||rel.Contains(":")||(e.ExternalAttributes>>16&0xF000)==0xA000)throw new Exception("Unsafe archive entry");
      total+=e.Length;if(total>1024L*1024*1024)throw new Exception("Payload exceeds expected bounds");
      Directory.CreateDirectory(Path.GetDirectoryName(target));using(var input=e.Open())using(var output=new FileStream(target,FileMode.CreateNew))input.CopyTo(output);
@@ -101,30 +123,28 @@ public static class YGPTApp {
    // Commit the ownership marker before moving the current installation. A
    // failed marker write must leave the existing application repairable.
    HostCore.Save(Path.Combine(stage,".ygpt-install.json"),new{product="YGPT Local",version=Version,installRoot=Path.GetFullPath(install)});
-   string previous=null;long previousTicks=DateTime.UtcNow.Ticks;
+   // Swap only application members. Data and update transactions never leave
+   // the chosen root. A failed commit restores every moved member.
+   Directory.CreateDirectory(previous);
+   var moved=new List<string>();var added=new List<string>();
    try{
-    if(Directory.Exists(install)){if(Directory.GetFileSystemEntries(install).Length>0){previous=install+".previous-"+previousTicks;MoveDirectoryWithRetry(install,previous);}else DeleteEmptyDirectoryWithRetry(install);}
-    MoveDirectoryWithRetry(stage,install);
-   }catch(Exception swapError){
-    if(previous!=null&&Directory.Exists(previous)&&!Directory.Exists(install)){
-     try{MoveDirectoryWithRetry(previous,install);}
-     catch(Exception rollbackError){throw new IOException("Setup could not restore the previous application to its original folder. It is retained at "+previous+". Private data is unchanged. Close this installation's processes and use the full Setup package to repair it.",new AggregateException(swapError,rollbackError));}
+    foreach(string member in Directory.GetFileSystemEntries(stage)){
+     string name=Path.GetFileName(member),dest=Path.Combine(install,name),old=Path.Combine(previous,name);
+     HostCore.CheckPath(dest);
+     if(Directory.Exists(dest)){MoveDirectoryWithRetry(dest,old);moved.Add(name);}
+     else if(File.Exists(dest)){File.Move(dest,old);moved.Add(name);}
+     if(Directory.Exists(member))MoveDirectoryWithRetry(member,dest);else File.Move(member,dest);
+     added.Add(name);
     }
-    if(swapError is UnauthorizedAccessException||swapError is IOException)throw new IOException("The YGPT Local folder is still in use, so Setup could not replace it. The previous application was retained and your private data is unchanged. Close this installation's windows or restart the PC, then retry.",swapError);
+   }catch{
+    foreach(string name in added){string dest=Path.Combine(install,name);if(Directory.Exists(dest))Directory.Delete(dest,true);else if(File.Exists(dest))File.Delete(dest);}
+    foreach(string name in moved){string old=Path.Combine(previous,name),dest=Path.Combine(install,name);if(Directory.Exists(old))MoveDirectoryWithRetry(old,dest);else if(File.Exists(old))File.Move(old,dest);}
     throw;
-   }
-   // The retained copy belongs INSIDE the application folder, not next to
-   // it: backup folders must not accumulate beside the install in the
-   // owner's drive root. This is a same-volume rename; if a lingering
-   // handle prevents it, the copy stays beside the install and the
-   // updater's post-update cleanup (or the next update) removes it.
-   if(previous!=null&&Directory.Exists(previous)&&Directory.Exists(install)){
-    try{MoveDirectoryWithRetry(previous,Path.Combine(install,".previous-"+previousTicks));}catch{}
    }
   }finally{
    // Corrupt archives and failed verification must not leak a payload-sized
    // directory. Only this invocation's unique staging directory is eligible.
-   try{if(Directory.Exists(stage)){CheckPath(stage);Directory.Delete(stage,true);}}catch{}
+   try{if(Directory.Exists(stage)){CheckPath(stage);Directory.Delete(stage,true);}if(Directory.Exists(transaction)&&Directory.GetFileSystemEntries(transaction).Length==0)Directory.Delete(transaction);}catch{}
   }
  }
  // Directory moves over a live previous install can lose a brief race with the

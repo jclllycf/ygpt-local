@@ -1,0 +1,41 @@
+{
+  "version": "1.0.0-rc.18",
+  "at": "2026-10-23T11:33:08.123Z",
+  "baseline": {
+    "remoteCommit": "cbeff63c757a3557e8802a6d8498ff56b481ae7f",
+    "comparableInstalledFiles": 82,
+    "sourceDifferences": 0
+  },
+  "tests": {
+    "total": 118,
+    "passed": 113,
+    "failed": 0,
+    "skipped": 5,
+    "environment": "Windows host with Chrome, Edge, native csc, bundled Python; Chromium-backed protocol fixtures are not real signed-in accounts"
+  },
+  "fieldDeployment": {
+    "dataMovedInsideChosenInstall": true,
+    "externalLegacyDataAbsent": true,
+    "cacheJunctionsRebased": 104,
+    "credentialsAndConnectionUnchanged": true,
+    "stateKeyAndPairingUnchanged": true,
+    "fixtureEnrollmentMatches": true,
+    "stateAclAndLinksVerified": true,
+    "initialInstalledManifest": {
+      "files": 5848,
+      "mismatches": 0
+    },
+    "isolatedRead": {
+      "snapshotRead": true,
+      "closedBeforeReturning": true,
+      "browserRunningAfterReturn": false,
+      "remainingProfiles": 0
+    }
+  },
+  "limits": {
+    "oldLoadedExtensionsNeedOneReloadPerProfile": true,
+    "realChatGPTApprovalDisplayAndHumanClick": "not verified",
+    "windowsSignInAndCleanWindowsAcceptance": "not verified",
+    "packageSigning": "unsigned"
+  }
+}

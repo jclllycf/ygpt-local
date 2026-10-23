@@ -330,11 +330,11 @@ test('Closing a chat context releases its daily-browser tabs without closing the
   let owner='chat-a';const facade=new YBrowserFacade({stateDir,currentOwner:()=>owner,extension:{port:0}});
   try{
     const page=stubPage('https://work.invalid/');let pageClosed=false;page.close=()=>{pageClosed=true;};
-    facade.existing.browser={contexts:()=>[{pages:()=>[page]}],close:async()=>{}};
-    const id=facade.existing.track(page,'chat-a');
+    const daily=new YExtensionBrowser({stateDir,currentOwner:()=>owner,port:0});daily.browser={contexts:()=>[{pages:()=>[page]}],close:async()=>{}};facade.existing.engines.set('fixture',daily);facade.existing.selections.set(owner,'fixture');
+    const id=daily.track(page,'chat-a');
     const r=await facade.closeContext('chat-a');
     assert.equal(r.dailyBrowserTabsReleased,1);assert.equal(facade.existing.has(id),false);assert.equal(pageClosed,false);
-    owner='chat-b';assert.equal((await facade.existing.attach({})).adopted,1,'the released tab can be adopted again');
+    owner='chat-b';assert.equal((await daily.attach({})).adopted,1,'the released tab can be adopted again');
   }finally{facade.existing.browser=null;await facade.close();await fs.rm(stateDir,{recursive:true,force:true});}
 });
 
@@ -379,7 +379,7 @@ test('Registration and popup status do not wait on optional Chrome identity or t
 });
 
 test('Popup reports Connected only after relay registration, and refreshes while open',async()=>{
-  const elements=Object.fromEntries(['host','port','token','status','save'].map(id=>[id,{addEventListener(){}}]));
+  const elements=Object.fromEntries(['host','port','token','profile-label','status','save'].map(id=>[id,{addEventListener(){}}]));
   let state='open',tick;
   const context=vm.createContext({document:{getElementById:id=>elements[id]},chrome:{runtime:{sendMessage:async()=>({state,profileLabel:'Chrome profile unsigned-a',settings:{host:'127.0.0.1',port:19341,hasToken:true}})}},setTimeout,setInterval:fn=>{tick=fn;return 1;}});
   vm.runInContext(await fs.readFile(new URL('../extension/popup.js',import.meta.url),'utf8'),context);
@@ -436,7 +436,7 @@ test('The pairing page updates its connected list after the owner pairs from an 
 });
 
 test('Live popup status preserves host and port edits while the owner is pairing',async()=>{
-  const elements=Object.fromEntries(['host','port','token','status','save'].map(id=>[id,{addEventListener(){}}]));let tick;
+  const elements=Object.fromEntries(['host','port','token','profile-label','status','save'].map(id=>[id,{addEventListener(){}}]));let tick;
   const context=vm.createContext({document:{getElementById:id=>elements[id]},chrome:{runtime:{sendMessage:async()=>({state:'registering',profileLabel:'Chrome profile unsigned-a',settings:{host:'127.0.0.1',port:19341,hasToken:true}})}},setTimeout,setInterval:fn=>{tick=fn;return 1;}});
   vm.runInContext(await fs.readFile(new URL('../extension/popup.js',import.meta.url),'utf8'),context);await new Promise(r=>setImmediate(r));
   elements.host.value='localhost';elements.port.value='19342';await tick();

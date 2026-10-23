@@ -74,12 +74,13 @@ public static class YGPTWatchdog {
    si.EnvironmentVariables["YGPT_TUNNEL_RUNTIME_KEY"]=HostCore.S(secrets,"runtimeKey");si.EnvironmentVariables["YGPT_TRANSPORT_SOURCE"]="official-secure-tunnel";
   }else si=new ProcessStartInfo(node,HostCore.Q(Path.Combine(install,"service","supervisor.mjs"))+" "+HostCore.Q(data));
   si.UseShellExecute=false;si.CreateNoWindow=true;si.WindowStyle=ProcessWindowStyle.Hidden;si.WorkingDirectory=install;si.RedirectStandardOutput=true;si.RedirectStandardError=true;
+  string temp=Path.Combine(data,"state","tmp");Directory.CreateDirectory(temp);si.EnvironmentVariables["TEMP"]=temp;si.EnvironmentVariables["TMP"]=temp;
   si.EnvironmentVariables["YGPT_CONFIG"]=Path.Combine(data,"ygpt.config.json");si.EnvironmentVariables["YGPT_SETUP_DATA_DIR"]=data;si.EnvironmentVariables["YGPT_FIRST_USE_KEY"]=HostCore.S(secrets,"verificationKey");si.EnvironmentVariables["YGPT_LOCAL_CONTROL_KEY"]=HostCore.S(secrets,"localKey");si.EnvironmentVariables["YGPT_CONTROL_PIPE"]="\\\\.\\pipe\\"+HostCore.PipeName(data);si.EnvironmentVariables["PATH"]=Path.GetDirectoryName(node)+";"+si.EnvironmentVariables["PATH"];si.EnvironmentVariables["PYTHONDONTWRITEBYTECODE"]="1";ProxyEnvironment(si,connection);
   authFailure=false;started=DateTime.UtcNow;child=Process.Start(si);OwnChild(child);child.OutputDataReceived+=(s,e)=>ObserveClientLine(e.Data);child.ErrorDataReceived+=(s,e)=>ObserveClientLine(e.Data);child.BeginOutputReadLine();child.BeginErrorReadLine();
  }
  public static int Main(string[] args){
   try{
-   data=HostCore.Full(HostCore.Arg(args,"--data-dir",HostCore.DefaultDataDir()));install=HostCore.Full(HostCore.Arg(args,"--install-dir",install));HostCore.CheckPath(data);HostCore.CheckPath(install);
+   install=HostCore.Full(HostCore.Arg(args,"--install-dir",install));data=HostCore.Full(HostCore.Arg(args,"--data-dir",HostCore.DataDir(install)));HostCore.CheckPath(data);HostCore.CheckPath(install);
    if(args.Contains("--cleanup-once")){InstallCleanup.Run(data,install);return 0;}
    var connection=HostCore.Read(Path.Combine(data,"connection.json"));var secrets=HostCore.Secrets(data);bool fresh;using(var owner=new Mutex(true,"Local\\YGPT-owner-"+HostCore.OwnerId(data),out fresh)){if(!fresh)return 0;
     string tunnel=HostCore.S(connection,"tunnelId",HostCore.S(connection,"publicOrigin",data));bool unique;using(var tunnelOwner=new Mutex(true,"Local\\YGPT-tunnel-"+HostCore.HashText(System.Security.Principal.WindowsIdentity.GetCurrent().User.Value+"|"+tunnel).Substring(0,32),out unique)){if(!unique){phase="other-owner-active";Health(false,false);return 2;}

@@ -1,14 +1,14 @@
-<img src="assets/brand/plugin-icon-256.png" width="72" alt="YGPT Local Y connection icon">
+<img src="assets/brand/ygpt-local-512.png" width="72" alt="YGPT Local Y connection icon">
 
 # YGPT Local
 
 Connect ChatGPT to files and tools on your own Windows PC, with protected snapshots, conflict-aware recovery and scoped approval.
 
-**1.0.0-rc.17 is the current candidate for owner testing, with English-only UI.** The repository is private; the installers are distributed through this repository's Releases page. Remaining tests are owner-run. What changed since rc.3: [CHANGELOG](CHANGELOG.md) · [upgrade guide](docs/UPGRADE_USER_GUIDE.md) · [security note](docs/UPGRADE_SECURITY_NOTE.md). [中文](README.zh-CN.md) · [Setup guide](docs/SETUP_GUIDE.md) · [Validation](docs/VALIDATION.md) · [Security](docs/SECURITY.md)
+**1.0.0-rc.18 is the current candidate for owner testing, with English-only UI.** The repository is private; the installers are distributed through this repository's Releases page. Remaining tests are owner-run. What changed since rc.3: [CHANGELOG](CHANGELOG.md) · [upgrade guide](docs/UPGRADE_USER_GUIDE.md) · [security note](docs/UPGRADE_SECURITY_NOTE.md). [中文](README.zh-CN.md) · [Setup guide](docs/SETUP_GUIDE.md) · [Validation](docs/VALIDATION.md) · [Security](docs/SECURITY.md)
 
 ## Install
 
-1. Obtain `YGPTLocal-Setup-1.0.0-rc.17-win-x64.exe` and compare its SHA-256 with `SHA256SUMS.txt`. This candidate is unsigned. Already installed? Run `YGPTLocal-Update-1.0.0-rc.17-win-x64.exe` instead: it updates in place and keeps your data folder, keys, connection identity, snapshots and ChatGPT plugin ([upgrade guide](docs/UPGRADE_USER_GUIDE.md)).
+1. Obtain `YGPTLocal-Setup-1.0.0-rc.18-win-x64.exe` and compare its SHA-256 with `SHA256SUMS.txt`. This candidate is unsigned. Already installed? Run `YGPTLocal-Update-1.0.0-rc.18-win-x64.exe` instead: it updates in place and preserves your data, keys, connection identity, snapshots and ChatGPT plugin; legacy external data moves inside the application folder ([upgrade guide](docs/UPGRADE_USER_GUIDE.md)).
 2. Run the eight-step native Windows wizard. Choose an application folder and an authorized working folder. Node, Python and the official Tunnel Client are bundled; normal installation needs no developer tools or administrator privileges.
 3. Keep **OpenAI Secure MCP Tunnel** selected. Create a dedicated Tunnel in your eligible Platform organization and associate the intended ChatGPT workspace. Do not reuse a Tunnel already run by another installation.
 4. Enter the full ID and a dedicated runtime API key in the masked local field. DPAPI encrypts it for your Windows user. It authenticates the Tunnel Client; setup does not call generation models or create keys.
@@ -42,7 +42,7 @@ The cleaner checks identity, size, SHA-256, ancestry, links, open handles, proce
 
 It keeps runtimes, Watchdog, Tunnel, dormant Settings/update/uninstall, DPAPI credentials, owner/OAuth state, databases, approval ledger, snapshots and rollback data. Installed Settings can reconfigure its verified runtime after Setup removal. A damaged runtime or version upgrade requires the full installer.
 
-Default application: `D:\YGPTLocal` and private data `D:\YGPTLocalData` (or the same folders on the largest other non-system fixed drive when there is no D:), otherwise `%LOCALAPPDATA%\Programs\YGPTLocal` and `%LOCALAPPDATA%\YGPTLocal`. Open Settings from Start when needed; no tray GUI must remain running. Maintenance blocks new calls and checks owned work before replacement. Active jobs/approvals prevent unsafe maintenance. Updates keep the previous program copy inside the application folder while they run and remove it automatically once the update is verified working (older backup folders left beside the application folder by earlier versions are removed at the same time); private state is always preserved. Uninstall is a separate confirmation that disconnects the service and retains private data, changed and unknown files. See [migration](docs/MIGRATION.md).
+Default application: `D:\YGPTLocal` (or another chosen folder). All product data stays in `<application>\data`, and update staging/rollback copies stay in `<application>\.updates`. Legacy external data is moved into this root during update with credentials, connection identity and snapshots preserved. Windows startup registrations and shortcuts are updated to the contained data folder. Unknown files are preserved. See [rc.18 field repair](docs/RC18_FIELD_REPAIR_ZH.md).
 
 RC3 development leaves existing working production Tunnels running. Different Tunnel identities are separate owners, not automatic duplicate-cleanup targets.
 

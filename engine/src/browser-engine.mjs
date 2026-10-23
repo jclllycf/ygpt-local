@@ -9,7 +9,7 @@ import {EngineError,sha256} from './file-engine.mjs';
 // context gets its own BrowserContext (cookies, storage, tabs); a chat sees and
 // controls only its own tabs. Idle contexts close; the browser closes with the last.
 export class YBrowserEngine {
-  static IDLE_MS=10*60000;
+  static IDLE_MS=30000;
   constructor({stateDir,allowedHosts=[],blockedHosts=[],channel='chrome',headless=true,currentOwner=()=>'local',launch,idleMs=YBrowserEngine.IDLE_MS}={}){
     this.stateDir=stateDir;
     // Owner blacklist (rc.13): the browser may visit any http/https site by
@@ -25,10 +25,11 @@ export class YBrowserEngine {
   }
   validateUrl(raw){const u=new URL(raw);if(!['http:','https:'].includes(u.protocol))throw new EngineError('URL_BLOCKED','Only http/https URLs can be opened');if(u.username||u.password)throw new EngineError('URL_BLOCKED','URLs with embedded credentials are on the blacklist');if(this.blockedHosts.has(u.hostname.toLowerCase()))throw new EngineError('URL_BLOCKED','This host is on the owner blocklist');if(this.allowedHosts.size&&!this.allowedHosts.has(u.hostname))throw new EngineError('URL_NOT_ENROLLED','Browser destination is outside the owner-configured allowlist');return u.href;}
   async ensureBrowser(){
+    await this.closing;
     if(this.browser)return this.browser;
     this.starting??=this.launcher({channel:this.channel,headless:this.headless}).then(browser=>{
       this.browser=browser;browser.on?.('disconnected',()=>{if(this.browser===browser)this.forget();});
-      this.sweeper=setInterval(()=>void this.sweep(),Math.min(60000,this.idleMs)).unref?.()??null;return browser;
+      this.sweeper=setInterval(()=>void this.sweep(),Math.min(1000,this.idleMs)).unref?.()??null;return browser;
     }).finally(()=>{this.starting=null;});
     return this.starting;
   }
@@ -39,10 +40,11 @@ export class YBrowserEngine {
     entry.ready=(async()=>{
       const browser=await this.ensureBrowser();
       const context=await browser.newContext({acceptDownloads:false,viewport:{width:1100,height:760},serviceWorkers:'block'});
+      entry.context=context;
       context.setDefaultTimeout(10000);
       await context.route('**/*',async route=>{try{this.validateUrl(route.request().url());await route.fallback();}catch{await route.abort('blockedbyclient');}});
       context.on('page',p=>this.track(p,owner));entry.context=context;return context;
-    })().catch(e=>{this.contexts.delete(owner);throw e;});
+    })().catch(async e=>{if(this.contexts.get(owner)===entry)this.contexts.delete(owner);await entry.context?.close().catch(()=>{});if(!this.contexts.size)await this.shutdownBrowser();throw e;});
     return entry.ready;
   }
   async launch(){await this.contextFor(this.owner());return {isolated:true,channel:this.channel,headless:this.headless,personalProfileUsed:false,externalDebugPort:false,perChatContext:true};}
@@ -54,7 +56,7 @@ export class YBrowserEngine {
     if(t.page.isClosed())throw new EngineError('NO_TAB','Tab already closed');
     const c=this.contexts.get(owner);if(c)c.lastUsed=Date.now();return t.page;
   }
-  async open(url){this.validateUrl(url);const owner=this.owner(),context=await this.contextFor(owner);const p=await context.newPage(),tabId=this.track(p,owner);await p.goto(url,{waitUntil:'domcontentloaded',timeout:15000});return this.snapshot(tabId);}
+  async open(url){this.validateUrl(url);const owner=this.owner(),context=await this.contextFor(owner);const p=await context.newPage(),tabId=this.track(p,owner);try{await p.goto(url,{waitUntil:'domcontentloaded',timeout:15000});return await this.snapshot(tabId);}catch(e){await p.close().catch(()=>{});if(!this.owned(owner).length)await this.closeContext(owner);throw e;}}
   async navigate(id,url){const p=this.page(id);await p.goto(this.validateUrl(url),{waitUntil:'domcontentloaded',timeout:15000});return this.snapshot(id);}
   // Only this chat's tabs; other chats' pages are counted, never described.
   async list(){const owner=this.owner(),mine=[...this.tabs].filter(([,t])=>t.owner===owner);return {tabs:await Promise.all(mine.map(async([id,t])=>({tabId:id,url:t.page.url(),title:await t.page.title()}))),otherChatTabs:this.tabs.size-mine.length,browserRunning:!!this.browser};}
@@ -70,7 +72,7 @@ export class YBrowserEngine {
     this.bounded??=new BoundedDownloads({directory:path.join(this.stateDir,'downloads'),validateUrl:u=>this.validateUrl(u)});
     const result=await this.bounded.save(new URL(href,p.url()).href);this.downloads.set(result.downloadId,{...result,owner:this.owner()});return result;
   }
-  async closeTab(id){await this.page(id).close();return {closed:id};}
+  async closeTab(id){const owner=this.owner();await this.page(id).close();if(!this.owned(owner).length)await this.closeContext(owner);return {closed:id,browserRunning:!!this.browser};}
   // Close one chat's context. Its tab IDs then report BROWSER_CONTEXT_CLOSED
   // to that chat only; other chats' contexts are untouched.
   async closeContext(owner=this.owner()){
@@ -84,8 +86,8 @@ export class YBrowserEngine {
   async sweep(now=Date.now()){for(const [owner,entry] of [...this.contexts])if(now-entry.lastUsed>=this.idleMs)await this.closeContext(owner);}
   owned(owner=this.owner()){return [...this.tabs].filter(([,t])=>t.owner===owner).map(([tabId,t])=>({tabId,url:t.page.url()}));}
   forget(){for(const [id,t] of this.tabs)this.closedTabs.set(id,t.owner);this.tabs.clear();this.contexts.clear();this.browser=null;if(this.sweeper)clearInterval(this.sweeper);this.sweeper=null;}
-  async shutdownBrowser(){const b=this.browser;this.forget();await b?.close().catch(()=>{});}
-  async close(){await this.shutdownBrowser();this.closedTabs.clear();}
+  async shutdownBrowser(){const b=this.browser;this.browser=null;if(this.sweeper)clearInterval(this.sweeper);this.sweeper=null;this.closing=b?.close().catch(()=>{});try{await this.closing;}finally{this.closing=null;}}
+  async close(){for(const owner of [...this.contexts.keys()])await this.closeContext(owner);await this.shutdownBrowser();this.closedTabs.clear();}
 }
 
 // The owner's REAL daily browser (Chrome or Edge, default profile, their
@@ -103,11 +105,11 @@ export class YExtensionBrowser {
   // new, attach waits longer for the first announcement; the total stays
   // under the 30 s HTTP request limit even with the 10 s CDP connect.
   static FRESH_RELAY_MS=35000;static FRESH_WAIT_MS=15000;static SETTLED_WAIT_MS=4000;
-  constructor({stateDir,currentOwner=()=>'local',port=19341,groupName='YGPT',validateUrl}={}){
+  constructor({stateDir,currentOwner=()=>'local',port=19341,groupName='YGPT',validateUrl,relay}={}){
     this.stateDir=stateDir;this.owner=()=>currentOwner()??'local';
     this.groupName=groupName||'YGPT';
     this.validateUrl=typeof validateUrl==='function'?validateUrl:u=>new URL(u).href;
-    this.relay=new ExtensionRelay({stateDir,port,groupName:this.groupName});
+    this.relay=relay??new ExtensionRelay({stateDir,port,groupName:this.groupName});
     this.relayReady=null;
     this.browser=null;this.tabs=new Map();this.identity=null;
     this.holders=new Set(); // chats currently attached to the shared connection
@@ -149,10 +151,10 @@ export class YExtensionBrowser {
     }
     this.relay.bind(chosen.id);
     let browser;
-    try{browser=await chromium.connectOverCDP(this.relay.endpoint(),{timeout:10000,headers:this.relay.cdpHeaders()});}
+    try{browser=await chromium.connectOverCDP(this.relay.cdpEndpoint?.()??this.relay.endpoint(),{timeout:10000,headers:this.relay.cdpHeaders()});}
     catch{this.relay.unbind();throw new EngineError('BROWSER_ATTACH_FAILED','The paired browser stopped answering before the connection completed. Nothing was changed.');}
     this.browser=browser;
-    this.identity={via:'YGPT browser extension',browser:chosen.browser,profileEmail:chosen.profileEmail,profileLabel:chosen.profileLabel,instance:chosen.id};
+    this.identity={via:'YGPT browser extension',browser:chosen.browser,profileEmail:chosen.profileEmail,profileLabel:chosen.profileLabel,instance:chosen.id,extensionVersion:chosen.extensionVersion??'unknown'};
     browser.on('disconnected',()=>{if(this.browser===browser){this.browser=null;this.tabs.clear();this.identity=null;this.holders.clear();}});
     let adopted=0;
     const owner=this.owner();this.holders=new Set([owner]);
@@ -244,16 +246,50 @@ export class YExtensionBrowser {
   async close(){await this.attaching?.catch(()=>{});await this.disconnect().catch(()=>{});await this.relay.stop().catch(()=>{});this.relayReady=null;}
 }
 
+// Each chat selects its own profile; each profile has a separate CDP relay.
+// A second chat never implicitly inherits the first chat's signed-in account.
+export class YMultiExtensionBrowser {
+  constructor(opts={}){this.opts=opts;this.owner=()=>opts.currentOwner?.()??'local';this.relay=new ExtensionRelay({stateDir:opts.stateDir,port:opts.port??19341,groupName:opts.groupName??'YGPT'});this.engines=new Map();this.selections=new Map();}
+  async ensureRelay(){await this.relay.start();}
+  prestart(){void this.ensureRelay().catch(()=>{});}
+  pairingUrl(){return this.relay.endpoint()+'/';}
+  selected(){return this.engines.get(this.selections.get(this.owner()));}
+  async attach({instance}={}){
+    const owner=this.owner();await this.ensureRelay();
+    const current=this.selected();if(current?.browser&&!instance)return current.attach({});
+    let candidates=this.relay.instancesList();
+    if(!candidates.length){const end=Date.now()+YExtensionBrowser.FRESH_WAIT_MS;while(!candidates.length&&Date.now()<end){await new Promise(r=>setTimeout(r,250));candidates=this.relay.instancesList();}}
+    if(!candidates.length)throw new EngineError('BROWSER_EXTENSION_MISSING','No YGPT extension is paired. Open '+this.pairingUrl()+' in each intended browser profile and pair its extension. Personal profiles are never loaded or copied automatically.');
+    const matches=instance?candidates.filter(c=>c.id===instance||c.profileEmail?.toLowerCase()===String(instance).toLowerCase()||c.browser.toLowerCase()===String(instance).toLowerCase()||c.profileLabel?.toLowerCase()===String(instance).toLowerCase()):candidates;
+    if(matches.length!==1){if(!matches.length)throw new EngineError('BROWSER_INSTANCE_UNKNOWN','The selected paired profile is not connected');return {needsChoice:true,candidates:matches.map(c=>({instance:c.id,browser:c.browser,profileEmail:c.profileEmail,profileLabel:c.profileLabel,tabs:c.totalTabs})),note:'Select an exact instance. Each chat keeps its own browser profile selection.'};}
+    const id=matches[0].id;
+    if(current&&this.selections.get(owner)!==id&&current.owned(owner).length)throw new EngineError('BROWSER_PROFILE_IN_USE','Detach this chat before changing its profile; its current tabs were preserved');
+    let engine=this.engines.get(id);if(!engine){engine=new YExtensionBrowser({...this.opts,relay:this.relay.profileRelay(id)});this.engines.set(id,engine);}
+    const result=await engine.attach({instance:id});this.selections.set(owner,id);return result;
+  }
+  status(){return {...(this.selected()?.status()??{attached:false}),pairingUrl:this.pairingUrl(),candidates:this.relay.instancesList().map(c=>({instance:c.id,browser:c.browser,profileLabel:c.profileLabel}))};}
+  has(id){return [...this.engines.values()].some(e=>e.has(id));}
+  forTab(id){const engine=[...this.engines.values()].find(e=>e.has(id));if(!engine)throw new EngineError('NO_TAB','Unknown daily-browser tab');return engine;}
+  page(id){return this.forTab(id).page(id);}
+  async open(url){if(!this.selected()?.browser){const result=await this.attach({});if(result.needsChoice)throw new EngineError('BROWSER_CHOICE_REQUIRED','Choose an exact paired instance with y_browser_attach before opening a daily-browser tab');}return this.selected().open(url);}
+  async list(){const engine=this.selected();return engine?engine.list():{attached:false,tabs:[],ownerTabsNotTouched:0};}
+  async detach(){const owner=this.owner(),engine=this.selected();const result=engine?await engine.detach():{detached:true};this.selections.delete(owner);return result;}
+  release(owner=this.owner()){let n=0;for(const e of this.engines.values())n+=e.release(owner);this.selections.delete(owner);return n;}
+  owned(owner=this.owner()){return [...this.engines.values()].flatMap(e=>e.owned(owner));}
+  async close(){await Promise.allSettled([...this.engines.values()].map(e=>e.close()));this.engines.clear();this.selections.clear();await this.relay.stop();}
+}
+for(const method of ['navigate','snapshot','act','wait','screenshot','download','closeTab'])YMultiExtensionBrowser.prototype[method]=function(id,...args){return this.forTab(id)[method](id,...args);};
+
 export class YBrowserFacade {
   constructor(opts={}){
     this.isolated=new YBrowserEngine(opts);
-    this.existing=new YExtensionBrowser({stateDir:opts.stateDir,currentOwner:opts.currentOwner,port:opts.extension?.port??19341,groupName:opts.extension?.groupName??'YGPT',validateUrl:u=>this.isolated.validateUrl(u)});
+    this.existing=new YMultiExtensionBrowser({stateDir:opts.stateDir,currentOwner:opts.currentOwner,port:opts.extension?.port??19341,groupName:opts.extension?.groupName??'YGPT',validateUrl:u=>this.isolated.validateUrl(u)});
     this.stateDir=opts.stateDir;
   }
   validateUrl(u){return this.isolated.validateUrl(u);}
   page(id){if(this.existing.has(id))return this.existing.page(id);return this.isolated.page(id);}
   engineFor(id){return this.existing.has(id)?this.existing:this.isolated;}
-  async open(url,{target}={}){if(target==='existing')return this.existing.open(url);return this.isolated.open(url);}
+  async open(url,{target,keepAlive=false}={}){if(target==='existing')return this.existing.open(url);const owner=this.isolated.owner();try{const result=await this.isolated.open(url);return {...result,ephemeral:!keepAlive,...(!keepAlive?{closedAfterCall:true}:{leaseExpiresAfterIdleMs:this.isolated.idleMs})};}finally{if(!keepAlive)await this.isolated.closeContext(owner);}}
   async attach(a={}){return this.existing.attach(a);}
   async detach(){return this.existing.detach();}
   attachStatus(){return this.existing.status();}

@@ -14,7 +14,7 @@ using System.Windows.Threading;
 // Backends deliberately have no process, registry, credential or network effects.
 // Only UpdateWindow.cs is production code in this isolated WPF regression.
 public static class HostCore {
- public const string Version="1.0.0-rc.17";
+ public const string Version="1.0.0-rc.18";
  public static readonly JavaScriptSerializer Json=new JavaScriptSerializer();
  public static readonly ManualResetEvent AllowPause=new ManualResetEvent(true),PauseEntered=new ManualResetEvent(false);
  public static readonly ConcurrentQueue<string> Calls=new ConcurrentQueue<string>();
@@ -27,7 +27,7 @@ public static class HostCore {
  public static Dictionary<string,object> Read(string p){return Json.Deserialize<Dictionary<string,object>>(File.ReadAllText(p));}
  public static void Save(string p,object value){File.WriteAllText(p,Json.Serialize(value));}
  public static void PrepareOwnedRepair(string install,string data){Calls.Enqueue("pause:"+install);PauseEntered.Set();if(!AllowPause.WaitOne(5000))throw new Exception("Fixture pause timed out");File.WriteAllText(Path.Combine(data,"paused"),"fixture");}
- public static void Start(string install,string data){Calls.Enqueue("start:"+install);File.Delete(Path.Combine(data,"paused"));Save(Path.Combine(data,"watchdog-health.json"),new{ownerId=OwnerId(data),version=Version,stopped=false,at=DateTime.UtcNow.ToString("o")});}
+ public static void Start(string install,string data){Calls.Enqueue("start:"+install);File.Delete(Path.Combine(data,"paused"));Save(Path.Combine(data,"watchdog-health.json"),new{ownerId=OwnerId(data),version=Version,localReady=true,stopped=false,at=DateTime.UtcNow.ToString("o")});}
 }
 public static class YGPTApp {
  public static bool FailPayload;
@@ -35,6 +35,7 @@ public static class YGPTApp {
  public static void ValidateInstallTarget(string target){if(!File.Exists(Path.Combine(target,".ygpt-install.json")))throw new Exception("Fixture install missing");}
  public static void InstallPayload(string install){HostCore.Calls.Enqueue("payload:"+install);if(FailPayload)throw new IOException("Fixture payload failure");}
  public static void Shortcut(string install,string data){HostCore.Calls.Enqueue("shortcut:"+install);}
+ public static string UpgradeData(string install,string data){return data;}
  public static void RefreshIconCache(){}
 }
 public static class UpdateWindowRegression {

@@ -1,3 +1,4 @@
+import {isolateVault} from './fixtures/vault-fs.mjs';
 // rc.13 fundamental blacklist upgrade (portable policy tests): no hard
 // refusals remain in the access policy. ChatGPT Desktop Agent resources are
 // ordinary targets; YGPT's own state and the vault are human gates, not
@@ -7,7 +8,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-test('Access policy rc.13: nothing is hard-refused; risk becomes a human gate',async()=>{
+test('Access policy rc.13: nothing is hard-refused; risk becomes a human gate',async t=>{isolateVault(t);
   const {register}=await import('node:module');
   register('./fixtures/config-hook.mjs',import.meta.url);
   const {authorize}=await import('../runtime/access-policy.mjs');

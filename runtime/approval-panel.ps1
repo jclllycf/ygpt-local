@@ -4,7 +4,7 @@ $ErrorActionPreference='Stop'
 Add-Type -AssemblyName PresentationFramework,PresentationCore,WindowsBase,System.Security
 $xaml=[IO.File]::ReadAllText((Join-Path $PSScriptRoot 'approval-view.xaml'))
 $window=[Windows.Markup.XamlReader]::Load([Xml.XmlNodeReader]::new([xml]$xaml))
-$brandPath=[IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\assets\brand\plugin-icon-256.png'))
+$brandPath=[IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\assets\brand\ygpt-local-512.png'))
 $window.FindName('BrandIcon').Source=[Windows.Media.Imaging.BitmapImage]::new([Uri]$brandPath)
 $area=[Windows.SystemParameters]::WorkArea;$window.Left=$area.Right-440;$window.Top=$area.Bottom-490
 $controls=@{};foreach($n in @('State','Title','Purpose','Queue','SourceLabel','Source','Target','Impact','Denied','Risk','Privilege','Technical','Code','Expiry','History','HistoryText','Allow','Always','Deny','Note')){$controls[$n]=$window.FindName($n)}

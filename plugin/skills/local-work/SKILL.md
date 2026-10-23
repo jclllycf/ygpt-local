@@ -12,3 +12,9 @@ On `REVIEW_REQUIRED`, immediately show `y_review_approval` using the original re
 Retain output tokens for search, process and durable task continuations. An interrupted or unknown mutation must be reconciled before retrying. Batch results are not atomic. Do not promise that all arbitrary script effects can be rolled back.
 
 For general explanations unrelated to local files, do not inspect the PC. If this host has not installed the plugin or cannot reach the endpoint, state the actual error and guide connection setup. The host ultimately chooses tools; these instructions do not force tool use.
+
+## Browser lifecycle (rc.18)
+
+An isolated `y_browser_open` defaults to a one-shot read and closes its browser and temporary profile before returning the snapshot. For an explicit multi-step browser task, set `keepAlive: true`, retain the returned `contextToken` on every later call, and close all tabs in a finally path as soon as the task ends. A 30-second idle lease releases abandoned contexts. Never leave an isolated browser waiting after completing a task.
+
+The daily-browser extension mode retains the owner browser. Each chat selects its own exact paired instance with `y_browser_attach`; different profiles can work concurrently. A second chat must not inherit another chat account. An unpacked extension loaded before rc.18 needs one Reload in each installed Chrome/Edge profile; after that, version negotiation handles future file upgrades.

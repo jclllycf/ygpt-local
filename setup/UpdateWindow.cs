@@ -118,7 +118,7 @@ public class UpdateWindow:Window{
   pickerHost.Children.Clear();BuildPicker(pickerHost);
  }
  BitmapSource BrandBitmap(int i){
-  string file=Path.Combine(install,"assets","brand",BrandIconFiles[i]);if(File.Exists(file)){try{using(var stream=File.OpenRead(file)){var b=new BitmapImage();b.BeginInit();b.CacheOption=BitmapCacheOption.OnLoad;b.StreamSource=stream;b.EndInit();b.Freeze();return b;}}catch{}}
+  string file=Path.Combine(install,"assets","brand",BrandIconFiles[i].Replace("-256.png","-512.png"));if(File.Exists(file)){try{using(var stream=File.OpenRead(file)){var b=new BitmapImage();b.BeginInit();b.CacheOption=BitmapCacheOption.OnLoad;b.StreamSource=stream;b.EndInit();b.Freeze();return b;}}catch{}}
   using(var stream=Assembly.GetExecutingAssembly().GetManifestResourceStream(BrandIconResources[i])){if(stream==null)return null;var b=new BitmapImage();b.BeginInit();b.CacheOption=BitmapCacheOption.OnLoad;b.StreamSource=stream;b.EndInit();return b;}
  }
  void RefreshIconTiles(){for(int i=0;i<iconTiles.Count;i++)iconTiles[i].BorderBrush=B(BrandIconFiles[i]==brandIcon?Mint:Line);}
@@ -197,6 +197,8 @@ public class UpdateWindow:Window{
    if(!pausedOk){Log("Stopped after waiting 10 minutes: the connection stayed busy, so nothing was changed. Finish the pending request in ChatGPT, then run the update again.");return;}
    Log("Replacing application files (your data folder is not touched)…");
    await Task.Run(()=>YGPTApp.InstallPayload(targetInstall));
+   Log("Moving private data inside the application folder and refreshing the bundled UIA identity…");
+   targetData=await Task.Run(()=>YGPTApp.UpgradeData(targetInstall,targetData));data=targetData;
    Log("Saving your icon and strip style…");
    try{await Task.Run(()=>{string cfgPath=Path.Combine(targetData,"ygpt.config.json");var cfg=YGPTApp.Read(cfgPath);cfg["brandIcon"]=selectedIcon;cfg["approvalStyle"]=selectedStyle;HostCore.Save(cfgPath,cfg);YGPTApp.Shortcut(targetInstall,targetData);});}
    catch(Exception ex){Log("Note: the icon choice could not be saved ("+ex.Message+"). Cosmetic choices never block a core update — you can pick it again later via Setup → Repair.");}
@@ -206,7 +208,7 @@ public class UpdateWindow:Window{
    bool live=false;
    for(int i=0;i<25&&!live;i++){
     await Task.Delay(1000);
-    try{var h=HostCore.Read(Path.Combine(targetData,"watchdog-health.json"));live=HostCore.S(h,"ownerId")==HostCore.OwnerId(targetData)&&HostCore.S(h,"version")==HostCore.Version&&!HostCore.B(h,"stopped")&&(DateTime.UtcNow-DateTime.Parse(HostCore.S(h,"at")).ToUniversalTime()).TotalSeconds<25;}catch{}
+    try{var h=HostCore.Read(Path.Combine(targetData,"watchdog-health.json"));live=HostCore.S(h,"ownerId")==HostCore.OwnerId(targetData)&&HostCore.S(h,"version")==HostCore.Version&&HostCore.B(h,"localReady")&&!HostCore.B(h,"stopped")&&(DateTime.UtcNow-DateTime.Parse(HostCore.S(h,"at")).ToUniversalTime()).TotalSeconds<25;}catch{}
    }
    Log(live?"Update complete — now running "+HostCore.Version+". Your ChatGPT plugin, settings and keys were kept; nothing to re-add.":"Update complete — now running "+HostCore.Version+". The connection is still starting; it reconnects automatically. Your plugin, settings and keys were kept.");
    if(live){
@@ -220,6 +222,7 @@ public class UpdateWindow:Window{
   // inside a catch block, so recovery runs after it.
   if(failed!=null){
    Log("Update stopped: "+failed.Message);
+   if(!File.Exists(Path.Combine(targetData,"ygpt.config.json"))&&File.Exists(Path.Combine(targetInstall,"data","ygpt.config.json")))targetData=Path.Combine(targetInstall,"data");
    // Resume only a pause this run created (including a pause that timed out
    // before the service reported stopped); an owner's earlier pause is kept.
    if(!wasPaused&&!restarted&&File.Exists(Path.Combine(targetData,"paused"))){
