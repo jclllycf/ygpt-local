@@ -37,5 +37,41 @@
     "realChatGPTApprovalDisplayAndHumanClick": "not verified",
     "windowsSignInAndCleanWindowsAcceptance": "not verified",
     "packageSigning": "unsigned"
-  }
+  },
+  "finalFieldVerification": {
+    "version": "1.0.0-rc.18",
+    "manifestFiles": 5849,
+    "manifestMismatches": 0,
+    "finalPackageInstalled": true,
+    "oldExternalDataAbsent": true,
+    "stateInsideSelectedRoot": true,
+    "secretsConnectionAndPairingPreserved": true,
+    "fixtureHashMatches": true,
+    "stateAclAndLinksVerified": true,
+    "health": {
+      "version": "1.0.0-rc.18",
+      "phase": "connected",
+      "localReady": true,
+      "tunnelConnected": true,
+      "error": ""
+    },
+    "verifiedAt": "2026-10-23T11:40:17.086Z"
+  },
+  "releaseArtifacts": [
+    {
+      "file": "YGPTLocal-Setup-1.0.0-rc.18-win-x64.exe",
+      "bytes": 93385216,
+      "sha256": "d8f48816da529a6ce392ee48ce1e43ac846f09872e068365216da04b97acde0d"
+    },
+    {
+      "file": "YGPTLocal-Update-1.0.0-rc.18-win-x64.exe",
+      "bytes": 93385216,
+      "sha256": "f2a8fa2ca40b051d4b94fcb1aff70329758f7b0240d9f9f32973d5d08038f8c9"
+    },
+    {
+      "file": "ygpt-local-portable-1.0.0-rc.18-win-x64.zip",
+      "bytes": 92479807,
+      "sha256": "c12f823664756dba7abeb2f51aeacaa0c751b02b28a9ce702c01b49f5813cca5"
+    }
+  ]
 }
