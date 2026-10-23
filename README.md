@@ -4,6 +4,8 @@
 
 Bring files, projects and approved Windows tools to the ChatGPT account you already use, with protected snapshots and conflict-aware recovery.
 
+**Positioning:** YGPT Local is a free, open-source, lightweight local semi-automated agent for using your own Windows PC through ChatGPT conversations. In supported ChatGPT web or desktop experiences, you can ask it to work with local files, browser tasks and approved tools while you stay in control of sensitive actions. YGPT itself needs no paid membership; ChatGPT plugin access, Platform Tunnels and any third-party services have their own account, workspace and cost requirements. See [OpenAI's plugin availability guidance](https://help.openai.com/en/articles/20001256-plugins-in-chatgpt) and [custom MCP requirements](https://help.openai.com/en/articles/12584461-connecting-custom-mcp-servers-in-chatgpt).
+
 **1.0.4 is the current stable release, with English-only UI.** Download from [GitHub Releases](https://github.com/jclllycf/ygpt-local/releases/tag/v1.0.4). Source and downloads are public. See the [release notes](docs/RELEASE_1.0.4.md) for the new guided setup and its verification scope.
 
 **Free-account field result:** on October 23, 2026, the project owner reported successful real use with a ChatGPT Free account. This is a concrete user-reported feasibility milestone; account availability, workspace permissions and Platform Tunnel access still need to be checked for each setup. It is not a promise of access for every Free account.

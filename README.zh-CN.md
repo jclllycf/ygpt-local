@@ -4,6 +4,8 @@
 
 从你正在使用的 ChatGPT 账户调用自己的 Windows 文件、项目与授权工具，保留写前快照、恢复冲突保护和高风险审批。
 
+**产品定位：** YGPT Local 是免费、开源、轻量的本地半自动化 Agent，让你在支持相关插件功能的 ChatGPT 网页端或桌面端对话中，用自然语言调用自己的 Windows 文件、浏览器任务与经授权的工具；敏感操作仍由你控制。YGPT 本身不要求付费会员；ChatGPT 插件入口、Platform Tunnel 和第三方服务各有账户、工作区及费用条件，不能保证所有免费账户都具备相同能力。参见 [OpenAI 插件可用性说明](https://help.openai.com/en/articles/20001256-plugins-in-chatgpt)及[自定义 MCP 条件](https://help.openai.com/en/articles/12584461-connecting-custom-mcp-servers-in-chatgpt)。
+
 **1.0.4 是当前正式版，界面仅英文。** 安装包见 [GitHub Releases](https://github.com/jclllycf/ygpt-local/releases/tag/v1.0.4)，源码和发行包均公开。实测范围见 [正式版说明](docs/RELEASE_1.0.4_ZH.md)。另见 [English README](README.md)、[CHANGELOG](CHANGELOG.md)、[中文升级指南](docs/UPGRADE_USER_GUIDE.zh-CN.md)、[中文安装教程](docs/SETUP_GUIDE.zh-CN.md)、[验收状态](docs/VALIDATION.md)、[安全边界](docs/SECURITY.md)。
 
 **免费账户实测进展：** 2026 年 10 月 23 日，项目所有者报告已在 ChatGPT Free 账户中实际使用成功。这为产品可行性增加了用户实测证据；每个账户仍需具备相应入口、工作区权限和 Platform Tunnel 访问权限，不代表所有免费账户均保证可用。
