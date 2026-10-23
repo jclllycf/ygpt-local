@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0.2 — migration cleanup compatibility
+
+- Keep download cleanup and rollback-cache maintenance independent after migration.
+- Report old signed download scopes as review-required without rebinding consent or deleting files; a new updater registration resumes cleanup.
+- Show the retained-download explanation in the installation cleanup review window.
+
 ## 1.0.1 — verified installation housekeeping
 
 - Recognize transaction-based rollback folders, retain one verified rollback and prune surplus owned program copies only after current integrity and health checks.

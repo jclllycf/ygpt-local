@@ -5,6 +5,12 @@ public static class HousekeepingRegression {
  static string Backup(string install,string transaction,string version,int minutes){string p=Path.Combine(install,".updates",transaction,"previous");Manifest(p,install,version,"old payload "+version);Directory.SetCreationTimeUtc(p,DateTime.UtcNow.AddMinutes(minutes));return p;}
  static void Health(string install,string data,bool ready){var p=Process.GetCurrentProcess();HostCore.Save(Path.Combine(data,"watchdog-health.json"),new{ownerId=HostCore.OwnerId(data),installRoot=install,version="fixture",localReady=ready,tunnelConnected=false,pid=p.Id,birth=p.StartTime.ToUniversalTime().Ticks,at=DateTime.UtcNow.ToString("o"),stopped=false});}
  public static int Main(string[] args){string root=args[0],install=Path.Combine(root,"application"),data=Path.Combine(install,"data");Directory.CreateDirectory(data);
+  if(args[1]=="legacy-download"){
+   HostCore.SaveSecrets(data,new Dictionary<string,object>{{"verificationKey",new string('k',64)}});string file=Path.Combine(root,"old-installer.exe");File.WriteAllText(file,"preserve exact legacy download");var current=Process.GetCurrentProcess();
+   InstallCleanup.Record(data,Path.Combine(root,"old-install"),"legacy",new[]{InstallCleanup.Entry(file,"legacy","setup-download",root,true)},true,current.Id,current.StartTime.ToUniversalTime().Ticks);
+   var review=InstallCleanup.Run(data,install);Check((string)review["state"]=="review-required"&&(string)review["code"]=="INSTALLATION_SCOPE_CHANGED","Legacy scope must produce a clear review receipt");Check(File.ReadAllText(file)=="preserve exact legacy download","Old consent must not be rebound to the current scope");Check(!InstallCleanup.Due(data),"An unchanged legacy receipt must not repeatedly block maintenance");
+   InstallCleanup.Record(data,install,"current",new[]{InstallCleanup.Entry(file,"current","update-download",root,true)},true,current.Id,current.StartTime.ToUniversalTime().Ticks);Check(InstallCleanup.Due(data),"Registering a current updater must resume download cleanup");Console.WriteLine("LEGACY_DOWNLOAD_SCOPE_PASS");return 0;
+  }
   if(args[1]=="registration"){
    string missing=Path.Combine(root,"missing-data"),key="YGPTLocal-"+HostCore.OwnerId(missing).Substring(0,12),command=HostCore.Q(Path.Combine(install,"YGPTLocal.exe"))+" --uninstall --data-dir "+HostCore.Q(missing);
    Check(InstallationHousekeeping.RegistrationReason(key,"YGPT Local",install,command,install,data)!=null,"Obsolete same-install data alias should be eligible");
