@@ -32,6 +32,7 @@
   $('target').title=p.target??'';$('risk').textContent=[p.risk,p.reversible].filter(Boolean).join(' · ');
   $('scope').textContent=card.chatScope?.explanation??'Allow once is required for this action.';
   $('state').textContent=labels[card.state]??card.state;
+  $('once').textContent=p.approveLabel??'Allow once';
   const enabled=healthy&&!busy&&!!call&&card.enabled&&card.state==='awaiting_user'&&!expired&&!!card.uiToken;
   for(const id of ['once','chat','deny'])$(id).disabled=!enabled||id==='chat'&&!card.chatScope?.eligible;
   $('actions').hidden=card.state!=='awaiting_user';$('chat').hidden=!card.chatScope?.eligible;
@@ -43,7 +44,7 @@
   else if(expired&&card.state==='awaiting_user')note('This approval expired. No operation was executed.');
   else if(card.note)note(card.note);
   else if(!healthy)note('Connecting to approval controls… If buttons do not appear, open this same conversation on the web or use the Windows approval center.');
-  else if(enabled)note(card.chatScope?.eligible?'Review the exact action, then choose. A decision on another device appears here automatically.':'Choose Allow once or Deny. The same decision is shared with your other devices.');
+  else if(enabled)note(p.approveLabel?'Choose '+p.approveLabel+' or Deny. This applies only to the chat and duration shown above.':card.chatScope?.eligible?'Review the exact action, then choose. A decision on another device appears here automatically.':'Choose Allow once or Deny. The same decision is shared with your other devices.');
   else if(card.state==='succeeded')note('Completed. The original result is available.');
   else if(card.state==='denied')note('Denied. Nothing was executed.');
  }
@@ -122,7 +123,7 @@
   if(card){render();schedule(0);}
  }
  window.addEventListener('openai:set_globals',globals);globals();
- if(window.parent!==window)request('ui/initialize',{appInfo:{name:'YGPT approval',version:'1.0.6'},appCapabilities:{},protocolVersion:'2026-01-26'}).then(result=>{
+ if(window.parent!==window)request('ui/initialize',{appInfo:{name:'YGPT approval',version:'1.0.8'},appCapabilities:{},protocolVersion:'2026-01-26'}).then(result=>{
   standard=true;healthy=true;call=async(name,args)=>{try{return await request('tools/call',{name,arguments:args});}catch(error){if(error.code===-32601&&typeof window.openai?.callTool==='function')return window.openai.callTool(name,args);throw error;}};
   window.parent.postMessage({jsonrpc:'2.0',method:'ui/notifications/initialized'},'*');
   const resize=()=>{const rect=document.querySelector('main').getBoundingClientRect();window.parent.postMessage({jsonrpc:'2.0',method:'ui/notifications/size-changed',params:{width:Math.ceil(rect.width),height:Math.ceil(rect.height)}},'*');};

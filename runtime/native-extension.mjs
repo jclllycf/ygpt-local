@@ -5,15 +5,20 @@ import {createHash} from 'node:crypto';
 import {AsyncLocalStorage} from 'node:async_hooks';
 import {fileURLToPath} from 'node:url';
 import {createRc9EngineExtension} from '../engine/src/rc9-integration.mjs';
-import {config} from './config.mjs';
+import {config,INSTALL} from './config.mjs';
+import {trustedRuntimeLaunch} from './trusted-runtime.mjs';
 import {isReadOnlyInvocation} from './read-only-policy.mjs';
 import {authorize,canonical,route,within,highRiskCommand,argvRiskText,projectRoots} from './access-policy.mjs';
-import {currentOwner,currentCall} from './ownership.mjs';
+import {currentOwner,currentCall,currentAccessMode} from './ownership.mjs';
 import {diskInspect,deviceFingerprint} from './safe-actions.mjs';
 import {uiaDecision,uiaPresentation,uiaChatScope,windowIdentity} from '../engine/src/uia-consent.mjs';
 
 const allow=reason=>({decision:'allow',reason}),hold=reason=>({decision:'approve',kind:'capability',reason}),deny=reason=>({decision:'deny',reason});
 export function authorizeNative(intent){
+  const decision=authorizeNativeStandard(intent);
+  return currentAccessMode()==='full'&&decision.decision==='approve'?allow('Owner-enabled Full Access for this chat context'):decision;
+}
+function authorizeNativeStandard(intent){
   const n=intent.tool,a=intent.args??{};
   if(!/^y_(?:file_|search_|project_|process_|job_|browser_|desktop_|system_)/.test(n))return authorize(n,a);
   if(n.startsWith('y_browser_')){
@@ -24,10 +29,12 @@ export function authorizeNative(intent){
     if(['y_browser_action','y_browser_download'].includes(n))return config.blacklistDefaultAllow?allow('Owner default-allow browser interaction; engine destination blacklist and tab ownership checks still apply'):hold('Browser interaction requires an owner-enrolled workflow origin');
     return allow('YGPT browser (isolated by default, or the owner existing browser after y_browser_attach); destination blacklist applies');
   }
-  // UIA stays available; binding and every input/focus action need a human decision.
+  // Inventory, binding and focus are ordinary operations; desktop input is reviewed.
+  if(n==='y_desktop_bind'&&config.readOnlyAutoAllow)return allow('Read-only window binding; input actions have their own policy');
+  if(n==='y_desktop_action'&&a.action==='focus'&&config.blacklistDefaultAllow)return allow('Focus this chat-owned window; no click or text input');
   if(n.startsWith('y_desktop_'))return uiaDecision(n)??hold('Unclassified desktop capability: '+n);
   if(['y_system_inspect','y_process_list'].includes(n))return allow('Fixed read-only diagnostics or this chat\'s process inventory');
-  if(n==='y_project_inspect'){const t=route(a.path??'');if(t.permission==='private'||t.permission==='vault'||t.sensitive)return hold('Project inspection target is protected or credential-adjacent: a verified owner decision is required');return allow('Read-only project structure, manifest and Git inspection');}
+  if(n==='y_project_inspect'){const t=route(a.path??'');if(config.readOnlyAutoAllow)return allow('Owner policy: read-only project inspection, including protected locations');if(t.permission==='private'||t.permission==='vault'||t.sensitive)return hold('Project inspection target is protected or credential-adjacent: a verified owner decision is required');return allow('Read-only project structure, manifest and Git inspection');}
   if(['y_process_run','y_process_start','y_job_submit'].includes(n)){
     if(config.readOnlyAutoAllow&&isReadOnlyInvocation(a))return allow('Parsed read-only PowerShell invocation; no approval');
     const cwd=a.cwd??projectRoots[0];
@@ -52,7 +59,7 @@ export async function createNativeExtension({backups,ledger,protectState}){
     const a=invocation.args;
     if(canonical(spec.executable)!==canonical(a.executable)||JSON.stringify(spec.args)!==JSON.stringify(a.args??[])||canonical(spec.cwd)!==canonical(a.cwd??root))return false;
     const approved=approvedInvocation.getStore()?.tool===invocation.name;
-    if(!approved&&(!config.blacklistDefaultAllow||authorizeNative({tool:invocation.name,args:a}).decision!=='allow'))return false;
+    if(!approved&&currentAccessMode()!=='full'&&(!config.blacklistDefaultAllow||authorizeNative({tool:invocation.name,args:a}).decision!=='allow'))return false;
     const file=fs.statSync(spec.executable);
     return file.isFile();
   };
@@ -61,14 +68,14 @@ export async function createNativeExtension({backups,ledger,protectState}){
     // Only the broker enters this scope after atomically claiming an exact
     // reviewed operation. No tool argument or request metadata can create it.
     const reviewed=approvedInvocation.getStore();
-    if(reviewed&&reviewed.tool===request.tool)return allow('Exact operation claimed by the broker after app capability consent');
     const tokenNames=['y_job_logs','y_job_cancel','y_process_poll','y_process_input','y_process_cancel'];
     if(tokenNames.includes(intent.tool)){
       const a=request.args,kind=intent.tool.startsWith('y_job_')?'job':'session',id=kind==='job'?a.id:a.sessionId;
       if(!ledger.owns(kind,id,a.outputToken))return deny('Missing, foreign or stale outputToken for this task/session');
-      if(intent.tool==='y_process_input'&&highRiskCommand(a.text??''))return hold('Sensitive process stdin requires verified host review');
+      if(intent.tool==='y_process_input'&&highRiskCommand(a.text??'')&&!(reviewed&&reviewed.tool===request.tool)&&currentAccessMode()!=='full')return hold('Sensitive process stdin requires verified host review');
       return ledger.owns(kind,id,a.outputToken)?allow('Original call output capability verified'):deny('Missing, foreign or stale outputToken for this task/session');
     }
+    if(reviewed&&reviewed.tool===request.tool)return allow('Exact operation claimed by the broker after app capability consent');
     if(intent.tool==='y_browser_action'||intent.tool==='y_browser_download'){
       let url;try{url=new URL(engine.browser.page(request.args.tabId).url());}catch(e){return {...deny(e.message||'Unknown owned browser tab'),...(e.code?{code:e.code}:{})};}
       if(config.blacklistDefaultAllow){
@@ -84,7 +91,7 @@ export async function createNativeExtension({backups,ledger,protectState}){
   };
   engine=await createRc9EngineExtension({config:{mode:'rc9-integrated',root,stateDir:config.stateDir,legacyTools:false,python:config.python,pythonArgs:config.pythonArgs,ingressId:config.ingressId,
     allowedExecutables:[process.execPath,config.python,config.executables.git,path.join(process.env.SystemRoot,'System32/WindowsPowerShell/v1.0/powershell.exe'),path.join(process.env.SystemRoot,'System32/cmd.exe')].filter(Boolean),
-    browser:config.browser,authorizeExecutable,currentOwner,currentCall,agentProtectedRoots:config.agentProtectedRoots,
+    browser:config.browser,authorizeExecutable,prepareExecutable:spec=>trustedRuntimeLaunch(spec,INSTALL),currentOwner,currentCall,agentProtectedRoots:config.agentProtectedRoots,
     // Read-only physical disk/partition inventory (was y_disk_inspect).
     physicalDisks:async()=>(await diskInspect()).map(d=>({...d,fingerprint:deviceFingerprint(d)}))},authorizeOperation,backupManager:backups,operationLedger:ledger,protectState});
   const invokeWithPolicy=engine.invoke.bind(engine);
@@ -93,17 +100,16 @@ export async function createNativeExtension({backups,ledger,protectState}){
     // Read-only calls may resolve any owner-authorized local drive. Keep the
     // engine's original root/reparse restrictions for every mutating call.
     // AsyncLocalStorage prevents parallel reads from widening a writer's scope.
-    const reads=new Set(['y_file_read','y_file_read_bytes','y_file_info','y_file_list','y_search_text','y_search_files']);
+    const reads=new Set(['y_file_read','y_file_read_bytes','y_file_read_many','y_file_info','y_file_list','y_search_text','y_search_files','y_project_inspect']);
     const readScope=new AsyncLocalStorage(),resolve=engine.file.resolve.bind(engine.file),invoke=engine.invoke.bind(engine);
     engine.file.resolve=async input=>{
       if(!readScope.getStore())return resolve(input);
       const value=canonical(path.resolve(root,input));return /^[a-z]:$/i.test(value)?value+'\\':value;
     };
-    engine.invoke=(name,args)=>readScope.run(reads.has(name),()=>invoke(name,args));
+    engine.invoke=(name,args)=>readScope.run(reads.has(name)||name==='y_file_patch'&&args.dryRun===true,()=>invoke(name,args));
   }
-  // The engine only reaches bind after the broker claimed a human-approved
-  // request for this exact window identity (see binding()). No enrollment
-  // list can turn that reviewed operation into a permanent policy refusal.
+  // Binding reads an exact live window identity and grants no input permission.
+  // Actions are evaluated separately, with per-chat target ownership retained.
   const rawBind=engine.desktop.bind.bind(engine.desktop);
   engine.desktop.bind=async hwnd=>{
     const win=await engine.desktop.window(hwnd);

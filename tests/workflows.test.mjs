@@ -24,9 +24,8 @@ test('Actual isolated Edge, native UIA fixture and durable job output',async()=>
     }
     return unpack(response).result.windows.find(w=>w.pid===created.pid);
   },120000);
-  // UIA is available but never silent: bind and each action wait for a decision.
-  const pendingBind=await call('y_desktop_bind',{hwnd:window.hwnd,...ctx});assert.equal(pendingBind.code,'APPROVAL_REQUIRED');
-  const bound=await decide(c,pendingBind,'once',ctx.contextToken);assert.equal(bound.state,'succeeded',JSON.stringify(bound));target=bound.result.structuredContent.result.targetId;
+  // Binding only reads the window; each input still waits for a decision.
+  const bound=await call('y_desktop_bind',{hwnd:window.hwnd,...ctx});assert.equal(bound.ok,true,JSON.stringify(bound));target=bound.result.targetId;
   const tree=await call('y_desktop_inspect',{targetId:target,...ctx});assert.ok(tree.result.result.elements.some(e=>e.automationId==='FixtureInput'));
   const foreign=await c.call('y_desktop_inspect',{targetId:target});assert.ok(foreign.isError&&/SESSION_FOREIGN/.test(JSON.stringify(foreign)),'another chat cannot read this window');
   const setValue=await call('y_desktop_action',{targetId:target,action:'setValue',automationId:'FixtureInput',value:'YGPT_UIA_OK',...ctx});assert.equal(setValue.code,'APPROVAL_REQUIRED');

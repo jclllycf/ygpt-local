@@ -37,7 +37,7 @@ export async function createEngine(config,{authorize,backupManager,ledger:outerL
   // Integrated mode is already guarded by the RC broker's PID+birth lease.
   // A second stale timer would reject a legitimate immediate crash recovery.
   const release=config.mode==='rc9-integrated'?async()=>{}:await lockfile.lock(stateDir,{lockfilePath:path.join(stateDir,'engine-instance.lock'),stale:30000,update:5000,retries:0});
-  const file=await YFileEngine.create(root,{snapshot}),terminal=new YTerminalEngine({root,stateDir,allowedExecutables:config.allowedExecutables,authorizeExecutable:config.mode==='rc9-integrated'?config.authorizeExecutable:undefined,maxOutputBytes:2*1024*1024,currentOwner});
+  const file=await YFileEngine.create(root,{snapshot}),terminal=new YTerminalEngine({root,stateDir,allowedExecutables:config.allowedExecutables,authorizeExecutable:config.mode==='rc9-integrated'?config.authorizeExecutable:undefined,prepareExecutable:config.mode==='rc9-integrated'?config.prepareExecutable:undefined,maxOutputBytes:2*1024*1024,currentOwner});
   const search=new YSearchEngine(file),browser=new YBrowserFacade({stateDir,...config.browser,currentOwner}),desktop=new YDesktopEngine({stateDir,allowedPids:config.desktopAllowedPids??[],protectedPaths:config.agentProtectedRoots??[],currentOwner}),system=new YSystemEngine({stateDir,physicalDisks:config.physicalDisks}),jobs=new DurableJobs({terminal,stateDir,python:config.python,pythonArgs:config.pythonArgs,ingressId:config.ingressId});
   // Live service: listen for the paired browser extension from the start (see
   // YExtensionBrowser.prestart); fixtures never open the relay port.

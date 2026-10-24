@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.0.8 — fewer approvals and chat-scoped Full Access
+
+- Permit all typed reads, protected-path project inspection and dry-run patches without approval. Read-only window binding and focus are automatic; ordinary edits and small cleanup retain verified snapshots.
+- Trust only exact manifest-verified bundled runtime executables, while checking all remaining arguments. Recognize bounded read-only SSH diagnostics without treating the identity-file parameter as a secret mutation.
+- Execute shipped Windows npm/npx shims through verified Node/CLI argv in sessions and durable jobs, fixing `spawn EINVAL` without shell expansion. Changed launch dependencies fail before execution.
+- Add `y_chat_access` status, explicit owner-approved Full Access and revoke actions. Grants are owner/context scoped, expire after the displayed duration, and end when the context closes. Other chats, resource ownership and task tokens remain enforced; existing pending actions are not replayed.
+- Version the approval resource and retain legacy aliases. The dedicated English card names the chat scope, duration and activation action on phone and desktop layouts. Add English and Chinese usage/release documentation.
+
 ## 1.0.7 — reliable daily-browser profiles
 
 - Create chat ownership when selecting a paired profile, so subsequent browser opens retain the selection.

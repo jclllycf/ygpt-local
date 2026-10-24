@@ -24,6 +24,7 @@ public static class ApprovalWindowRegression {
  [STAThread] public static int Main(){
   SynchronizationContext.SetSynchronizationContext(new DispatcherSynchronizationContext());
   var queue=new List<Dictionary<string,object>>{Row("FIRST",false),Row("SECOND",true)};object submitted=null;bool fail=false;
+  var full=(Dictionary<string,object>)queue[0]["presentation"];full["approveLabel"]="Enable Full Access";full["reversible"]="Revoke with y_chat_access action=revoke";
   var w=new ApprovalWindow("FIXTURE_ONLY",payload=>{
    string kind=Convert.ToString(payload.GetType().GetProperty("kind").GetValue(payload,null));
    if(kind=="queue")return new Dictionary<string,object>{{"entries",queue.ToArray()}};
@@ -32,7 +33,8 @@ public static class ApprovalWindowRegression {
   var list=Field<ListBox>(w,"list");PumpUntil(()=>list.Items.Count==2);w.UpdateLayout();
   Check(Field<TextBox>(w,"details").Text.Contains("Exact fixture arguments"),"Review must show exact details");
   Check(Field<Button>(w,"once").IsEnabled&&!Field<Button>(w,"chat").IsEnabled,"Ineligible chat grants must remain disabled");
-  list.SelectedIndex=1;Check(Field<Button>(w,"chat").IsEnabled,"Eligible request has scoped choice");
+  Check(Convert.ToString(Field<Button>(w,"once").Content)=="Enable Full Access"&&Field<TextBox>(w,"details").Text.Contains("action=revoke"),"Full Access has explicit activation and revocation wording");
+  list.SelectedIndex=1;Check(Field<Button>(w,"chat").IsEnabled&&Convert.ToString(Field<Button>(w,"once").Content)=="Allow once","Ordinary request restores its scoped choices");
   Field<Button>(w,"deny").RaiseEvent(new RoutedEventArgs(Button.ClickEvent));PumpUntil(()=>submitted!=null&&!Field<bool>(w,"busy"));
   Check(Convert.ToString(submitted.GetType().GetProperty("id").GetValue(submitted,null))=="SECOND"&&Convert.ToString(submitted.GetType().GetProperty("requestDigest").GetValue(submitted,null))=="digest-SECOND","Choice must bind selected request and digest");
   Check(Field<TextBlock>(w,"state").Text.Contains("Decision saved"),"Decision needs explicit feedback");

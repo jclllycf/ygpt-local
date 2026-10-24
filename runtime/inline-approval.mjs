@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {config,RUNTIME,INSTALL} from './config.mjs';
 // New resource URI forces hosts to fetch the revised CSP and bridge bundle.
-export const BAR_URI='ui://ygpt/approval/strip-v6-cross-device.html';
+export const BAR_URI='ui://ygpt/approval/strip-v7-chat-access.html';
 // The prior ChatGPT tool catalog can retain this URI across conversations.
 // Serve the NEW strip at this legacy address rather than the retired large card.
 export const LEGACY_BAR_URI='ui://ygpt/approval/card-v1.html';
@@ -15,7 +15,7 @@ const knownResources=[BAR_URI,LEGACY_BAR_URI,INSPECTION_URI,'ui://ygpt/approval/
 export const approvalGuidance='Review the approval card, then pause this response so mobile clients can mount it. Do not repeatedly call y_wait_approval while awaiting a user decision. The card resumes this conversation after a decision. If no buttons appear, open this same conversation in ChatGPT on the web or use the Windows approval center. No text reply grants permission; never repeat the original action.';
 export function approvalResourceUris(){
  const modern=config.rc10Candidate?knownResources:!config.rc9Candidate&&uiEnabled()?(barEnabled()?[BAR_URI,LEGACY_BAR_URI]:[BAR_URI]):[];
- return [...new Set(modern)];
+ return [...new Set([...modern,...(modern.length?['ui://ygpt/approval/strip-v6-cross-device.html']:[])])];
 }
 export const approvalCenterTool={
  name:'y_approval_center',

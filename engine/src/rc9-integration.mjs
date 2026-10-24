@@ -13,7 +13,7 @@ export function rc9Intents({tool,args:a,root,mutating}) {
   if(['y_file_write','y_file_edit','y_file_mkdir'].includes(n))return [{tool:n==='y_file_mkdir'?'create_directory':n==='y_file_edit'?'edit_block':'write_file',args:n==='y_file_edit'?{file_path:full(a.path)}:{path:full(a.path)}}];
   if(['y_file_read','y_file_read_bytes','y_file_info','y_file_list'].includes(n))return [read(a.path)];
   if(n==='y_file_read_many')return [{tool:'read_multiple_files',args:{paths:a.paths.map(full)}}];
-  if(n==='y_file_patch')return [{tool:'edit_block',args:{file_path:full(a.path)}}];
+  if(n==='y_file_patch')return a.dryRun===true?[read(a.path)]:[{tool:'edit_block',args:{file_path:full(a.path)}}];
   if(n==='y_project_inspect')return [{tool:'y_project_inspect',args:{path:full(a.path??'.')}}];
   if(['y_search_text','y_search_files'].includes(n))return [{tool:'start_search',args:{path:full(a.directory),pattern:a.pattern}}];
   // New browser/desktop/process capabilities must be explicitly recognized by

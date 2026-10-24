@@ -1,4 +1,16 @@
-# Current validation: 1.0.6
+# Current validation: 1.0.8
+
+Release 1.0.8 reduces unnecessary approvals and adds owner-approved, chat-scoped Full Access. See the [release notes](RELEASE_1.0.8.md), [permission guide](CHAT_ACCESS.md) and [machine-readable verification](../evidence/access-1.0.8-verification.json).
+
+The final full local run covered 143 tests: 137 passed, five environment-specific checks skipped and one desktop UIA fixture initially failed after reading an extra character. That fixture and its companion approval test both passed on an isolated rerun without changing assertions or production UIA code. The resulting unique coverage is 138 passed and five skipped; the initial UIA discrepancy is recorded rather than hidden, and its cause is unconfirmed. An earlier complete run passed all 137 runnable checks before the additional npm/npx launch test.
+
+Skips cover three POSIX-helper UIA fixtures, a `python3` alias fixture and a repo-local Roslyn compilation fixture. Actual native Windows state checks, compiled desktop UIA and the ordinary Windows build are separate checks. Focused runs also passed the access/card bridge, installer/updater/native and Windows approval-center checks. The npm/npx regression verifies literal arguments in a real process, the validated argv passed to durable jobs and pre-execution refusal after CLI tampering.
+
+Coverage includes exact approval/duration/context binding, restart/expiry/revoke behavior, no pending-request replay, other-chat resource refusal, task output-token validation even in Full Access, manifest-hash runtime trust, protected reads/dry-run patches, snapshot-backed changes and small cleanup. Cards were checked at phone and desktop sizes with both standard and compatibility bridges. Test card decisions are isolated fixtures, not new trusted human-click attestation. Physical Android and a clean Windows VM were not rerun.
+
+Package integrity, private-data exclusion and installed-runtime readiness are recorded separately in the release verification. Production maintenance waits for live requests and approvals to clear. No test enables Full Access in a live user chat or decides its pending operation.
+
+## Previous 1.0.6 approval compatibility validation
 
 The current release is 1.0.6. See the [release notes](RELEASE_1.0.6.md) and [machine-readable verification](../evidence/mobile-1.0.6-verification.json). It changes pending approvals to render and yield, handles delayed component metadata, refreshes cross-device state, deduplicates continuation messages and provides a manual Windows-owner approval center. The versioned resource keeps old URI aliases and restrictive CSP.
 

@@ -41,9 +41,11 @@ public sealed class ApprovalWindow:Window {
  void Configure(Button b,string label,string id,Action action){b.Content=label;SetupWindow.StyleButton(b,id=="review-allow-once");AutomationProperties.SetAutomationId(b,id);b.Click+=(s,e)=>action();}
  Dictionary<string,object> Current(){return list.SelectedIndex>=0&&list.SelectedIndex<entries.Count?entries[list.SelectedIndex]:null;}
  static string StateLabel(string value){switch(value){case "awaiting_user":return "Awaiting your decision";case "approved":return "Approved";case "running":return "Running";case "unknown":return "Check the existing result";default:return value;}}
- void ShowSelection(){var row=Current();if(row==null){details.Text="Choose a pending request. Completed requests disappear from this queue; their original results stay in ChatGPT.";once.IsEnabled=chat.IsEnabled=deny.IsEnabled=false;return;}
+ void ShowSelection(){var row=Current();if(row==null){details.Text="Choose a pending request. Completed requests disappear from this queue; their original results stay in ChatGPT.";once.Content="Allow once";once.IsEnabled=chat.IsEnabled=deny.IsEnabled=false;return;}
   selectedId=HostCore.S(row,"id");var p=row.ContainsKey("presentation")?row["presentation"] as Dictionary<string,object>:null;
   details.Text=p==null?"Review unavailable":HostCore.S(p,"title")+"\n\nTarget\n"+HostCore.S(p,"target")+"\n\nImpact\n"+HostCore.S(p,"impact")+"\n\nExact details\n"+HostCore.S(p,"technical")+"\n\nRequest\n"+selectedId+"\n\nExpires\n"+HostCore.S(row,"expiresAt");
+  once.Content=p!=null&&HostCore.S(p,"approveLabel")!=""?HostCore.S(p,"approveLabel"):"Allow once";
+  if(p!=null&&HostCore.S(p,"reversible")!="")details.Text+="\n\nRecovery and revocation\n"+HostCore.S(p,"reversible");
   bool enabled=!busy&&HostCore.S(row,"state")=="awaiting_user"&&HostCore.S(row,"nonce")!="";
   once.IsEnabled=deny.IsEnabled=enabled;var scope=row.ContainsKey("chatScope")?row["chatScope"] as Dictionary<string,object>:null;chat.IsEnabled=enabled&&scope!=null&&HostCore.B(scope,"eligible");
  }

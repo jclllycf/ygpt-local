@@ -5,6 +5,7 @@
 import {AsyncLocalStorage} from 'node:async_hooks';
 export const callScope=new AsyncLocalStorage();
 export const currentOwner=()=>callScope.getStore()?.context?.hash??null;
+export const currentAccessMode=()=>{const mode=callScope.getStore()?.accessMode;return typeof mode==='function'?mode():mode??'standard';};
 // The broker's call record for this tool call; the engine reuses it.
 export const currentCall=()=>callScope.getStore()?.callId??null;
 const pick=(kind,id)=>({kind,id:id===undefined||id===null?'':String(id)});
@@ -12,6 +13,7 @@ const pick=(kind,id)=>({kind,id:id===undefined||id===null?'':String(id)});
 // kinds (browser, desktop, session) are enforced by the engines themselves;
 // durable jobs are enforced by the broker ledger.
 export function resourceIntent(name,a={}){
+ if(name==='y_chat_access')return a.action==='request_full'?{creates:'chat-access'}:{lists:'any'};
  // Selecting a daily profile is already owned state, before any tab opens.
  // Mint the chat context here so the next open uses that same selection.
  if(name==='y_browser_open'||name==='y_browser_attach')return {creates:'browser'};

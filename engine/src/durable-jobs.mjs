@@ -17,7 +17,7 @@ export class DurableJobs {
       child.once('close',code=>{clearTimeout(timer);try{const got=JSON.parse(out);if(code||got.error)throw new EngineError('JOB_FAILED',got.error??err);resolve(got);}catch(e){reject(e);}});child.stdin.end(JSON.stringify(request));
     });
   }
-  async submit({id,executable,args=[],cwd,timeoutMs=21600000}){const spec=await this.terminal.validate({executable,args,cwd,timeoutMs});return this.call({action:'submit',id,argv:[executable,...args],cwd:spec.cwd,timeoutSeconds:Math.ceil(timeoutMs/1000)});}
+  async submit({id,executable,args=[],cwd,timeoutMs=21600000}){const spec=await this.terminal.validate({executable,args,cwd,timeoutMs});return this.call({action:'submit',id,argv:[spec.executable,...spec.args],cwd:spec.cwd,timeoutSeconds:Math.ceil(spec.timeoutMs/1000)});}
   status(id){return this.call({action:'status',id});}
   logs(id){return this.call({action:'tail',id});}
   cancel(id){return this.call({action:'cancel',id});}

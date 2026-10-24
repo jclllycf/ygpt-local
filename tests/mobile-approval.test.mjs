@@ -9,6 +9,7 @@ import {fixture,unpack} from './helpers.mjs';
 import {BAR_URI,barHtmlForTest} from '../runtime/inline-approval.mjs';
 import {DurableLedger} from '../runtime/durable.mjs';
 import {createLocalReview} from '../runtime/local-review.mjs';
+import {chatAccessPresentation} from '../runtime/chat-access.mjs';
 
 test('Pending approval yields immediately for mobile mounting; old URIs remain valid and decisions stay capability-protected',async()=>{
  const f=fixture(),c=await f.client().start();
@@ -127,4 +128,24 @@ test('Unsupported standard methods use compatibility once; an uncertain decision
   await page.waitForFunction(()=>document.querySelector('iframe').contentDocument.querySelector('main').dataset.delivery==='sent');
   assert.equal(decisions,1);assert.equal(messages,1);assert.equal(await frame.getByRole('button',{name:'Deny',exact:true}).isVisible(),false);
  }finally{await browser?.close();await new Promise(r=>server.close(r));}
+});
+
+test('Full Access card names the chat scope, duration and explicit action on phone and desktop',async()=>{
+ const html=barHtmlForTest(),card={...bar(),presentation:chatAccessPresentation({durationMinutes:120}),chatScope:{eligible:false,explanation:'Only this chat, for the displayed duration.'}};
+ let browser;
+ try{
+  browser=await chromium.launch({channel:'msedge',headless:true});
+  for(const viewport of [{width:390,height:844},{width:1100,height:760}]){
+   const page=await browser.newPage({viewport});
+   await page.addInitScript(value=>{window.openai={toolResponseMetadata:{yBar:value},callTool:async()=>({structuredContent:{state:'awaiting_user'}})};},card);
+   await page.route('https://ygpt-fixture.invalid/',route=>route.fulfill({body:html,contentType:'text/html'}));await page.goto('https://ygpt-fixture.invalid/');
+   const button=page.getByRole('button',{name:'Enable Full Access',exact:true});await button.waitFor();assert.equal(await button.isEnabled(),true);
+   assert.equal(await page.getByRole('button',{name:'Always allow in this chat',exact:true}).isVisible(),false);
+   assert.match(await page.locator('#target').textContent(),/This chat only.*120 minutes/);
+   await page.locator('details').evaluateAll(elements=>elements.forEach(e=>e.open=true));
+   assert.match(await page.locator('#impact').textContent(),/Other chats keep/);assert.match(await page.locator('#risk').textContent(),/action=revoke/);
+   assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
+   fs.mkdirSync('build',{recursive:true});await page.screenshot({path:'build/chat-access-'+viewport.width+'.png',fullPage:true});await page.close();
+  }
+ }finally{await browser?.close();}
 });

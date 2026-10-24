@@ -31,7 +31,8 @@ import {sqliteRead} from './sqlite-read.mjs';
 import {retiredTool} from './retired-tools.mjs';
 import {firstUseRecorder} from '../service/first-use.mjs';
 import {startOwnerControl} from './owner-control.mjs';
-import {callScope,resourceIntent,ownershipViolation,createdId} from './ownership.mjs';
+import {callScope,resourceIntent,ownershipViolation,createdId,currentAccessMode} from './ownership.mjs';
+import {chatAccessTool,chatAccessGate,chatAccessPresentation,chatAccessStatus} from './chat-access.mjs';
 const wireContext=new AsyncLocalStorage();
 let activeOwnerRequests=0,ownerDraining=false;
 const recordFirstUse=firstUseRecorder({data:process.env.YGPT_SETUP_DATA_DIR,key:process.env.YGPT_FIRST_USE_KEY,transport:process.env.YGPT_TRANSPORT_SOURCE,clientName:()=>init?.clientInfo?.name??''});
@@ -46,9 +47,9 @@ const additions=[
  ['y_ping','Health of this YGPT Local bridge: version, engine and approval readiness, and the tool catalog by group. Read-only; no monthly local quota.',obj()],
  ['y_pending_approvals','List THIS chat\'s pending approval request IDs and states (other chats are only counted); never grants approval.',obj()],
  ['y_wait_approval','Retrieve an approved operation result. If still awaiting a user decision, returns immediately: display the card then pause so mobile UI can mount. Never repeatedly poll a pending approval or replay an action.',obj({requestId:str,resultToken:str,waitMs:{type:'integer',minimum:100,maximum:25000}},['requestId','resultToken'])],
- ['y_policy','Project roots, protections, the active permission mode (autonomous, balanced or secure) and what needs a human. Read-only: the mode is changed by the owner in Windows, never by a tool call.',obj()],
+ ['y_policy','Read project roots, protections, default permission rules and this chat access mode. Request or revoke owner-approved Full Access with y_chat_access; global settings are unchanged.',obj()],
  ['y_dev_task','Run predefined git, Node, npm or Python project tasks without a shell. Ordinary project tasks run by default; protected working directories require a human decision. Can run project scripts; returns durable job ID and output token.',obj({cwd:str,task:{type:'string',enum:developerTasks},timeoutSeconds:{type:'integer',minimum:1,maximum:1800}},['cwd','task'])],
- ['y_close_context','Revoke this chat-held context: its narrow grants end, its browser context closes and its UIA bindings are released. Running processes and jobs keep running but can no longer be controlled from this chat; cancel them first if needed.',obj({contextToken:str},['contextToken'])],
+ ['y_close_context','Revoke this chat-held context: Full Access and narrow grants end, its browser context closes and its UIA bindings are released. Running processes and jobs keep running but can no longer be controlled from this chat; cancel them first if needed.',obj({contextToken:str},['contextToken'])],
  ['y_download_file','Download an HTTPS file with bounded size and optional SHA-256 verification. Protected destinations require a human decision. Never executes downloaded code. Returns a durable job ID and scoped output token; follow progress with y_job_status.',obj({url:str,destination:str,sha256:{type:'string',pattern:'^[a-fA-F0-9]{64}$'},maxBytes:{type:'integer',minimum:1,maximum:10737418240}},['url','destination'])],
  ['y_verify_checksum','Read an ordinary project file (any size) and compute/compare SHA-256 without modifying it.',obj({path:str,sha256:{type:'string',pattern:'^[a-fA-F0-9]{64}$'}},['path'])],
  ['y_call_status','Get durable operation/call state by ID. A pending ChatGPT generation is not kept open.',obj({id},['id'])],
@@ -56,7 +57,7 @@ const additions=[
  ['y_recent_calls','Recent call IDs and states with tool name, time, a short chat label and transport; no arguments, results or tokens.',obj({limit:integer})],
  ['y_usage_report','Usage statistics for this instance over a bounded window (1 hour to 30 days, default 7 days): totals by state, per-tool counts, error codes, latency percentiles and per-chat/transport counts. Chat labels are server-issued; host type is never guessed. No arguments, results or secrets are included.',obj({windowHours:{type:'integer',minimum:1,maximum:720}})],
  ['y_resource_owner','Read-only ownership view: the resources (jobs, browser tabs, process sessions, UIA bindings) that belong to THIS chat, and how many belong to other chats. Listing never grants control over any resource.',obj()],
- ['y_file_trash','Move 1 to 20 files or folders to the Windows Recycle Bin. A single ordinary file is deleted by default: a verified protected snapshot is taken first (its snapshotId restores it with y_backup_restore) and the Recycle Bin keeps its own copy; if the snapshot fails nothing is deleted. Batch deletes, directories, project roots, system paths, YGPT runtime/state, the vault and files too large for a snapshot (over 32 MB) require a human decision first. Folders are snapshotted file by file up to 2,000 entries and 128 MB in total; the result lists anything that only the Recycle Bin holds.',obj({paths:{type:'array',minItems:1,maxItems:20,items:str}},['paths'])],
+ ['y_file_trash','Move 1 to 20 files or folders to the Windows Recycle Bin. Ordinary single files up to 32 MiB, or small cleanups up to 64 entries and 16 MiB, run automatically with a verified protected snapshot first. If that snapshot fails nothing is deleted. Major deletes, project roots, sensitive or system paths and YGPT state require review in Standard mode. Full Access may authorize those changes for this chat. Folders are snapshotted up to 2,000 entries and 128 MiB; the result lists any Recycle-Bin-only coverage.',obj({paths:{type:'array',minItems:1,maxItems:20,items:str}},['paths'])],
  ,['y_backup_list','List protected pre-write snapshots; contents and credentials are not included.',obj({limit:integer})]
  ,['y_backup_diff','Get path/hash differences and Git checkpoint status for a snapshot.',obj({id},['id'])]
  ,['y_backup_restore','Conflict-checked restore of a completed file snapshot; creates its own undo snapshot.',obj({id},['id'])]
@@ -162,7 +163,7 @@ const emit=o=>{o=withFreshContext(o);if(o.result)recordFirstUse(wireContext.getS
 const failure=(id,message)=>emit({jsonrpc:'2.0',id,error:{code:-32001,message}});
 const response=(id,value,isError=false)=>emit({jsonrpc:'2.0',id,result:{content:[{type:'text',text:typeof value==='string'?value:JSON.stringify(value)}],isError}});
 const fixtureTool={name:'y_desktop_fixture',title:'YGPT Local · Desktop fixture',description:'Launch the owner-enrolled harmless UIA test fixture window; no disk or unrelated application effects.',inputSchema:obj(),annotations:{readOnlyHint:false,destructiveHint:false}};
-const catalog=()=>[...(nativeExtension?.tools()??[]),...(config.rc10Candidate?[fixtureTool]:[]),...additions.filter(t=>!(noLocalReview&&!config.chatAppConsent&&t.name==='y_pending_approvals')&&(config.rc9Candidate||!t.name.startsWith('y_backup_'))),...((!config.rc9Candidate||config.chatAppConsent)&&uiEnabled()?[previewTool]:[]),...((!config.rc9Candidate||config.chatAppConsent)&&barEnabled()?barTools:[]),...(config.rc10Candidate?[approvalCenterTool]:[])];
+const catalog=()=>[chatAccessTool,...(nativeExtension?.tools()??[]),...(config.rc10Candidate?[fixtureTool]:[]),...additions.filter(t=>!(noLocalReview&&!config.chatAppConsent&&t.name==='y_pending_approvals')&&(config.rc9Candidate||!t.name.startsWith('y_backup_'))),...((!config.rc9Candidate||config.chatAppConsent)&&uiEnabled()?[previewTool]:[]),...((!config.rc9Candidate||config.chatAppConsent)&&barEnabled()?barTools:[]),...(config.rc10Candidate?[approvalCenterTool]:[])];
 const tools=()=>catalog().map(t=>({...t,...(config.chatAppConsent&&t._meta?.ui?.resourceUri?{_meta:{...t._meta,ui:{...t._meta.ui,resourceUri:INSPECTION_URI},'openai/outputTemplate':INSPECTION_URI}}:{}),title:t.title??('YGPT Local · '+t.name),inputSchema:{...t.inputSchema,properties:{...t.inputSchema.properties,contextToken:{type:'string',description:'Private context token retained in THIS chat; never copy to another chat.'}}}}));
 const appOnly=t=>t._meta?.ui?.visibility?.includes('app');
 const groups=[['file','y_file_'],['search','y_search_'],['project','y_project_'],['process','y_process_'],['job','y_job_'],['browser','y_browser_'],['desktop','y_desktop_'],['backup','y_backup_'],['approval',/^y_(?:show_approval|approval_center|wait_approval|pending_approvals|bar_)/],['status',/^y_(?:ping|policy|recent_calls|usage_report|resource_owner|call_|system_)/]];
@@ -211,6 +212,12 @@ async function dispatch(name,args,operationId,reviewed=false){
   return dispatchScoped(name,args,operationId,false);
 }
 async function dispatchScoped(name,args,operationId,reviewed=false){
+  if(name==='y_chat_access'){
+    if(args.action!=='request_full'||!reviewed)throw Object.assign(Error('Full Access requires its dedicated owner approval'),{code:'ACCESS_NOT_APPROVED',effectStarted:false});
+    const contextHash=callScope.getStore()?.context?.hash;
+    ledger.enableFullAccess(contextHash,operationId,args.durationMinutes??120);
+    const result=chatAccessStatus(ledger,contextHash);return {structuredContent:result,content:[{type:'text',text:JSON.stringify(result)}]};
+  }
   if(name==='y_sqlite_read'){canonical(args.path);const value=sqliteRead(args);return {content:[{type:'text',text:JSON.stringify(value)}],structuredContent:value};}
   if(name==='y_desktop_fixture'&&nativeExtension){const result=await nativeExtension.launchFixture();return {content:[{type:'text',text:JSON.stringify(result)}],structuredContent:result};}
   if(nativeExtension?.tools().some(t=>t.name===name)){
@@ -337,7 +344,7 @@ async function execute(id,name,args){
   // An approved operation always runs as the chat context that requested it,
   // never as the context of the call that delivered the human decision.
   const requested=ledger.get(id);
-  return callScope.run({context:requested?.contextHash?{hash:requested.contextHash}:null,transport:'approval-continuation',delivered:true},()=>executeApproved(id,name,args));
+  return callScope.run({context:requested?.contextHash?{hash:requested.contextHash}:null,accessMode:()=>requested?.contextHash&&ledger.fullAccess(requested.contextHash)?'full':'standard',transport:'approval-continuation',delivered:true},()=>executeApproved(id,name,args));
 }
 async function executeApproved(id,name,args){
   const access=nativeExtension?.tools().some(t=>t.name===name)?await nativeExtension.authorize(name,args):authorize(name,args);if(access.decision==='deny')throw Error('Policy changed; operation not executed');
@@ -353,15 +360,17 @@ async function executeApproved(id,name,args){
   }catch(e){const beforeEffect=e.effectStarted===false,state=beforeEffect?'failed':'unknown';ledger.finish(id,state,null,e.message,name==='y_download_file'?id:null);ledger.callFinish(callId,state);return {isError:true,structuredContent:{state,executed:beforeEffect?false:null,code:e.code??'EXECUTION_UNCERTAIN'},content:[{type:'text',text:(beforeEffect?'NOT_EXECUTED: ':'UNKNOWN: ')+e.message+'; inspect status/effects before retrying.'}]};}
 }
 // Conversation-grant scope of a reviewed call. UIA uses its own narrow rule
-// (same window identity, same action type, ten minutes); bind is Allow once.
-function grantScopeOf(name,args){return nativeExtension?.chatScope(name,args)??(config.chatAppConsent?reviewScope(name,args):chatScope(name,args));}
+// (same window identity, same action type, ten minutes).
+function grantScopeOf(name,args){return name==='y_chat_access'?{eligible:false,key:null,explanation:'Enable Full Access explicitly for this chat and duration. This request cannot create a reusable approval for later activations.'}:nativeExtension?.chatScope(name,args)??(config.chatAppConsent?reviewScope(name,args):chatScope(name,args));}
 // Server instructions: one canonical y_ catalog, per-chat context, approvals.
 const instructions=['For authorized local Windows file, directory, edit, search, project or build requests, call YGPT Local typed tools first; never claim completion without their results. For general knowledge do not probe the PC.',
  'Read with y_file_read / y_file_read_many / y_search_text / y_project_inspect / y_sqlite_read (typed reads are automatic). Change files with y_file_edit or y_file_patch using the expectedSha256 you read, then read back; STALE_PREIMAGE means someone else changed the file: re-read, never overwrite blindly. Remove files only with y_file_trash.',
  'Use y_process_run/start for short commands and y_job_submit for long work (pass a fresh UUID as id; resubmitting the same id never runs it twice).',
+ 'Standard mode: typed reads, window inventory/binding/inspection, ordinary file changes, small snapshotted cleanups and recognized read-only shell diagnostics run automatically. Sensitive file changes, major deletions, privileged/system changes and desktop input require review. Exact manifest-verified bundled runtimes are trusted as executable paths, but their arguments are still checked.',
+ 'Full Access for development: y_chat_access action=status checks THIS chat; action=request_full asks the owner to enable it on a dedicated card (durationMinutes defaults to 120, maximum 720). End the response for that click. Only a confirmed card decision enables it. Retain the returned contextToken on all calls, including status and revoke. While active, this chat can perform all YGPT actions with current Windows permissions without further policy approvals. Other chats, resource ownership, path integrity and task output tokens remain unchanged. Never invent a fullAccess flag or use another chat context. action=revoke or y_close_context ends the grant; enabling it never executes existing pending requests.',
  'Chat context: the first call that creates a tab, UIA binding, process or job returns ygptContext.contextToken. Include that contextToken on EVERY later YGPT call in THIS chat; it is private to this chat and never belongs in another chat or a summary. Other chats\' tabs, windows, processes and jobs answer SESSION_FOREIGN. Permission model: owner blacklist — everything is allowed by default; operations with a destructive, privileged, system or credential-adjacent signal return APPROVAL_REQUIRED for a human decision instead of a refusal. There are no hard-denied targets: ChatGPT Desktop Agent windows, processes and folders are ordinary targets under the same rules.',
  'Browser tools have two modes: the isolated browser (default, a fresh private browser) and the owner\'s daily Chrome/Edge taken over through the paired YGPT browser extension (y_browser_attach, then open with target existing). In the daily browser, work only inside the YGPT tab group and never disturb the owner\'s own tabs. When several browsers/profiles are paired, attach returns candidates — ask the owner which account to use. When the choice matters, ask the owner which browser to use; if they do not answer, use the isolated browser. The isolated browser launches Chrome by default. An isolated open is a one-shot read: its browser is closed and temporary profile removed before the result returns. Only for an explicit multi-step task set keepAlive=true, preserve the returned contextToken, and close every tab in a finally path. Idle leases expire after 30 seconds. Daily-browser profiles are selected per chat and different profiles can run concurrently.',
- 'Desktop UIA (y_desktop_*) and protected actions return APPROVAL_REQUIRED: show y_show_approval with the original requestId, resultToken and contextToken, then end this response with a brief request to review the card. Do not call y_wait_approval or keep polling before the user decides: some mobile clients mount components only after the response ends. The card sends a follow-up after the user chooses. Only the user decides; never call y_bar_* from the model, accept a text message as approval, or replay the original action. After a decision retrieve y_call_status / y_call_result.',
+ 'When an action returns APPROVAL_REQUIRED, show y_show_approval with the original requestId, resultToken and contextToken, then end this response with a brief request to review the card. Do not call y_wait_approval or keep polling before the user decides: some mobile clients mount components only after the response ends. The card sends a follow-up after the user chooses. Only the user decides; never call y_bar_* from the model, accept a text message as approval, or replay the original action. After a decision retrieve y_call_status / y_call_result.',
  'RESULT_UNKNOWN or state unknown: query y_call_status, y_job_status or y_resource_owner; do not repeat the operation. Preserve resultToken/outputToken for retrieval and never show tokens in summaries.'].join(' ');
 async function handle(msg){
   if(msg.jsonrpc!=='2.0')throw Error('JSON-RPC 2.0 required');
@@ -399,7 +408,7 @@ async function handle(msg){
   const intent=resourceIntent(name,args);let context=null;
   if(contextToken){try{context=ledger.context(contextToken);}catch(e){if(intent.creates||intent.uses||intent.lists)return response(id,{state:'rejected',executed:false,code:'CONTEXT_EXPIRED',message:e.message},true);}}
   if(!context&&intent.creates)context=ledger.context();
-  return callScope.run({context,transport:transportOf(msg),delivered:false},()=>callTool({id,msg,host,nativeCall,name,args,contextToken,rawArgs,intent}));
+  return callScope.run({context,accessMode:()=>context?.hash&&ledger.fullAccess(context.hash)?'full':'standard',transport:transportOf(msg),delivered:false},()=>callTool({id,msg,host,nativeCall,name,args,contextToken,rawArgs,intent}));
 }
 async function callTool({id,msg,host,nativeCall,name,args,contextToken,rawArgs,intent}){
   const descriptor=tools().find(t=>t.name===name);
@@ -408,6 +417,11 @@ async function callTool({id,msg,host,nativeCall,name,args,contextToken,rawArgs,i
   if(!ajv.validate(descriptor.inputSchema,rawArgs))throw Error('Invalid tool arguments: '+(ajv.errors?.[0]?.message??name));
   const foreign=ownershipViolation(ledger,name,intent,callScope.getStore().context?.hash??null);
   if(foreign)return response(id,foreign,true);
+  if(name==='y_chat_access'&&(args.action??'status')!=='request_full'){
+    const contextHash=callScope.getStore()?.context?.hash;
+    const revoked=args.action==='revoke'&&contextHash?ledger.revokeFullAccess(contextHash):false;
+    return response(id,{...chatAccessStatus(ledger,contextHash),...(args.action==='revoke'?{revoked}: {})});
+  }
   const resumed=await resumeNativeConsent(msg,name,args,host,ledger,execute);
   if(resumed)return emit({jsonrpc:'2.0',id,result:resumed});
   if(config.rc10Candidate&&name==='y_approval_center')return emit({jsonrpc:'2.0',id,result:config.chatAppConsent?chatApprovalResult(ledger,{...args,contextToken}):approvalCenterResult(ledger.get(args.requestId),args.requestId)});
@@ -436,7 +450,9 @@ async function callTool({id,msg,host,nativeCall,name,args,contextToken,rawArgs,i
     hostApprovalClickVerified:false,approvalSecurity:config.chatAppConsent?'app-only tools + hidden metadata capability + exact request + TTL; physical human identity is not attested':'disabled',
     catalog:catalogSummary(),pid:process.pid,tunnelReadiness:config.deployment==='production'?'existing-production-ingress; probe watchdog for tunnel health':'isolated; no tunnel created',quota:'none',singleOwner:true,aclProtected:acl.protected,localPopups:false});
   if(name==='y_policy')return response(id,{projectRoots,systemRoots,...profileSummary(currentPermissionMode()),defaultAllow:config.blacklistDefaultAllow,readOnlyAutoAllow:config.readOnlyAutoAllow,autoDevTasks:config.autoDevTasks,trustedDeveloperRoots:config.trustedDeveloperRoots,
-    humanApproval:['Desktop UIA bind and every UIA action','batch, directory or system-path deletes (y_file_trash)','destructive, privileged or system-changing commands','protected, credential-adjacent or system file changes','developer tasks targeting protected directories','writes into YGPT runtime/state or the vault'],hardDenied:[],hardDeniedNote:'Owner blacklist model (rc.13): there are no hard-denied targets. ChatGPT Desktop Agent resources and YGPT\'s own state are gated by human approval when a risk signal matches, never refused outright. Per-chat resource ownership (SESSION_FOREIGN) is not a policy denial: a chat can only operate resources it created.',
+    systemChangesNeedHuman:currentAccessMode()!=='full',
+    chatAccess:chatAccessStatus(ledger,callScope.getStore()?.context?.hash),automatic:['All typed file, directory, search, project and database reads','Read-only window binding and focus','Ordinary file changes with protected snapshots','Small ordinary cleanup: up to 64 entries / 16 MiB, or a single file up to 32 MiB','Recognized read-only PowerShell and SSH diagnostics'],
+    humanApproval:['Enable or renew Full Access for this chat','In Standard mode: desktop input actions','In Standard mode: major, sensitive or system-path deletes','In Standard mode: destructive, privileged or system-changing commands','In Standard mode: protected, credential-adjacent or system file changes'],hardDenied:[],hardDeniedNote:'Policy approvals can be replaced by owner-enabled Full Access for this chat. Invalid paths, schema and tokens are still rejected. Per-chat resource ownership (SESSION_FOREIGN) remains enforced: a chat can only operate resources it created.',
     desktopRequireEnrollment:false,scope:'private single-owner; resources belong to the chat context that created them',noOsSandbox:true});
   if(name==='y_pending_approvals'){const mine=callScope.getStore().context?.hash??null,waiting=ledger.pending().filter(o=>o.state==='awaiting_user');
     return response(id,{operations:waiting.filter(o=>mine&&o.contextHash===mine).map(r=>({id:r.id,state:r.state,title:r.presentation?.title,expiresAt:r.expiresAt})),otherChats:waiting.filter(o=>!mine||o.contextHash!==mine).length});}
@@ -448,7 +464,7 @@ async function callTool({id,msg,host,nativeCall,name,args,contextToken,rawArgs,i
     if(!ok)return response(id,'Result token missing or not scoped to this request',true);
     return response(id,op?{state:op.state,result:ledger.result(args.id)}:ledger.call(args.id,true));
   }
-  let access=nativeCall?(name==='y_desktop_fixture'?{decision:'allow'}:await nativeExtension.authorize(name,args)):authorize(name,args);
+  let access=name==='y_chat_access'?chatAccessGate:nativeCall?(name==='y_desktop_fixture'?{decision:'allow'}:await nativeExtension.authorize(name,args)):authorize(name,args);
   if(config.blacklistDefaultAllow&&name==='y_backup_restore'){
     await ensureBackups();
     for(const file of backups.manifest(args.id).files){
@@ -457,13 +473,14 @@ async function callTool({id,msg,host,nativeCall,name,args,contextToken,rawArgs,i
       if(targetAccess.decision==='approve')access=targetAccess;
     }
   }
+  if(name!=='y_chat_access'&&currentAccessMode()==='full'&&access.decision!=='deny')access={...access,decision:'allow',fullAccess:true};
   if(access.decision==='deny')return response(id,{state:'rejected',executed:false,code:access.code??'POLICY_BLOCKED',message:'YGPT POLICY BLOCKED: '+access.reason},true);
   if(access.decision==='approve'&&config.chatAppConsent){
     const context=chatContext(),grantScope=grantScopeOf(name,args);
     if(grantScope.eligible&&ledger.hasChatGrant(context.hash,grantScope.key))access={...access,decision:'allow',chatGrant:true};
     else{
       const binding=nativeCall?await nativeExtension.binding(name,args):null;
-      const presentation=(nativeCall&&await nativeExtension.presentation(name,args))||describeEnglish(name,args);
+      const presentation=name==='y_chat_access'?chatAccessPresentation(args):(nativeCall&&await nativeExtension.presentation(name,args))||describeEnglish(name,args);
       const hold=ledger.create(name,args,{...access,presentation,chatScope:grantScope,contextHash:context.hash,executionBinding:binding?digest(stable(binding)):null},{idempotencyKey:msg.params?._meta?.['ygpt/idempotency-key']??null});
       if(nativeConsentSupported(host)&&hold.operation.state==='awaiting_user')return emit({jsonrpc:'2.0',id,result:nativeConsentRequest(ledger,hold.operation,name,args,host,{resultToken:hold.receipt,contextToken:context.token})});
       if(context.token)callScope.getStore().delivered=true;
@@ -492,11 +509,11 @@ async function callTool({id,msg,host,nativeCall,name,args,contextToken,rawArgs,i
     const gate=ledger.create(name,args,{...access,presentation:describeOperation(name,args),contextHash:callScope.getStore().context?.hash??null},{idempotencyKey:idem});
     if(gate.reused)return response(id,{id:gate.operation.id,state:gate.operation.state,resultRef:gate.operation.resultRef,replayed:false});
     if(!ledger.autoClaim(gate.operation.id))throw Error('Automatic job was already claimed');
-    try{const r=await dispatch(name,args,gate.operation.id,access.chatGrant===true);if(!r.isError)ownCreated(name,r);ledger.finish(gate.operation.id,r.structuredContent?.error?.outcomeUnknown?'unknown':r.isError?'failed':'succeeded',r,null,r.structuredContent?.job_id??null);return emit({jsonrpc:'2.0',id,result:{...r,structuredContent:{...(r.structuredContent??{}),ygpt:{requestId:gate.operation.id,resultToken:gate.receipt,policyAutomatic:true}}}});}
+    try{const r=await dispatch(name,args,gate.operation.id,access.chatGrant===true||access.fullAccess===true);if(!r.isError)ownCreated(name,r);ledger.finish(gate.operation.id,r.structuredContent?.error?.outcomeUnknown?'unknown':r.isError?'failed':'succeeded',r,null,r.structuredContent?.job_id??null);return emit({jsonrpc:'2.0',id,result:{...r,structuredContent:{...(r.structuredContent??{}),ygpt:{requestId:gate.operation.id,resultToken:gate.receipt,policyAutomatic:true}}}});}
     catch(e){const beforeEffect=e.effectStarted===false,state=beforeEffect?'failed':'unknown';ledger.finish(gate.operation.id,state,null,e.message,gate.operation.id);return response(id,{id:gate.operation.id,state,executed:beforeEffect?false:null,code:e.code??'EXECUTION_UNCERTAIN',...(e.filesRestored!==undefined?{filesRestored:e.filesRestored,noFilesRestored:e.filesRestored===0}:{}),resultRef:gate.operation.id,message:beforeEffect?'Preflight failed before execution; inspect the error before creating a new request':'Query existing task; do not replay'},true);}
   }
   const callId=ledger.callStart(name,null,callMeta());callScope.getStore().callId=callId;const token=ledger.grant('call',callId);
-  try{const r=await dispatch(name,args,callId,access.chatGrant===true);if(!r.isError)ownCreated(name,r);ledger.callFinish(callId,r.structuredContent?.error?.outcomeUnknown?'unknown':r.isError?'failed':'succeeded',r);emit({jsonrpc:'2.0',id,result:{...r,structuredContent:{...(r.structuredContent??{}),ygpt:{callId,resultToken:token}}}});}
+  try{const r=await dispatch(name,args,callId,access.chatGrant===true||access.fullAccess===true);if(!r.isError)ownCreated(name,r);ledger.callFinish(callId,r.structuredContent?.error?.outcomeUnknown?'unknown':r.isError?'failed':'succeeded',r);emit({jsonrpc:'2.0',id,result:{...r,structuredContent:{...(r.structuredContent??{}),ygpt:{callId,resultToken:token}}}});}
   catch(e){const beforeEffect=e.effectStarted===false,state=beforeEffect?'failed':'unknown';ledger.callFinish(callId,state);response(id,{callId,state,executed:beforeEffect?false:null,code:e.code??'EXECUTION_UNCERTAIN',...(e.filesRestored!==undefined?{filesRestored:e.filesRestored,noFilesRestored:e.filesRestored===0}:{}),message:e.message},true);}
 }
 const ownerControl=startOwnerControl({pipe:process.env.YGPT_CONTROL_PIPE,key:process.env.YGPT_LOCAL_CONTROL_KEY,review:createLocalReview({ledger,onApproved:execute}),status:async()=>{const c=catalogSummary();return {product:'YGPT Local',version:config.version,pid:process.pid,localReady:ready&&!!nativeExtension,tools:c.tools,publicTools:c.publicTools,appOnly:c.appOnly,draining:ownerDraining};},drain:async()=>{

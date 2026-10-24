@@ -29,6 +29,7 @@ export class DurableLedger {
       CREATE TABLE IF NOT EXISTS approval_events(id TEXT PRIMARY KEY,owner TEXT NOT NULL,operation_id TEXT NOT NULL,event TEXT NOT NULL,channel TEXT NOT NULL,at INTEGER NOT NULL);
       CREATE TABLE IF NOT EXISTS contexts(owner TEXT NOT NULL,token_hash TEXT NOT NULL,expires INTEGER NOT NULL,PRIMARY KEY(owner,token_hash));
       CREATE TABLE IF NOT EXISTS chat_grants(owner TEXT NOT NULL,context_hash TEXT NOT NULL,scope_key TEXT NOT NULL,expires INTEGER NOT NULL,PRIMARY KEY(owner,context_hash,scope_key));
+      CREATE TABLE IF NOT EXISTS chat_access(owner TEXT NOT NULL,context_hash TEXT NOT NULL,expires INTEGER NOT NULL,operation_id TEXT NOT NULL,PRIMARY KEY(owner,context_hash));
       CREATE TABLE IF NOT EXISTS scopes(owner TEXT NOT NULL,kind TEXT NOT NULL,id TEXT NOT NULL,token_hash TEXT NOT NULL,created INTEGER NOT NULL,PRIMARY KEY(owner,kind,id));`);
     this.db.exec('CREATE TABLE IF NOT EXISTS ui_capabilities(owner TEXT NOT NULL,id TEXT NOT NULL,token_hash TEXT NOT NULL,created INTEGER NOT NULL,PRIMARY KEY(owner,id,token_hash));');
     // Resource ownership: which chat context created a job, tab, UIA target or
@@ -56,6 +57,7 @@ export class DurableLedger {
     this.db.prepare('DELETE FROM ui_capabilities WHERE owner=? AND created<?').run(this.owner,cutoff);
     this.db.prepare("DELETE FROM approval_events WHERE owner=? AND at<?").run(this.owner,cutoff);
     this.db.prepare('DELETE FROM chat_grants WHERE owner=? AND expires<=?').run(this.owner,now);
+    this.db.prepare('DELETE FROM chat_access WHERE owner=? AND (expires<=? OR context_hash NOT IN (SELECT token_hash FROM contexts WHERE owner=? AND expires>?))').run(this.owner,now,this.owner,now);
     this.db.prepare('DELETE FROM contexts WHERE owner=? AND expires<=?').run(this.owner,now);
     this.db.prepare('DELETE FROM resources WHERE owner=? AND created<?').run(this.owner,cutoff);
   }
@@ -165,6 +167,26 @@ export class DurableLedger {
   transfer(kind,id,contextHash){if(typeof contextHash!=='string'||!contextHash)throw fail('SESSION_FOREIGN','recovery requires a chat context');this.db.prepare('INSERT OR REPLACE INTO resources(owner,kind,id,context_hash,created,label) VALUES(?,?,?,?,?,?)').run(this.owner,kind,String(id),contextHash,Date.now(),'recovered');}
   hasChatGrant(hash,key){return !!key&&!!this.db.prepare('SELECT 1 FROM chat_grants WHERE owner=? AND context_hash=? AND scope_key=? AND expires>?').get(this.owner,hash,key,Date.now());}
   contextActive(hash){return typeof hash==='string'&&!!this.db.prepare('SELECT 1 FROM contexts WHERE owner=? AND token_hash=? AND expires>?').get(this.owner,hash,Date.now());}
-  closeContext(token){const hash=digest(String(token));this.db.prepare('DELETE FROM chat_grants WHERE owner=? AND context_hash=?').run(this.owner,hash);this.db.prepare('DELETE FROM contexts WHERE owner=? AND token_hash=?').run(this.owner,hash);}
+  fullAccess(contextHash){
+    if(!contextHash)return null;
+    return this.db.prepare('SELECT a.expires,a.operation_id FROM chat_access a JOIN contexts c ON c.owner=a.owner AND c.token_hash=a.context_hash WHERE a.owner=? AND a.context_hash=? AND a.expires>? AND c.expires>?').get(this.owner,contextHash,Date.now(),Date.now())??null;
+  }
+  enableFullAccess(contextHash,operationId,durationMinutes=120){
+    if(!Number.isInteger(durationMinutes)||durationMinutes<1||durationMinutes>720)throw fail('ACCESS_DURATION_INVALID','Full Access duration must be 1 to 720 minutes');
+    return this.tx(()=>{
+      const operation=this.row(operationId),context=this.db.prepare('SELECT expires FROM contexts WHERE owner=? AND token_hash=?').get(this.owner,contextHash);
+      if(!operation||operation.tool!=='y_chat_access'||operation.state!=='running'||operation.expires<=Date.now()||!context||context.expires<=Date.now())throw fail('ACCESS_NOT_APPROVED','A claimed, live Full Access approval is required');
+      const preview=JSON.parse(this.vault.open(operation.preview)),args=JSON.parse(this.vault.open(operation.args));
+      if(preview.contextHash!==contextHash||preview.kind!=='chat-full-access'||args.action!=='request_full'||(args.durationMinutes??120)!==durationMinutes)throw fail('ACCESS_NOT_APPROVED','Approval belongs to another chat or duration');
+      const expires=Math.min(context.expires,Date.now()+durationMinutes*60000);
+      this.db.prepare('INSERT INTO chat_access(owner,context_hash,expires,operation_id) VALUES(?,?,?,?) ON CONFLICT(owner,context_hash) DO UPDATE SET expires=excluded.expires,operation_id=excluded.operation_id').run(this.owner,contextHash,expires,operationId);
+      this.event(operationId,'chat_full_access_enabled','owner-approved-chat-mode');return {expires};
+    });
+  }
+  revokeFullAccess(contextHash){
+    const prior=this.fullAccess(contextHash),changes=this.db.prepare('DELETE FROM chat_access WHERE owner=? AND context_hash=?').run(this.owner,contextHash??'').changes;
+    if(prior&&changes)this.event(prior.operation_id,'chat_full_access_revoked','chat-mode-revocation');return changes>0;
+  }
+  closeContext(token){const hash=digest(String(token));this.revokeFullAccess(hash);this.db.prepare('DELETE FROM chat_grants WHERE owner=? AND context_hash=?').run(this.owner,hash);this.db.prepare('DELETE FROM contexts WHERE owner=? AND token_hash=?').run(this.owner,hash);}
   close(){this.db.close();}
 }

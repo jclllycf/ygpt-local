@@ -1,0 +1,137 @@
+{
+  "version": "1.0.8",
+  "at": "2026-10-24T18:40:25.952Z",
+  "tests": {
+    "fullRegression": {
+      "total": 143,
+      "passed": 137,
+      "failed": 1,
+      "skipped": 5,
+      "initialFailure": "UIA fixture read an extra character; cause unconfirmed; passed isolated rerun without weakening assertions",
+      "skipReasons": [
+        "Three POSIX-helper UIA fixtures",
+        "python3 alias not available",
+        "Repo-local Roslyn SDK / net48 reference fixture unavailable"
+      ]
+    },
+    "workflowRecheck": {
+      "total": 2,
+      "passed": 2,
+      "failed": 0
+    },
+    "uniqueCoverageAfterRecheck": {
+      "total": 143,
+      "passed": 138,
+      "failed": 0,
+      "skipped": 5
+    },
+    "finalAccessAndBridge": {
+      "total": 13,
+      "passed": 13,
+      "failed": 0
+    },
+    "finalInstallerUpdaterNative": {
+      "total": 10,
+      "passed": 10,
+      "failed": 0
+    },
+    "finalWindowsApprovalWording": {
+      "total": 1,
+      "passed": 1,
+      "failed": 0
+    },
+    "finalPolicy": {
+      "total": 11,
+      "passed": 11,
+      "failed": 0
+    }
+  },
+  "regressions": {
+    "ownerAndContextBoundGrant": true,
+    "exactApprovalAndDurationRequired": true,
+    "expiredRevokedClosedContextInactive": true,
+    "restartPreservesOnlyUnexpiredContextGrant": true,
+    "forgedModeArgumentRejected": true,
+    "otherChatResourceRejectedInFullMode": true,
+    "outputTokenStillRequiredInFullMode": true,
+    "enableDoesNotExecutePendingRequests": true,
+    "protectedReadsAndDryRunAutomatic": true,
+    "ordinaryEditsAndSmallCleanupSnapshotBacked": true,
+    "phoneAndDesktopCardChecked": true,
+    "windowsFallbackExplicitActivationLabel": true,
+    "verifiedNpmNpxSessionsAndDurableArgv": true,
+    "changedLaunchDependencyRejected": true,
+    "literalShellMetacharactersPreserved": true
+  },
+  "policy": {
+    "version": "1.0.8",
+    "trustedBundledNpx": true,
+    "bundledVersionOnlyDecision": "allow",
+    "protectedArgumentDecision": "approve",
+    "bundledNodeLiteralDecision": "allow",
+    "privateTypedRead": "allow",
+    "secretChange": "approve",
+    "executedCommands": false
+  },
+  "installed": {
+    "manifestMismatches": 0,
+    "packageManifestMatches": true,
+    "credentialsConnectionPairingUnchanged": true,
+    "stateAuditPassed": true,
+    "containedState": true,
+    "oldExternalDataAbsent": true,
+    "localReady": true,
+    "tunnelConnected": true,
+    "fullAccessEnabledByTest": false
+  },
+  "installedSourceSmoke": {
+    "version": "1.0.8",
+    "scope": "Installed binaries and source with separate disposable data; not a ChatGPT host call",
+    "fullAccessToolPresent": true,
+    "initialMode": "standard",
+    "protectedRuntimeInfoReadWithoutApproval": true,
+    "bundledNpxVersionWithoutApproval": true,
+    "bundledNpxDurableJobWithoutApproval": true,
+    "fullAccessEnabled": false,
+    "productionStateOrCredentialsCopied": false,
+    "at": "2026-10-24T18:39:50.671Z"
+  },
+  "discardedBuildCleanup": {
+    "copies": 2,
+    "bytes": 509025910,
+    "method": "Windows Recycle Bin; recoverable, not permanently erased",
+    "scope": "Two superseded unpublished development payloads only"
+  },
+  "package": {
+    "version": "1.0.8",
+    "manifestFiles": 5905,
+    "manifestMismatches": 0,
+    "forbiddenMembers": 0,
+    "currentRuntimeServiceExtensionMatch": true,
+    "currentNativeBinariesMatch": true,
+    "artifacts": [
+      {
+        "file": "YGPTLocal-Setup-1.0.8-win-x64.exe",
+        "bytes": 94599680,
+        "sha256": "88d568c88e26015b6e0ef80ff8e2c6a41ad7cb620e05c5b2d3ef3dc41310ecb9"
+      },
+      {
+        "file": "YGPTLocal-Update-1.0.8-win-x64.exe",
+        "bytes": 94599680,
+        "sha256": "be7e0f439f4257fe3df08afa6e62acfd99fc265897d9fd513040c2daaca94426"
+      },
+      {
+        "file": "ygpt-local-portable-1.0.8-win-x64.zip",
+        "bytes": 93602688,
+        "sha256": "8d0b6d1f5094501cf0a4183c1a1f9fb360f5990e3d4f3676bbb35619d41d1a57"
+      }
+    ]
+  },
+  "limits": {
+    "physicalAndroid": "not rerun; viewport/bridge fixtures only",
+    "freshCleanVm": "not rerun",
+    "newChatGPTHostTask": "not independently exercised",
+    "approvalClicks": "isolated fixtures, not new human-host attestation",
+    "fullAccessBoundary": "server-issued chat capability, not authenticated OpenAI conversation identity; current Windows permissions and engine limits apply"
+  }
+}

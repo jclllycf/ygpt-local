@@ -10,11 +10,11 @@ export class YTerminalEngine {
   // Sessions belong to the chat context that started them. Another chat
   // cannot poll, feed or cancel them even with the session ID or a token.
   static MAX_ACTIVE=8;static MAX_ACTIVE_PER_OWNER=4;
-  constructor({root,allowedExecutables,authorizeExecutable,maxOutputBytes=65536,stateDir=path.join(root,'.ygpt-terminal'),currentOwner=()=>'local'}={}) {
+  constructor({root,allowedExecutables,authorizeExecutable,prepareExecutable,maxOutputBytes=65536,stateDir=path.join(root,'.ygpt-terminal'),currentOwner=()=>'local'}={}) {
     this.owner=()=>currentOwner()??'local';
     if(!path.isAbsolute(root??''))throw new EngineError('BAD_ROOT','An absolute project root is required');
     this.root=path.resolve(root);this.stateDir=stateDir;this.allowed=new Set((allowedExecutables??[]).map(p=>path.resolve(p).toLowerCase()));this.maxOutputBytes=maxOutputBytes;this.sessions=new Map();
-    this.authorizeExecutable=authorizeExecutable;this.starting=new Map();this.closing=false;
+    this.authorizeExecutable=authorizeExecutable;this.prepareExecutable=prepareExecutable;this.starting=new Map();this.closing=false;
   }
   async validate({executable,args=[],cwd=this.root,timeoutMs=10000}) {
     if(!path.isAbsolute(executable??''))throw new EngineError('EXE_NOT_ALLOWED','Executable must use an absolute local path');
@@ -26,7 +26,8 @@ export class YTerminalEngine {
     if(!path.isAbsolute(cwd)){const rel=path.relative(this.root,full);
     if(rel==='..'||rel.startsWith('..'+path.sep)||path.isAbsolute(rel))throw new EngineError('OUT_OF_SCOPE','Relative process cwd escapes the engine root');}
     if(!Number.isInteger(timeoutMs)||timeoutMs<100||timeoutMs>86400000)throw new EngineError('BAD_TIMEOUT','Invalid timeout');
-    return {executable,args,cwd:full,timeoutMs};
+    const spec={executable,args,cwd:full,timeoutMs};
+    return this.prepareExecutable?this.prepareExecutable(spec):spec;
   }
   async start(input={}) {
     if(this.closing)throw new EngineError('ENGINE_CLOSED','Process engine is closing');

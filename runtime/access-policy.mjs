@@ -5,6 +5,8 @@ import {config,INSTALL,RUNTIME,currentPermissionMode} from './config.mjs';
 import {applyProfile} from './permission-profiles.mjs';
 import {fileReadTools,isReadOnlyInvocation} from './read-only-policy.mjs';
 import {agentToolBoundary,agentProtectedRoots} from '../engine/src/agent-protection.mjs';
+import {trustedRuntimeExecutable} from './trusted-runtime.mjs';
+import {smallTrash} from './small-trash.mjs';
 const w=path.win32;
 const OS=process.env.SystemRoot??'C:/Windows';
 export const systemRoots=[OS,process.env.ProgramFiles??'C:/Program Files',process.env.ProgramData??'C:/ProgramData',config.stateDir,RUNTIME,config.configFile,...config.protectedRoots].map(v=>canonical(v));
@@ -104,8 +106,9 @@ function workflow(a){
 // as an actual disk command. All other programs retain the full signal scan.
 export function argvRiskText(argv=[]){
   const [exe,flag,script,...rest]=argv;
-  if(config.blacklistDefaultAllow&&/^(?:node|node\.exe)$/i.test(w.basename(String(exe)))&&flag==='-e'&&!rest.length&&typeof script==='string'&&/^console\.log\((?:"(?:[^"\\\r\n]|\\["\\/bfnrt]|\\u[0-9a-f]{4})*"|'(?:[^'\\\r\n]|\\['"\\/bfnrt]|\\u[0-9a-f]{4})*')\);?$/i.test(script.trim()))return String(exe)+' literal-print-only';
-  return argv.join(' ');
+  const executable=trustedRuntimeExecutable(exe,INSTALL)?'verified-ygpt-runtime':String(exe??'');
+  if(config.blacklistDefaultAllow&&/^(?:node|node\.exe)$/i.test(w.basename(String(exe)))&&flag==='-e'&&!rest.length&&typeof script==='string'&&/^console\.log\((?:"(?:[^"\\\r\n]|\\["\\/bfnrt]|\\u[0-9a-f]{4})*"|'(?:[^'\\\r\n]|\\['"\\/bfnrt]|\\u[0-9a-f]{4})*')\);?$/i.test(script.trim()))return executable+' literal-print-only';
+  return [executable,...argv.slice(1)].join(' ');
 }
 // A high-risk signal is never treated as a comprehensive shell sandbox. The
 // same check is applied to argv job paths, including direct interpreter flags.
@@ -173,6 +176,7 @@ function authorizeImpl(name,a={}){
     // deleting them would destroy the approval and rollback machinery itself.
     const coverage='A protected snapshot of the files is taken first (folders up to 2,000 entries and 128 MB in total, 32 MB per file); anything larger, or containing links, can then be recovered only from the Windows Recycle Bin. The result lists the coverage.';
     if(targets.some(t=>ownWriteRoots.some(r=>within(t.target,r)||within(r,t.target))||t.permission==='private'||t.permission==='vault'))return gate('filesystem-trash',JSON.stringify({tool:name,paths:targets.map(t=>t.target)}),'These paths are inside YGPT runtime/state or the vault: deleting them can break the connection and its rollback store. A verified owner decision is required. '+coverage,{targets:targets.map(t=>t.target)});
+    if(config.blacklistDefaultAllow&&smallTrash(paths,{route,projectRoots}))return allow('Small ordinary cleanup: at most 64 entries and 16 MiB; protected snapshots first, then the Recycle Bin');
     const isDir=t=>{try{return fs.statSync(t).isDirectory();}catch{return false;}};
     const gated=targets.length>1||targets.some(t=>t.system||t.sensitive||t.secretAdjacent||/^[a-z]:\\?$/.test(t.target)||projectRoots.includes(t.target)||isDir(t.target));
     if(gated)return gate('filesystem-trash',JSON.stringify({tool:name,paths:targets.map(t=>t.target)}),'Batch, directory or system delete: explicit owner decision required. '+coverage,{targets:targets.map(t=>t.target)});
@@ -215,10 +219,7 @@ export function authorize(name,args={}){
    const paths=name==='read_multiple_files'?args.paths:[args.path];
    if(!Array.isArray(paths)||!paths.length)return deny('Missing read paths');
    for(const p of paths)canonical(p);
-   if(name==='start_search'&&(String(args.pattern??'').length>300||args.literalSearch===false)){
-     // Broad/non-literal searches are not part of the read fast path; fall
-     // through to the normal policy, which gates them for a human decision.
-   }else return allow('Owner policy: all typed file, directory, search and database reads require no human approval; native ACL applies');
+   return allow('Owner policy: all typed file, directory, search and database reads require no human approval; native ACL and bounded engine limits apply');
   }
   if(config.readOnlyAutoAllow&&name==='job_submit'&&isReadOnlyInvocation({argv:args.argv}))return allow('Parsed read-only PowerShell invocation');
   if(config.rc9Candidate)return authorizeRc9(name,args);
