@@ -8,6 +8,7 @@ using System.Windows;
 // Window constructors are unreachable; this fixture calls only payload logic.
 public class SetupWindow:Window {public SetupWindow(string data,string install){throw new Exception("Setup UI must not run in this fixture");}public void Uninstall(){throw new Exception("Uninstall must not run in this fixture");}}
 public class UpdateWindow:Window {public UpdateWindow(){throw new Exception("Updater UI must not run in this fixture");}}
+public class ApprovalWindow:Window {public ApprovalWindow(string data){throw new Exception("Approval UI must not run in this fixture");}}
 public static class InstallPayloadRegression {
  static void Check(bool ok,string message){if(!ok)throw new Exception(message);}
  static void Add(ZipArchive zip,string name,string text){using(var stream=zip.CreateEntry(name).Open())using(var writer=new StreamWriter(stream,new UTF8Encoding(false)))writer.Write(text);}

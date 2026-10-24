@@ -1,0 +1,83 @@
+{
+  "version": "1.0.6",
+  "at": "2026-10-24T05:45:19.657Z",
+  "tests": {
+    "uniqueTests": 132,
+    "passed": 127,
+    "failed": 0,
+    "skipped": 5,
+    "fullRun": {
+      "tests": 131,
+      "passed": 126,
+      "failed": 0,
+      "skipped": 5
+    },
+    "supplementaryNewScenario": "Unsupported standard bridge methods fall back once; a committed decision with a lost reply is reconciled without replay",
+    "skipReasons": [
+      "Repo-local Roslyn/net48 references absent; native Framework compilation succeeded",
+      "Three POSIX-shebang fixtures do not apply to Windows",
+      "python3 unavailable for one child-environment fixture"
+    ]
+  },
+  "regressions": {
+    "pendingApprovalYieldsWithoutWaitingLoop": true,
+    "versionedResourceWithLegacyAliases": true,
+    "delayedCanonicalMetadata": true,
+    "standardAndCompatibilityBridges": true,
+    "unsupportedMethodFallbackWithoutTimeoutReplay": true,
+    "externalDecisionUpdatesVisibleCard": true,
+    "durableAutomaticNotificationDeduplication": true,
+    "explicitUncertainMessageRetry": true,
+    "terminalStateDoesNotRegress": true,
+    "capabilityAndContextChecksRetained": true,
+    "exactOwnerReviewNonceAndDigest": true,
+    "ownerPipeAuthentication": true,
+    "onceOnlyExecutionClaim": true,
+    "strictHashedCsp": true
+  },
+  "package": {
+    "version": "1.0.6",
+    "manifestFiles": 5893,
+    "manifestMismatches": 0,
+    "forbiddenMembers": 0,
+    "currentRuntimeServiceExtensionMatch": true,
+    "currentNativeBinariesMatch": true,
+    "artifacts": [
+      {
+        "file": "YGPTLocal-Setup-1.0.6-win-x64.exe",
+        "bytes": 94504448,
+        "sha256": "99d74a8b3d555abd49e7aff2a7387351ffaf098b71af3454c90397b879bda6fa"
+      },
+      {
+        "file": "YGPTLocal-Update-1.0.6-win-x64.exe",
+        "bytes": 94504448,
+        "sha256": "48fb50f3b1daa32e9c1cc41f9a5760b9857c9c9b25f3af5da8b0701216118ac3"
+      },
+      {
+        "file": "ygpt-local-portable-1.0.6-win-x64.zip",
+        "bytes": 93507429,
+        "sha256": "23fab221a744d0e35d555713c2b7c76990c9387039ce809f6b10fc30dbde5676"
+      }
+    ]
+  },
+  "nativeUi": {
+    "actualCompiledWindowRendered": true,
+    "disposableTransportOnly": true,
+    "windowsImageSha256": "99802ba68ff9c8293f432b8147b2132fd6d7048ea16da050964d29577ec6a266",
+    "mobileViewportImageSha256": "0c7b1d8a3de92595e01c0739be23cc8445fa8da5543e906527dbd87b4d727832"
+  },
+  "acceptance": {
+    "browserFixtures": "Fresh isolated Edge processes; 390px and desktop viewports; protocol fixtures, no owner browser profiles",
+    "windowsCenter": "Compiled WPF window with fixture transport and authenticated-pipe regressions",
+    "physicalAndroidChatGPTVerified": false,
+    "realHostClickAttestation": false,
+    "productionDeployment": "Separate from release acceptance; maintenance preserves live pending decisions"
+  },
+  "limits": [
+    "The exact Android mounting failure remains a hypothesis supported by screenshots, not a verified client defect",
+    "A mobile-sized browser viewport is not a physical Android ChatGPT test",
+    "The ChatGPT outer diagnostic shell cannot be styled by component CSS; badge-removal conditions remain unconfirmed",
+    "No new public phone approval website, domain or authentication service is deployed",
+    "No clean-VM, sign-in/reboot or every-account acceptance"
+  ]
+}

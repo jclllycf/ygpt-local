@@ -3,15 +3,16 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {config,RUNTIME,INSTALL} from './config.mjs';
 // New resource URI forces hosts to fetch the revised CSP and bridge bundle.
-export const BAR_URI='ui://ygpt/approval/strip-v5.html';
+export const BAR_URI='ui://ygpt/approval/strip-v6-cross-device.html';
 // The prior ChatGPT tool catalog can retain this URI across conversations.
 // Serve the NEW strip at this legacy address rather than the retired large card.
 export const LEGACY_BAR_URI='ui://ygpt/approval/card-v1.html';
 // RC10 read-only MCP App surface. Never returns a decision capability until host attestation is proven.
-export const INSPECTION_URI=config.chatAppConsent?'ui://ygpt/approval/compact-v1-rc2.html':'ui://ygpt/approval/inspection-v1.html';
+export const INSPECTION_URI=config.chatAppConsent?BAR_URI:'ui://ygpt/approval/inspection-v1.html';
 // Resource addresses are protocol identifiers, not display branding. Old chats
 // retain these exact addresses and must still receive the current component.
-const knownResources=[BAR_URI,LEGACY_BAR_URI,INSPECTION_URI,'ui://ygpt/approval/strip-v4-rc18.html','ui://ygpt/approval/strip-v3.html',...['compact-v11-3','interactive-v11-2c','interactive-v11-2b','interactive-v11-2','interactive-v11-1','interactive-v11','inspection-v1'].map(n=>'ui://ygpt/approval/'+n+'.html')];
+const knownResources=[BAR_URI,LEGACY_BAR_URI,INSPECTION_URI,'ui://ygpt/approval/strip-v5.html','ui://ygpt/approval/compact-v1-rc2.html','ui://ygpt/approval/strip-v4-rc18.html','ui://ygpt/approval/strip-v3.html',...['compact-v11-3','interactive-v11-2c','interactive-v11-2b','interactive-v11-2','interactive-v11-1','interactive-v11','inspection-v1'].map(n=>'ui://ygpt/approval/'+n+'.html')];
+export const approvalGuidance='Review the approval card, then pause this response so mobile clients can mount it. Do not repeatedly call y_wait_approval while awaiting a user decision. The card resumes this conversation after a decision. If no buttons appear, open this same conversation in ChatGPT on the web or use the Windows approval center. No text reply grants permission; never repeat the original action.';
 export function approvalResourceUris(){
  const modern=config.rc10Candidate?knownResources:!config.rc9Candidate&&uiEnabled()?(barEnabled()?[BAR_URI,LEGACY_BAR_URI]:[BAR_URI]):[];
  return [...new Set(modern)];
@@ -19,7 +20,7 @@ export function approvalResourceUris(){
 export const approvalCenterTool={
  name:'y_approval_center',
  title:'Approval center',
- description:'Show this approval immediately at the current action with original contextToken, then wait using y_wait_approval. Keep the task in progress; no final report before the user decides. No arguments safely returns an empty state.',
+ description:'Show an approval with the original contextToken, then pause for a user click. Do not poll while awaiting a user decision. No arguments safely returns an empty state.',
  inputSchema:{type:'object',properties:{requestId:{type:'string',maxLength:128}},additionalProperties:false},
  _meta:{ui:{resourceUri:INSPECTION_URI},'openai/outputTemplate':INSPECTION_URI},
  annotations:{readOnlyHint:true,destructiveHint:false,openWorldHint:false}
@@ -46,27 +47,28 @@ export function chatApprovalResult(ledger,args={}){
  if(!operation&&context&&!args.requestId)operation=ledger.pending().find(o=>o.state==='awaiting_user'&&o.contextHash===context.hash);
  const matched=!!operation&&!!context&&operation.contextHash===context.hash;
  const enabled=barEnabled()&&matched&&operation.state==='awaiting_user'&&Date.parse(operation.expiresAt)>Date.now();
- const value={requestId:operation?.id??'NONE',state:operation?.state??'not_found',approvalEnabled:enabled,requiresOriginalChatContext:!!operation&&!matched};
+ const value={requestId:operation?.id??'NONE',state:operation?.state??'not_found',approvalEnabled:enabled,requiresOriginalChatContext:!!operation&&!matched,requiresUserInteraction:enabled,continueWaiting:false,renderer:'mcp-app',message:approvalGuidance};
  const presentation=operation?.presentation??{title:'No request to review',target:'No pending operation selected',impact:'No command or file change will run.',purpose:'Pass a pending requestId and its original contextToken.',denied:'Nothing changes.',risk:'None',reversible:'No operation',administrator:'No elevation',technical:''};
  // Keep the capability exclusively in the host-to-app metadata channel.
- return {content:[{type:'text',text:JSON.stringify(value)}],structuredContent:value,_meta:{yBar:{...value,uiToken:enabled?ledger.grant('ui',operation.id):'',presentation,chatScope:operation?.chatScope??{eligible:false,explanation:'No conversation grant available.'},expiresAt:operation?.expiresAt??null,enabled,demo:false,note:matched?'':operation?'Retry the original action in this chat, then include its contextToken.':'No pending request.'}}};
+ return {content:[{type:'text',text:JSON.stringify(value)}],structuredContent:value,_meta:{yBar:{...value,uiToken:barEnabled()&&matched?ledger.grant('ui',operation.id):'',presentation,chatScope:operation?.chatScope??{eligible:false,explanation:'No conversation grant available.'},expiresAt:operation?.expiresAt??null,enabled,demo:false,note:matched?'':operation?'Use the pending request and original contextToken from the chat that created it. Do not repeat the action.':'No pending request.'}}};
 }
 const text=value=>({content:[{type:'text',text:JSON.stringify(value)}],structuredContent:value});
 export const barTools=[
- {name:'y_show_approval',description:'Render the pending approval immediately at this action, then y_wait_approval with original resultToken. Do not finish the response or append a long report while pending. Preserve original contextToken and resultToken. The user decision sends a chat follow-up; inspect status, never replay the action.',inputSchema:{type:'object',properties:{requestId:{type:'string'},resultToken:{type:'string'}},required:['requestId','resultToken'],additionalProperties:false},_meta:{ui:{resourceUri:BAR_URI},'openai/outputTemplate':BAR_URI},annotations:{readOnlyHint:true,destructiveHint:false,openWorldHint:false}},
- ...['decide','status'].map(action=>({name:'y_bar_'+action,description:'UI-only '+action+'; requires a widget-only one-request capability.',inputSchema:{type:'object',properties:{requestId:{type:'string'},uiToken:{type:'string'},...(action==='decide'?{decision:{type:'string',enum:['once','chat','deny']}}:{})},required:['requestId','uiToken',...(action==='decide'?['decision']:[])],additionalProperties:false},_meta:{ui:{visibility:['app']},'openai/visibility':'private','openai/widgetAccessible':true},annotations:{readOnlyHint:action==='status',destructiveHint:action==='decide',openWorldHint:false}}))
+ {name:'y_show_approval',title:'Review local action',description:'Display the approval card, then pause for a user click. Do not immediately poll or call y_wait_approval: some mobile hosts mount UI only after the response ends. Preserve original contextToken and resultToken privately. The card sends a follow-up after a decision; inspect the existing result, never replay the action.',inputSchema:{type:'object',properties:{requestId:{type:'string'},resultToken:{type:'string'}},required:['requestId','resultToken'],additionalProperties:false},_meta:{ui:{resourceUri:BAR_URI},'openai/outputTemplate':BAR_URI},annotations:{readOnlyHint:true,destructiveHint:false,openWorldHint:false}},
+ ...['decide','status'].map(action=>({name:'y_bar_'+action,description:'UI-only '+action+'; requires a widget-only one-request capability.',inputSchema:{type:'object',properties:{requestId:{type:'string'},uiToken:{type:'string'},...(action==='decide'?{decision:{type:'string',enum:['once','chat','deny']}}:{notifyAction:{type:'string',enum:['claim','retry','sent','uncertain']},deliveryToken:{type:'string',maxLength:128}})},required:['requestId','uiToken',...(action==='decide'?['decision']:[])],additionalProperties:false},_meta:{ui:{visibility:['app']},'openai/visibility':'private','openai/widgetAccessible':true},annotations:{readOnlyHint:action==='status',destructiveHint:action==='decide',openWorldHint:false}}))
 ];
 // Safe production renderer probe: never issues an operation capability.
 export const previewTool={
  name:'y_preview_approval_ui',
+ title:'YGPT approval preview',
  description:'Display a harmless PREVIEW of the compact YGPT in-chat permission panel. Does not request or grant any permission or modify local files.',
  inputSchema:{type:'object',properties:{},additionalProperties:false},
  _meta:{ui:{resourceUri:BAR_URI},'openai/outputTemplate':BAR_URI},
  annotations:{readOnlyHint:true,destructiveHint:false,openWorldHint:false}
 };
 export function previewResult(){
- const presentation={title:'YGPT · 授权条预览（不执行操作）',purpose:'验证 ChatGPT 中的对话内授权界面是否正常渲染。',target:'示例：D:\\AI\\Projects\\example\\build.log',impact:'仅展示界面；不会读取、写入、执行本机文件。',denied:'不产生任何更改。',risk:'无风险预览',reversible:'没有实际操作',administrator:'普通用户；不会提升权限',technical:'Preview only; no command execution'};
- return {...text({preview:true,executed:false,requiresApproval:false,ui:'in-chat preview'}),_meta:{yBar:{requestId:'PREVIEW_ONLY',uiToken:'',presentation,chatScope:{eligible:false,explanation:'此预览没有可授权的操作。'},state:'awaiting_user',expiresAt:null,enabled:false,demo:true}}};
+ const presentation={title:'YGPT approval preview',purpose:'Check whether this client displays approval controls.',target:'Example operation — no files accessed',impact:'This preview cannot grant permission or execute an operation.',denied:'Nothing changes.',risk:'Harmless preview',reversible:'No operation',administrator:'No elevation',technical:'Preview only; no command execution'};
+ return {...text({preview:true,executed:false,requiresApproval:false,ui:'in-chat preview'}),_meta:{yBar:{requestId:'PREVIEW_ONLY',uiToken:'',presentation,chatScope:{eligible:false,explanation:'This preview has no action to approve.'},state:'awaiting_user',expiresAt:null,enabled:false,demo:true}}};
 }
 // Default to plain MCP tools: no chat file-preview widgets or app resources.
 export const uiEnabled=()=>config.chatAppConsent||config.enableMcpUi===true&&config.localApprovalDisabled!==true;
@@ -93,7 +95,7 @@ function rehashCsp(text){
  const patch=(src,kind,h)=>{const marker=kind+"-src 'sha256-",i=src.indexOf(marker);if(i<0)return src;const j=src.indexOf("'",i+marker.length);return src.slice(0,i+marker.length)+h+src.slice(j);};
  return patch(patch(text,'script',hash(script)),'style',hash(style));
 }
-export function barResource(uri=BAR_URI){const legacy=config.approvalStyle==='legacy';let text=fs.readFileSync(path.join(RUNTIME,legacy?'approval-bar-legacy.html':'approval-bar.html'),'utf8');text=text.replace("img-src 'none'","img-src data:");if(!legacy){text=text.replace('__YGPT_BRAND_ICON__',brandIconDataUrl());if(GREEN_ICON_FILES.includes(config.brandIcon))for(const [from,to] of GREEN_THEME)text=text.replace(from,to);text=rehashCsp(text);}return {uri,name:legacy?'YGPT compact approval strip (classic)':'YGPT compact approval strip',mimeType:'text/html;profile=mcp-app',text,_meta:{ui:{prefersBorder:false,csp:{connectDomains:[],resourceDomains:[],frameDomains:[]}},'openai/widgetPrefersBorder':false,'openai/widgetCSP':{connect_domains:[],resource_domains:[]}}};}
+export function barResource(uri=BAR_URI){const legacy=config.approvalStyle==='legacy';let text=fs.readFileSync(path.join(RUNTIME,legacy?'approval-bar-legacy.html':'approval-bar.html'),'utf8');text=text.replace("img-src 'none'","img-src data:").replace(/<script>[\s\S]*?<\/script>/,()=>'<script>'+fs.readFileSync(path.join(RUNTIME,'approval-ui.js'),'utf8')+'</script>');if(!legacy){text=text.replace('__YGPT_BRAND_ICON__',brandIconDataUrl());if(GREEN_ICON_FILES.includes(config.brandIcon))for(const [from,to] of GREEN_THEME)text=text.replace(from,to);}text=rehashCsp(text);return {uri,name:legacy?'YGPT approval (classic)':'YGPT approval',description:'Review an exact local operation. Approval stays pending until you choose; phone and desktop show the same saved result.',mimeType:'text/html;profile=mcp-app',text,_meta:{ui:{prefersBorder:false,csp:{connectDomains:[],resourceDomains:[],frameDomains:[]}},'openai/ui':{availableDisplayModes:['inline','fullscreen']},'openai/widgetDescription':'Approve or deny the displayed local operation. Changes made on another device are synchronized.','openai/widgetPrefersBorder':false,'openai/widgetCSP':{connect_domains:[],resource_domains:[]}}};}
 // Test hook: the exact HTML a host receives for the current configuration.
 export function barHtmlForTest(){return barResource(BAR_URI).text;}
 export function handleBar(name,args,ledger,onApproved,isWaiting=()=>false){
@@ -113,7 +115,10 @@ export function handleBar(name,args,ledger,onApproved,isWaiting=()=>false){
  }
  if(!ledger.owns('ui',id,args.uiToken)||!operation)throw Error('APP_CAPABILITY_INVALID: this card does not own the pending request');
  if(config.chatAppConsent&&!ledger.contextActive(operation.contextHash))throw Error('APP_CONTEXT_EXPIRED: the original chat context was revoked or expired');
- if(name==='y_bar_status')return text({requestId:id,state:operation.state,continuation:isWaiting(id)?'waiting-tool':'follow-up'});
+ if(name==='y_bar_status'){
+  const delivery=args.notifyAction==='claim'||args.notifyAction==='retry'?ledger.reserveUiDelivery(id,args.notifyAction==='retry'):args.notifyAction==='sent'||args.notifyAction==='uncertain'?ledger.finishUiDelivery(id,args.deliveryToken,args.notifyAction==='sent'):null;
+  return text({requestId:id,state:operation.state,updatedAt:operation.updatedAt,expiresAt:operation.expiresAt,rendererConnected:true,notificationSent:ledger.uiDelivery(id)?.event==='ui_notify_sent',continuation:isWaiting(id)?'waiting-tool':'follow-up',...(delivery?{delivery}:{})});
+ }
  if(!config.allowInlineDecisions)throw Error('Inline decisions disabled until the trusted host passes acceptance');
  ledger.event(id,'ui_decision_received','app-capability-validated');
  const decision=ledger.decideLocal(id,args.decision,'chat-app-click');if(!decision.ok)throw Error(decision.reason);

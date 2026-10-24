@@ -39,10 +39,15 @@ test('unknown icon name falls back to the current sprout',()=>{
   const r=serveWith({brandIcon:'nope.png'});
   assert.ok(r.imgPrefix?.startsWith(iconB64Prefix('ygpt-local-512.png')),r.imgPrefix);
 });
-test('legacy style: the original strip is served byte for byte',()=>{
+test('legacy style keeps its appearance with the current bridge and valid CSP',()=>{
   const r=serveWith({approvalStyle:'legacy',brandIcon:'ygpt-local-sky-y-256.png'});
-  assert.equal(r.sha256,crypto.createHash('sha256').update(fs.readFileSync('runtime/approval-bar-legacy.html','utf8').replace("img-src 'none'","img-src data:")).digest('hex'));
   assert.equal(r.imgPrefix,null);
+  const raw=fs.readFileSync('runtime/approval-bar-legacy.html','utf8'),served=serveRaw({approvalStyle:'legacy'});
+  assert.equal(/<style>([\s\S]*?)<\/style>/.exec(served)[1],/<style>([\s\S]*?)<\/style>/.exec(raw)[1]);
+  assert.ok(served.includes(fs.readFileSync('runtime/approval-ui.js','utf8').replace(/\r\n?/g,'\n')));
+  assertCspMatchesServed(served);
+  const script=/<script>([\s\S]*?)<\/script>/.exec(served)[1];
+  assert.equal(/script-src 'sha256-([^']+)'/.exec(served)[1],crypto.createHash('sha256').update(script.replace(/\r\n?/g,'\n')).digest('base64'));
 });
 
 function serveRaw(cfg){

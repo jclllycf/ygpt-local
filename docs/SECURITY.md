@@ -8,6 +8,8 @@ Secure MCP Tunnel is an optional private transport, subject to Platform/workspac
 
 High-risk operations pause for a one-request App capability. The private decision capability is carried only in App metadata. The model must not call decision tools. Decision replay reads existing status; it does not run the action again. Unknown effects remain unknown and must be reconciled before retrying.
 
+The manual Windows approval center uses the existing owner-only named pipe, authenticated with the DPAPI-protected local control key. It lists saved requests and binds a choice to an exact request nonce and argument digest. It creates no public approval endpoint and performs no automatic decision. Widget and Windows decisions share the same durable ledger and once-only execution claim. Cross-device continuation messages are reserved and acknowledged durably; uncertain delivery is retried only through an explicit Resume chat action, never by replaying the approved operation. Missing UI or metadata grants no permission.
+
 Snapshots cover actual listed preimages, with size/depth limits. Restore conflicts preserve newer content. Batch operations are not atomic. Old user state, credentials, databases and approval capabilities are not part of the public source tree or the release payload.
 
 Before publication: review source and clean Git history, runtime hashes and notices, install/uninstall boundaries, OAuth negative tests, the built archive, and actual host evidence. The included automated scanner is a scoped aid, not a claim of exhaustive security audit or legal review.

@@ -37,6 +37,7 @@ public static class YGPTApp {
   string data=Arg(args,"--data-dir",HostCore.DataDir(selectedInstall));
   if(args.Contains("--apply-update")){ApplyUpdate(Arg(args,"--install-dir",Base),data);return;}
   if(args.Contains("--background")){Background(data);return;}
+  if(args.Contains("--approvals")){var reviewApp=new Application();reviewApp.Run(new ApprovalWindow(data));return;}
   if(args.Contains("--uninstall-worker")){RemoveInstall(Arg(args,"--install-dir",Base),data);return;}
   if(args.Contains("--self-test")){var b=Encoding.UTF8.GetBytes("YGPT fixture");if(!b.SequenceEqual(ProtectedData.Unprotect(ProtectedData.Protect(b,null,DataProtectionScope.CurrentUser),null,DataProtectionScope.CurrentUser)))Environment.Exit(2);return;}
   bool ownSetup;using(var setupOwner=new Mutex(true,"Local\\YGPT-setup-"+HostCore.OwnerId(data),out ownSetup)){if(!ownSetup)return;

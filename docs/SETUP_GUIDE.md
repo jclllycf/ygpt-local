@@ -87,6 +87,10 @@ Uninstall reports deleted, already absent, changed and blocked files separately,
 
 **Advanced maintenance → Review installation leftovers** audits contained update caches and obsolete registrations. Cleanup verifies current integrity and connection health, retains one complete rollback, and backs up obsolete registrations before removing them. Developer folders, private data and protected recovery records are not swept.
 
+## Cross-device approvals
+
+When YGPT requests a decision, let the response finish so the client can display its card. The card checks the saved request and follows decisions made on another device. Do not repeatedly ask it to wait or resubmit the original action. If a client shows no buttons, open the same conversation on the web or use **Verify & finish → Advanced maintenance → Open approval center** on the Windows PC. Return to the same chat to retrieve the original result. The Windows center is manual and local; it does not expose a public approval website. See the [1.0.6 notes](RELEASE_1.0.6.md) for verification limits.
+
 ## Account field result and feedback
 
 On October 23, 2026, the owner reported successful real use with a ChatGPT Free account. This is a user-reported field result, separate from automated fixture tests; availability and permissions can vary by account and workspace.

@@ -10,10 +10,10 @@ import {createHash} from 'node:crypto';
 import {fixture,unpack} from './helpers.mjs';
 import {validateFirstUseProof} from '../service/first-use.mjs';
 test('Owner pipe authenticates, exposes no tool execution and drains at most once per message',async()=>{
- const key=randomBytes(32).toString('hex'),pipe='\\\\.\\pipe\\YGPT-test-'+randomBytes(12).toString('hex');let drained=0;
- const server=startOwnerControl({pipe,key,status:()=>({localReady:true}),drain:()=>({safeToStop:++drained===1})});await once(server,'listening');
+ const key=randomBytes(32).toString('hex'),pipe='\\\\.\\pipe\\YGPT-test-'+randomBytes(12).toString('hex');let drained=0,reviewed=0;
+ const server=startOwnerControl({pipe,key,status:()=>({localReady:true}),drain:()=>({safeToStop:++drained===1}),review:()=>({ok:true,reviewed:++reviewed})});await once(server,'listening');
  const request=q=>new Promise((resolve,reject)=>{const c=net.connect(pipe);let s='';c.on('connect',()=>c.write(JSON.stringify(q)+'\n'));c.on('data',b=>s+=b);c.on('error',reject);c.on('end',()=>resolve(JSON.parse(s)));});
- try{assert.equal((await request({key:'wrong',action:'drain'})).code,'UNAUTHORIZED');assert.equal(drained,0);assert.equal((await request({key,action:'status'})).localReady,true);assert.equal((await request({key,action:'tools/call',name:'y_file_delete'})).code,'UNSUPPORTED');assert.equal(drained,0);assert.equal((await request({key,action:'drain'})).safeToStop,true);assert.equal(drained,1);}finally{await new Promise(r=>server.close(r));}
+ try{assert.equal((await request({key:'wrong',action:'drain'})).code,'UNAUTHORIZED');assert.equal(drained,0);assert.equal((await request({key:'wrong',action:'review'})).code,'UNAUTHORIZED');assert.equal(reviewed,0);assert.equal((await request({key,action:'review',payload:{kind:'queue'}})).reviewed,1);assert.equal((await request({key,action:'status'})).localReady,true);assert.equal((await request({key,action:'tools/call',name:'y_file_delete'})).code,'UNSUPPORTED');assert.equal(drained,0);assert.equal((await request({key,action:'drain'})).safeToStop,true);assert.equal(drained,1);}finally{await new Promise(r=>server.close(r));}
 });
 test('Actual broker preserves pending approvals during drain and records marker result; controlled transport fixture is NOT ChatGPT',async()=>{
  const f=fixture(),key=randomBytes(32).toString('hex'),proofKey=randomBytes(32).toString('hex'),pipe='\\\\.\\pipe\\YGPT-integration-'+randomBytes(12).toString('hex'),data=path.dirname(f.config.stateDir);fs.mkdirSync(data,{recursive:true});

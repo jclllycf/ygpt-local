@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.0.6 — cross-device approval recovery
+
+- Let an approval response finish before asking for a user decision, and stop repeated pending-approval polling by the model.
+- Serve a versioned component with delayed-metadata handling, standard/compatibility bridges, visible-card status refresh and durable continuation-message deduplication.
+- Add a manually opened Windows approval center over the authenticated owner pipe, preserving exact-request capabilities, scoped grants and once-only execution.
+- Retain strict component CSP, old resource aliases and private capability metadata; improve touch targets and expose a harmless renderer preview.
+- Document separate browser-fixture, Windows and real Android acceptance boundaries.
+
 ## 1.0.5 — numbered Chrome profiles and a clearer browser picker
 
 - Fix engine startup refusal on isolated Chrome `Profile N` cache permissions while preserving owner, capability-SID, path and reparse checks.

@@ -1,8 +1,10 @@
-# Current validation: 1.0.5
+# Current validation: 1.0.6
 
-The current release is 1.0.5. See the [release notes](RELEASE_1.0.5.md) and [machine-readable verification](../evidence/startup-1.0.5-verification.json). It fixes a reproduced numbered-Chrome-profile ACL startup refusal and themes the native browser picker. The repaired owner installation recovered local readiness, Tunnel connectivity and successful host-requested file operations. Release-package and installation checks are recorded separately from those field observations. The owner's earlier local-update deferral was superseded by their explicit repair/update request.
+The current release is 1.0.6. See the [release notes](RELEASE_1.0.6.md) and [machine-readable verification](../evidence/mobile-1.0.6-verification.json). It changes pending approvals to render and yield, handles delayed component metadata, refreshes cross-device state, deduplicates continuation messages and provides a manual Windows-owner approval center. The versioned resource keeps old URI aliases and restrictive CSP.
 
-Native Windows regression checks cover permitted cache capabilities and rejected unsafe ACLs, the WPF picker, installer navigation and cleanup safeguards. Isolated Chromium relay fixtures use fresh test browsers and do not prove every real signed-in browser workflow. The owner-reported ChatGPT Free result remains one account's field evidence. Clean-Windows, Windows sign-in/reboot and new human-approval acceptance are not established by this repair.
+The local full run passed 126 of 131 tests, with five environment-specific skips. One additional bridge-error scenario passed separately: 132 unique tests, 127 passed, five skipped, zero unresolved failures. It verifies that an acknowledged decision with a lost reply is reconciled without replay. Browser checks use isolated phone/desktop viewports and protocol fixtures; WPF tests exercise the compiled window with a disposable transport. They are not physical Android ChatGPT acceptance or new trusted human-click attestation. The exact Android cause and the host's outer diagnostic-badge conditions remain unconfirmed.
+
+Earlier 1.0.5 field evidence established recovered Windows readiness, Tunnel connectivity and successful host-requested file operations after the numbered-profile fix. That evidence and the owner's ChatGPT Free result remain separate from 1.0.6 acceptance. A production update preserves live pending decisions and is deferred while the maintenance guard reports active requests. Clean-Windows and Windows sign-in/reboot acceptance are not established here.
 
 Earlier stable and RC records remain historical evidence. The table below describes RC3 only.
 

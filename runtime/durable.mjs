@@ -131,6 +131,17 @@ export class DurableLedger {
   grant(kind,id){const token=randomBytes(32).toString('hex');if(kind==='ui')this.db.prepare('INSERT INTO ui_capabilities(owner,id,token_hash,created) VALUES(?,?,?,?)').run(this.owner,String(id),digest(token),Date.now());else this.db.prepare('INSERT OR REPLACE INTO scopes(owner,kind,id,token_hash,created) VALUES(?,?,?,?,?)').run(this.owner,kind,String(id),digest(token),Date.now());return token;}
   owns(kind,id,token){if(!token)return false;const hash=digest(String(token));if(kind==='ui'&&this.db.prepare('SELECT 1 FROM ui_capabilities WHERE owner=? AND id=? AND token_hash=?').get(this.owner,String(id),hash))return true;const r=this.db.prepare('SELECT token_hash FROM scopes WHERE owner=? AND kind=? AND id=?').get(this.owner,kind,String(id));return !!r&&r.token_hash===hash;}
   event(id,event,channel){this.db.prepare('INSERT INTO approval_events(id,owner,operation_id,event,channel,at) VALUES(?,?,?,?,?,?)').run(randomUUID(),this.owner,id,event,channel,Date.now());}
+  uiDelivery(id){return this.db.prepare("SELECT event,at FROM approval_events WHERE owner=? AND operation_id=? AND event IN ('ui_notify_reserved','ui_notify_sent','ui_notify_uncertain') ORDER BY at DESC,rowid DESC LIMIT 1").get(this.owner,id)??null;}
+  reserveUiDelivery(id,retry=false){return this.tx(()=>{
+    const choice=this.db.prepare("SELECT 1 FROM approval_events WHERE owner=? AND operation_id=? AND event IN ('allow_once','allow_chat','deny') LIMIT 1").get(this.owner,id);
+    if(!choice)return {granted:false,status:'no-decision'};
+    const previous=this.uiDelivery(id);
+    if(previous?.event==='ui_notify_sent')return {granted:false,status:'sent'};
+    if(previous&&!retry)return {granted:false,status:'unconfirmed'};
+    const token=this.grant('ui_delivery',id);this.event(id,'ui_notify_reserved','app-capability-validated');
+    return {granted:true,status:'reserved',token};
+  });}
+  finishUiDelivery(id,token,sent){if(!this.owns('ui_delivery',id,token))throw Error('NOTIFICATION_CAPABILITY_INVALID');if(this.uiDelivery(id)?.event==='ui_notify_sent')return {status:'sent'};this.event(id,sent?'ui_notify_sent':'ui_notify_uncertain','app-capability-validated');return {status:sent?'sent':'unconfirmed'};}
   events(limit=20){const labels={allow_once:'允许这一次',allow_chat:'对话内固定范围允许',deny:'拒绝',expired:'过期',succeeded:'已完成',failed:'失败',unknown:'结果待核实'};return this.db.prepare('SELECT operation_id,event,channel,at FROM approval_events WHERE owner=? ORDER BY at DESC LIMIT ?').all(this.owner,limit).map(r=>({...r,at:new Date(r.at).toISOString(),label:labels[r.event]??r.event,title:this.public(this.row(r.operation_id))?.presentation?.title??'历史操作'}));}
   context(token){
     const now=Date.now();

@@ -15,7 +15,7 @@ using Microsoft.Win32;
 using Microsoft.Win32.SafeHandles;
 
 public static class HostCore {
- public const string Version="1.0.5";
+ public const string Version="1.0.6";
  public static readonly JavaScriptSerializer Json=new JavaScriptSerializer{MaxJsonLength=32*1024*1024};
  public static string Full(string p){return Path.GetFullPath(p).TrimEnd(Path.DirectorySeparatorChar);}
  // Fresh-install defaults prefer a non-system fixed drive (D: when present)
@@ -44,7 +44,8 @@ public static class HostCore {
  public static void SaveText(string p,string text){CheckPath(p);string tmp=p+".new-"+Guid.NewGuid().ToString("N");File.WriteAllText(tmp,text,new UTF8Encoding(false));if(File.Exists(p))File.Replace(tmp,p,null);else File.Move(tmp,p);}
  public static string OwnerId(string data){return HashText(WindowsIdentity.GetCurrent().User.Value+"|"+Full(data).ToLowerInvariant()).Substring(0,24);}
  public static string PipeName(string data){return "YGPT-"+OwnerId(data);}
- public static Dictionary<string,object> Control(string data,string action){var s=Secrets(data);using(var pipe=new NamedPipeClientStream(".",PipeName(data),PipeDirection.InOut)){pipe.Connect(2500);var w=new StreamWriter(pipe,new UTF8Encoding(false),1024,true){AutoFlush=true};w.WriteLine(Json.Serialize(new{key=S(s,"localKey"),action=action}));using(var r=new StreamReader(pipe,Encoding.UTF8,false,4096,true)){var task=r.ReadLineAsync();if(!task.Wait(15000))throw new Exception("Local control timed out; no operation was replayed");return Json.Deserialize<Dictionary<string,object>>(task.Result);}}}
+ public static Dictionary<string,object> Control(string data,string action){return ControlRequest(data,action,null);}
+ public static Dictionary<string,object> ControlRequest(string data,string action,object payload){var s=Secrets(data);using(var pipe=new NamedPipeClientStream(".",PipeName(data),PipeDirection.InOut)){pipe.Connect(2500);var w=new StreamWriter(pipe,new UTF8Encoding(false),1024,true){AutoFlush=true};w.WriteLine(Json.Serialize(new{key=S(s,"localKey"),action=action,payload=payload}));using(var r=new StreamReader(pipe,Encoding.UTF8,false,4096,true)){var task=r.ReadLineAsync();if(!task.Wait(15000))throw new Exception("Local control timed out; no operation was replayed");return Json.Deserialize<Dictionary<string,object>>(task.Result);}}}
  // Task Scheduler may store the same owner as a short account name rather than
  // the SID supplied at creation. Resolve it back to a SID before comparison.
  public static bool SameUserPrincipal(string recorded,SecurityIdentifier expected){
