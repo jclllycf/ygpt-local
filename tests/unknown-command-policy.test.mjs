@@ -42,8 +42,9 @@ test('Broker executes the directory-statistics shape without a card and keeps an
  const f=fixture(),base=path.join(f.dir,'data','scan-fixture');fs.mkdirSync(path.join(base,'example'),{recursive:true});fs.writeFileSync(path.join(base,'example','keep.txt'),'unchanged fixture');
  const c=await f.client().start();try{
   const script="$rs=@('"+base.replaceAll("'","''")+"'); foreach($p in $rs) { Get-ChildItem -LiteralPath $p -Directory | ForEach-Object {$s=Get-ChildItem -LiteralPath $_.FullName -File -Recurse | Measure-Object Length -Sum; Write-Output ($_.Name+'|'+[math]::Round($s.Sum/1GB,3)+'|'+$s.Count)}}";
-  const result=unpack(await c.call('y_process_run',{executable:ps,args:['-NoProfile','-NonInteractive','-Command',script],cwd:base}));
-  assert.equal(result.ok,true,JSON.stringify(result));assert.equal(result.result.state,'succeeded');assert.match(result.result.stdout,/example\|0\|1/);assert.equal(fs.readFileSync(path.join(base,'example','keep.txt'),'utf8'),'unchanged fixture');
+  // Cold PowerShell startup on hosted Windows can exceed the ten-second default.
+  const result=unpack(await c.call('y_process_run',{executable:ps,args:['-NoProfile','-NonInteractive','-Command',script],cwd:base,timeoutMs:45000}));
+  assert.equal(result.ok,true,result.error?.code??result.code);assert.equal(result.result.state,'succeeded');assert.match(result.result.stdout,/example\|0\|1/);assert.equal(fs.readFileSync(path.join(base,'example','keep.txt'),'utf8'),'unchanged fixture');
   const target=path.join(base,'must-not-be-created.txt'),pending=unpack(await c.call('y_process_run',{executable:ps,args:['-NoProfile','-NonInteractive','-Command',"Set-Content -LiteralPath '"+target+"' changed"],cwd:base}));
   assert.equal(pending.code,'APPROVAL_REQUIRED');assert.equal(fs.existsSync(target),false);await decide(c,pending,'deny');assert.equal(fs.existsSync(target),false);
  }finally{await c.close();}
