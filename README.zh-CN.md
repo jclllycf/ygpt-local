@@ -6,15 +6,17 @@
 
 **产品定位：** YGPT Local 是免费、开源、轻量的本地半自动化 Agent，让你在支持相关插件功能的 ChatGPT 网页端或桌面端对话中，用自然语言调用自己的 Windows 文件、浏览器任务与经授权的工具；敏感操作仍由你控制。YGPT 本身不要求付费会员；ChatGPT 插件入口、Platform Tunnel 和第三方服务各有账户、工作区及费用条件，不能保证所有免费账户都具备相同能力。参见 [OpenAI 插件可用性说明](https://help.openai.com/en/articles/20001256-plugins-in-chatgpt)及[自定义 MCP 条件](https://help.openai.com/en/articles/12584461-connecting-custom-mcp-servers-in-chatgpt)。
 
-**1.0.8 是当前正式版，界面仅英文。** 安装包见 [GitHub Releases](https://github.com/jclllycf/ygpt-local/releases/tag/v1.0.8)，源码和发行包均公开。实测范围见 [正式版说明](docs/RELEASE_1.0.8_ZH.md)。另见 [English README](README.md)、[CHANGELOG](CHANGELOG.md)、[中文升级指南](docs/UPGRADE_USER_GUIDE.zh-CN.md)、[中文安装教程](docs/SETUP_GUIDE.zh-CN.md)、[验收状态](docs/VALIDATION.md)、[安全边界](docs/SECURITY.md)。
+**1.0.9 是当前正式版，界面仅英文。** 安装包见 [GitHub Releases](https://github.com/jclllycf/ygpt-local/releases/tag/v1.0.9)，源码和发行包均公开。实测范围见 [正式版说明](docs/RELEASE_1.0.9_ZH.md)。另见 [English README](README.md)、[CHANGELOG](CHANGELOG.md)、[中文升级指南](docs/UPGRADE_USER_GUIDE.zh-CN.md)、[中文安装教程](docs/SETUP_GUIDE.zh-CN.md)、[验收状态](docs/VALIDATION.md)、[安全边界](docs/SECURITY.md)。
 
 **权限与开发模式：** 普通模式直接放行结构化读取、普通修改和有快照保护的小规模清理；敏感修改、大规模删除、系统变更与桌面输入仍需授权。开发时可用 `y_chat_access` 申请当前聊天的 **Full Access**，由本人点击专用卡片开启，默认两小时；其他聊天权限不变，可随时查询或退出。操作说明见 [Full Access 指南](docs/CHAT_ACCESS.zh-CN.md)。
+
+脚本和命令默认放行：未知代码、变量、循环、多行参数、动态或编码脚本，以及对受保护目录的单纯引用，均不会单独触发授权。只有识别出明确高危信号时才要求确认；这是一套用户指定的黑名单策略，不是操作系统沙箱或未知代码的安全证明。
 
 **免费账户实测进展：** 2026 年 10 月 23 日，项目所有者报告已在 ChatGPT Free 账户中实际使用成功。这为产品可行性增加了用户实测证据；每个账户仍需具备相应入口、工作区权限和 Platform Tunnel 访问权限，不代表所有免费账户均保证可用。
 
 ## 图形安装流程
 
-1. 获取 `YGPTLocal-Setup-1.0.8-win-x64.exe`，核对 `SHA256SUMS.txt`。安装包未签名。已经安装过？运行 `YGPTLocal-Update-1.0.8-win-x64.exe`：原地更新，保留数据、密钥、连接身份、快照和 ChatGPT 插件，并将旧版外部数据迁入程序目录（见 [升级指南](docs/UPGRADE_USER_GUIDE.zh-CN.md)）。
+1. 获取 `YGPTLocal-Setup-1.0.9-win-x64.exe`，核对 `SHA256SUMS.txt`。安装包未签名。已经安装过？运行 `YGPTLocal-Update-1.0.9-win-x64.exe`：原地更新，保留数据、密钥、连接身份、快照和 ChatGPT 插件，并将旧版外部数据迁入程序目录（见 [升级指南](docs/UPGRADE_USER_GUIDE.zh-CN.md)）。
 2. 按九步向导选择程序目录和授权工作目录。内置 Node、Python 和官方 Tunnel Client，普通安装不要求开发环境或管理员权限。
 3. 保留默认 **OpenAI Secure MCP Tunnel**。在自己有资格的 Platform 组织中创建专用 Tunnel，并关联实际使用的 ChatGPT 工作区。不要抢用其他实例已连接的 Tunnel。
 4. 在本机填写完整 Tunnel ID 和专用运行时 API Key。Key 使用遮罩输入和当前用户 DPAPI 加密，用于认证 Tunnel Client；安装器不调用 GPT 生成模型，也不代为创建 Key。

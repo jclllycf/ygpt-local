@@ -41,7 +41,7 @@ function authorizeNativeStandard(intent){
     const decision=authorize('job_submit',{cwd,argv:[a.executable,...(a.args??[])]});
     if(decision.decision!=='allow')return decision;
     if(highRiskCommand(argvRiskText([a.executable,...(a.args??[])])))return hold('Destructive or privileged executable arguments require verified host review');
-    return allow('Pinned executable, enrolled project cwd, current user; bounded pre-write coverage');
+    return allow('Owner default-allow command with no identified high-risk signal; current user and bounded pre-write coverage');
   }
   if(['y_process_poll','y_process_input','y_process_cancel','y_job_status','y_job_logs','y_job_cancel','y_job_list'].includes(n))return allow('Private ingress, engine-owned sessions and durable owner-scoped job IDs only');
   return hold('Unclassified native capability: '+n+' — instead of a blanket refusal, a verified owner decision is required');

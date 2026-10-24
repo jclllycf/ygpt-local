@@ -29,7 +29,7 @@ test('Access policy rc.13: nothing is hard-refused; risk becomes a human gate',a
   assert.equal(check('write_file',{path:'C:\\YGPT\\data\\state\\ops.sqlite3',content:'x'}).decision,'approve');
   assert.equal(check('write_file',{path:'G:\\vault\\note.txt',content:'x'}).decision,'approve');
   assert.equal(check('y_download_file',{destination:'C:\\YGPT\\data\\state\\f.bin',url:'https://example.com/f'}).decision,'approve');
-  assert.equal(check('job_submit',{cwd:'C:\\YGPT\\data\\state',argv:['C:\\Windows\\System32\\cmd.exe','/c','echo hi']}).decision,'approve');
+  assert.equal(check('job_submit',{cwd:'C:\\YGPT\\data\\state',argv:['C:\\Windows\\System32\\cmd.exe','/c','echo hi']}).decision,'allow');
 
   // Unclassified tools ask a human instead of being disabled.
   assert.equal(check('y_something_new',{}).decision,'approve');

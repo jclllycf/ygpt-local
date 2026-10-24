@@ -1,4 +1,12 @@
-# Current validation: 1.0.8
+# Current validation: 1.0.9
+
+Release 1.0.9 fixes command approvals based solely on a protected path reference or an unrecognized script shape. The actual reported request was evaluated without execution: the old policy required approval and the new policy allowed it. Broker fixtures execute the same directory-statistics shape with local variables, loops and arithmetic, while an explicit protected write remains suspended.
+
+Regression coverage includes unknown/dynamic/encoded and multiline scripts, protected working directories, protected writes, credential uploads, disk/security/service changes, decoded destructive commands and existing Full Access isolation. Exact current test, package and installed-runtime results are in [machine-readable verification](../evidence/readonly-1.0.9-verification.json). No test decides or replays a live pending operation. This default-allow blacklist does not prove arbitrary scripts safe or create an OS sandbox.
+
+The full local run passed 142 of 147 tests with five environment skips and no failures. After the runtime-path and fixture portability corrections, all 14 final access/command tests passed, including a real Windows 8.3 alias, linked-path refusal, npm/npx launch integrity, the actual local Recycle Bin and broker directory statistics. Hosted CI results are reported separately; the prior 1.0.8 CI had failed runtime-alias checks and timed out in its combined Recycle Bin fixture. The bin-dependent test is now separate and checks fixture-volume availability rather than skipping permission coverage.
+
+## Previous 1.0.8 validation
 
 Release 1.0.8 reduces unnecessary approvals and adds owner-approved, chat-scoped Full Access. See the [release notes](RELEASE_1.0.8.md), [permission guide](CHAT_ACCESS.md) and [machine-readable verification](../evidence/access-1.0.8-verification.json).
 

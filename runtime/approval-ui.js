@@ -123,7 +123,7 @@
   if(card){render();schedule(0);}
  }
  window.addEventListener('openai:set_globals',globals);globals();
- if(window.parent!==window)request('ui/initialize',{appInfo:{name:'YGPT approval',version:'1.0.8'},appCapabilities:{},protocolVersion:'2026-01-26'}).then(result=>{
+ if(window.parent!==window)request('ui/initialize',{appInfo:{name:'YGPT approval',version:'1.0.9'},appCapabilities:{},protocolVersion:'2026-01-26'}).then(result=>{
   standard=true;healthy=true;call=async(name,args)=>{try{return await request('tools/call',{name,arguments:args});}catch(error){if(error.code===-32601&&typeof window.openai?.callTool==='function')return window.openai.callTool(name,args);throw error;}};
   window.parent.postMessage({jsonrpc:'2.0',method:'ui/notifications/initialized'},'*');
   const resize=()=>{const rect=document.querySelector('main').getBoundingClientRect();window.parent.postMessage({jsonrpc:'2.0',method:'ui/notifications/size-changed',params:{width:Math.ceil(rect.width),height:Math.ceil(rect.height)}},'*');};

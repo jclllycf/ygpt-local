@@ -1,0 +1,71 @@
+{
+  "version": "1.0.9",
+  "at": "2026-10-24T20:33:23.560Z",
+  "tests": {
+    "fullRun": {
+      "total": 147,
+      "passed": 142,
+      "failed": 0,
+      "skipped": 5
+    },
+    "finalTargetedAfterPathFix": {
+      "total": 14,
+      "passed": 14,
+      "failed": 0,
+      "skipped": 0
+    }
+  },
+  "reportedRequestPolicy": {
+    "old": "approve",
+    "current": "allow",
+    "originalExecutedByThisCheck": false
+  },
+  "policy": {
+    "unknownScripts": "allow-unless-explicit-high-risk",
+    "pathReferenceAloneRequiresApproval": false,
+    "protectedWorkingDirectoryAloneRequiresApproval": false,
+    "multilineArgumentsAllowed": true,
+    "encodedPowerShellConcreteRiskChecked": true,
+    "protectedWritesCredentialUploadsAndDestructiveChangesReviewed": true,
+    "fullAccessAndResourceOwnershipRetained": true
+  },
+  "package": {
+    "version": "1.0.9",
+    "manifestFiles": 5908,
+    "manifestMismatches": 0,
+    "forbiddenMembers": 0,
+    "currentRuntimeServiceExtensionMatch": true,
+    "currentNativeBinariesMatch": true,
+    "artifacts": [
+      {
+        "file": "YGPTLocal-Setup-1.0.9-win-x64.exe",
+        "bytes": 94642688,
+        "sha256": "16fcd39d5dd4136d6bae841389ceea01795b8f6db0b7c89aca8cb0d4c2f21f68"
+      },
+      {
+        "file": "YGPTLocal-Update-1.0.9-win-x64.exe",
+        "bytes": 94642688,
+        "sha256": "f7f4e32ef287a6fde332d29bb318016812492defbb1371f7d63a98b272bd1092"
+      },
+      {
+        "file": "ygpt-local-portable-1.0.9-win-x64.zip",
+        "bytes": 93645726,
+        "sha256": "a65203d4c0258ef511304663d52c9f187867a63af88f5a23d71effc069acd1e8"
+      }
+    ]
+  },
+  "installed": {
+    "applied": false,
+    "reason": "Existing pending owner decision is retained; maintenance guard prevents replacement"
+  },
+  "ci": {
+    "prior108Failure": "Windows short path canonicalization and bin-dependent combined fixture; fixed and locally regressed",
+    "candidateStatus": "pending"
+  },
+  "limits": {
+    "newChatGPTHostTask": "not exercised by this verification",
+    "physicalAndroid": "not rerun; approval UI behavior unchanged",
+    "freshCleanWindowsVM": "not rerun",
+    "unknownCodeSafety": "Not proven; owner-requested default-allow blacklist, not an OS sandbox"
+  }
+}

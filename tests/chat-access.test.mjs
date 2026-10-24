@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import {createHash} from 'node:crypto';
+import {execFileSync} from 'node:child_process';
 import {DurableLedger} from '../runtime/durable.mjs';
 import {chatAccessStatus,chatAccessGate} from '../runtime/chat-access.mjs';
 import {resourceIntent} from '../runtime/ownership.mjs';
@@ -52,6 +53,15 @@ test('Trusted runtime is an exact shipped path plus hash; altered binaries and u
  assert.equal(trustedRuntimeExecutable(exe,dir),true);fs.writeFileSync(exe,'changed-runtime');assert.equal(trustedRuntimeExecutable(exe,dir),false);
  const other=path.join(dir,'runtimes/node/unreviewed.cmd');fs.writeFileSync(other,'fixture-runtime');assert.equal(trustedRuntimeExecutable(other,dir),false);
  assert.equal(trustedRuntimeExecutable(path.join(dir,'../npx.cmd'),dir),false);
+});
+
+test('Windows short-path aliases keep exact runtime trust without trusting linked ancestors',{skip:process.platform!=='win32'},t=>{
+ const dir=fs.mkdtempSync(path.join(os.tmpdir(),'ygpt-runtime-long-alias-fixture-')),exe=path.join(dir,'runtimes/node/npx.cmd');fs.mkdirSync(path.dirname(exe),{recursive:true});fs.writeFileSync(exe,'fixture-runtime');
+ const bytes=fs.readFileSync(exe);fs.writeFileSync(path.join(dir,'manifest.json'),JSON.stringify({product:'YGPT Local',files:[{path:'runtimes/node/npx.cmd',bytes:bytes.length,sha256:createHash('sha256').update(bytes).digest('hex')}]}));
+ const ps=path.join(process.env.SystemRoot,'System32/WindowsPowerShell/v1.0/powershell.exe'),short=execFileSync(ps,['-NoProfile','-NonInteractive','-Command',"(New-Object -ComObject Scripting.FileSystemObject).GetFolder($env:YGPT_ALIAS_FIXTURE).ShortPath"],{encoding:'utf8',windowsHide:true,env:{...process.env,YGPT_ALIAS_FIXTURE:dir}}).trim();
+ if(short.toLowerCase()===dir.toLowerCase()){t.skip('8.3 aliases are disabled on this fixture volume');return;}
+ assert.equal(trustedRuntimeExecutable(path.join(short,'runtimes/node/npx.cmd'),short),true);assert.equal(trustedRuntimeExecutable(exe,short),true);
+ const linked=path.join(dir,'linked-node');fs.symlinkSync(path.dirname(exe),linked,'junction');assert.equal(trustedRuntimeExecutable(path.join(linked,'npx.cmd'),dir),false);
 });
 
 test('SSH diagnostics using a private key are reads; mutation, shell injection and forwarding are not classified as reads',()=>{
@@ -107,7 +117,7 @@ test('Broker Full Access is requested through a card, applies only to this chat,
  }finally{await c.close();}
 });
 
-test('Standard mode reads protected files and dry-run patches automatically; ordinary edits and small cleanup keep snapshots',async()=>{
+test('Standard mode reads protected files and dry-run patches automatically; ordinary edits keep snapshots',async()=>{
  const f=fixture(),privateFile=path.join(f.project,'.ssh','fixture.txt'),ordinary=path.join(f.project,'ordinary.txt');
  fs.mkdirSync(path.dirname(privateFile));fs.writeFileSync(privateFile,'fixture before\n');fs.writeFileSync(ordinary,'ordinary before\n');
  const c=await f.client().start(),call=async(name,args={})=>{const r=await c.call(name,args);assert.ok(!r.isError,JSON.stringify(r));return unpack(r);};
@@ -124,8 +134,15 @@ test('Standard mode reads protected files and dry-run patches automatically; ord
   const changed=await call('y_file_patch',{...input,...ctx});assert.ok(changed.result.snapshotId);assert.match(fs.readFileSync(privateFile,'utf8'),/after/);await decide(c,pending,'deny',ctx.contextToken);
   await call('y_chat_access',{action:'revoke',...ctx});
   const edited=await call('y_file_edit',{path:ordinary,oldText:'before',newText:'after'});assert.ok(edited.result.snapshotId);
-  const trash=[path.join(f.project,'cleanup-a.txt'),path.join(f.project,'cleanup-b.txt')];for(const file of trash)fs.writeFileSync(file,'disposable fixture');
-  const cleaned=await call('y_file_trash',{paths:trash});assert.ok(cleaned.snapshotId);assert.equal(cleaned.coverage,'complete');assert.ok(trash.every(file=>!fs.existsSync(file)));
   const protectedAgain=await call('y_file_edit',{path:privateFile,oldText:'after',newText:'next',...ctx});assert.equal(protectedAgain.code,'APPROVAL_REQUIRED');await decide(c,protectedAgain,'deny',ctx.contextToken);
+ }finally{await c.close();}
+});
+
+test('Small cleanup uses verified snapshots and the actual Windows Recycle Bin',async t=>{
+ const f=fixture(),bin=path.join(path.parse(f.project).root,'$Recycle.Bin');
+ if(process.platform!=='win32'||!fs.existsSync(bin)){t.skip('No existing Windows Recycle Bin on this fixture volume; snapshot policy is tested separately');return;}
+ const c=await f.client().start();try{
+  const trash=[path.join(f.project,'cleanup-a.txt'),path.join(f.project,'cleanup-b.txt')];for(const file of trash)fs.writeFileSync(file,'disposable fixture');
+  const response=await c.call('y_file_trash',{paths:trash});assert.ok(!response.isError,JSON.stringify(response));const cleaned=unpack(response);assert.ok(cleaned.snapshotId);assert.equal(cleaned.coverage,'complete');assert.ok(trash.every(file=>!fs.existsSync(file)));
  }finally{await c.close();}
 });

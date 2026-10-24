@@ -106,9 +106,16 @@ function workflow(a){
 // as an actual disk command. All other programs retain the full signal scan.
 export function argvRiskText(argv=[]){
   const [exe,flag,script,...rest]=argv;
-  const executable=trustedRuntimeExecutable(exe,INSTALL)?'verified-ygpt-runtime':String(exe??'');
+  const executable=trustedRuntimeExecutable(exe,INSTALL)?'verified-ygpt-runtime':w.basename(String(exe??''));
   if(config.blacklistDefaultAllow&&/^(?:node|node\.exe)$/i.test(w.basename(String(exe)))&&flag==='-e'&&!rest.length&&typeof script==='string'&&/^console\.log\((?:"(?:[^"\\\r\n]|\\["\\/bfnrt]|\\u[0-9a-f]{4})*"|'(?:[^'\\\r\n]|\\['"\\/bfnrt]|\\u[0-9a-f]{4})*')\);?$/i.test(script.trim()))return executable+' literal-print-only';
-  return [executable,...argv.slice(1)].join(' ');
+  const parts=[executable,...argv.slice(1)];
+  if(/^(?:powershell|pwsh)(?:\.exe)?$/i.test(w.basename(String(exe)))){
+    const index=argv.findIndex((value,i)=>i>0&&/^-(?:enc|encodedcommand)$/i.test(value));
+    if(index>0&&typeof argv[index+1]==='string'&&/^[A-Za-z0-9+/]+={0,2}$/.test(argv[index+1])){
+      const bytes=Buffer.from(argv[index+1],'base64');if(bytes.length%2===0)parts.push(bytes.toString('utf16le'));
+    }
+  }
+  return parts.join(' ');
 }
 // A high-risk signal is never treated as a comprehensive shell sandbox. The
 // same check is applied to argv job paths, including direct interpreter flags.
@@ -116,17 +123,21 @@ export function highRiskCommand(command){
   const value=String(command);
   // File tools classify targets structurally; terminals need an explicit
   // mutation + system-path signal as well. This is a blacklist, not a sandbox.
-  if(config.blacklistDefaultAllow&&/\b(?:set-content|add-content|out-file|copy-item|move-item|remove-item|writefilesync|writefile|unlinksync|unlink|rmsync|rmtree|open|copy|move|del|erase)\b[^\r\n;]{0,160}(?:[a-z]:[\\/](?:windows|program files(?: \(x86\))?|programdata|boot|efi)\b|\$(?:env:)?(?:windir|systemroot|programfiles|programdata)\b)|(?:^|[^=])>{1,2}\s*["']?(?:[a-z]:[\\/](?:windows|program files|programdata|boot|efi)\b|\$env:(?:windir|systemroot|programfiles|programdata)\b)/i.test(value))return true;
+  if(config.blacklistDefaultAllow&&/\b(?:set-content|add-content|out-file|copy-item|move-item|remove-item|writefilesync|writefile|unlinksync|unlink|rmsync|rmtree|copy|move|del|erase)\b[^\r\n;]{0,160}(?:[a-z]:[\\/](?:windows|program files(?: \(x86\))?|programdata|boot|efi)\b|\$(?:env:)?(?:windir|systemroot|programfiles|programdata)\b)|(?:^|[^=])>{1,2}\s*["']?(?:[a-z]:[\\/](?:windows|program files|programdata|boot|efi)\b|\$env:(?:windir|systemroot|programfiles|programdata)\b)/i.test(value))return true;
   if(/\b(?:set-acl|icacls(?:\.exe)?|takeown(?:\.exe)?|set-mppreference|add-mppreference|set-executionpolicy|new-localuser|remove-localuser|add-localgroupmember|remove-localgroupmember)\b/i.test(value))return true;
-  const normalized=value.replaceAll('/','\\').toLowerCase();
-  // Explicit references to the connector's runtime/key/state or common secret
-  // stores cannot use the ordinary project shell exception. This is a signal
-  // guard, not a claim that arbitrary trusted code is an OS sandbox.
-  if([config.stateDir,config.configFile,INSTALL,...config.protectedRoots].some(p=>normalized.includes(canonical(p))))return true;
-  if(/(?:^|[\s'"(=,])g:[\\/]/i.test(value))return true;
-  if(/(?:^|[\\/\s'"(])(?:\.ssh|\.aws|\.azure|\.kube|\.codex|\.mcp-auth|\.env(?:\.[\w-]+)?)(?:[\\/\s'";)]|$)|\b(?:auth\.json|id_rsa|id_ed25519|login data|credentials\.json)\b/i.test(value))return true;
+  const normalized=value.replaceAll('/','\\').replace(/\\+/g,'\\').toLowerCase();
+  // A path reference, unfamiliar script or local variable assignment is not
+  // evidence of a dangerous effect. Gate protected paths only together with
+  // an explicit mutation or credential-upload signal. This is the owner's
+  // default-allow blacklist, not a proof of arbitrary script safety.
+  const protectedReference=[config.stateDir,config.configFile,INSTALL,...config.protectedRoots].some(p=>normalized.includes(canonical(p)))||/(?:^|[\s'"(=,])g:[\\/]/i.test(value)||/(?:^|[\\/\s'"(])(?:\.ssh|\.aws|\.azure|\.kube|\.codex|\.mcp-auth|\.env(?:\.[\w-]+)?)(?:[\\/\s'";)]|$)|\b(?:auth\.json|id_rsa|id_ed25519|login data|credentials\.json)\b/i.test(value);
+  const mutation=/\b(?:set-content|add-content|out-file|copy-item|move-item|remove-item|new-item|set-item|set-itemproperty|new-itemproperty|remove-itemproperty|writefilesync|writefile|writealltext|writeallbytes|appendalltext|appendfilesync|appendfile|write_text|write_bytes|copyfile|copyfilesync|rename|renamesync|unlinksync|unlink|rmsync|rmdirsync|rmtree|mkdir|touch|chmod|chown|copy|move|del|erase|rm|rmdir|rd|ri)\b|\bopen\s*\([^\r\n]{0,200},\s*["'][wax][b+t]*["']/i.test(value)||/\b(?:powershell|pwsh|cmd|ssh|plink)(?:\.exe)?\b/i.test(value)&&/(?:^|[^=])>{1,2}(?![=])/i.test(value);
+  const upload=/\b(?:invoke-webrequest|invoke-restmethod)\b[\s\S]*-(?:body|infile)\b|\bcurl(?:\.exe)?\b[\s\S]*(?:--(?:data(?:-binary|-raw|-urlencode)?|upload-file|form)\b|(?:^|\s)-[FTd](?=\s|[^\s-]))|\b(?:scp|rsync)(?:\.exe)?\b|\b(?:requests|httpx)\.(?:post|put|patch)\s*\(/i.test(value);
+  if(protectedReference&&(mutation||upload))return true;
   if(/\b(?:stop-process|taskkill(?:\.exe)?|stop-service|restart-service|set-service|new-service|remove-service|register-scheduledtask|unregister-scheduledtask|bcdboot|bootsect|mountvol|fsutil|runas(?:\.exe)?)\b|\bsc(?:\.exe)?\s+(?:create|config|delete|start|stop)\b|\bschtasks(?:\.exe)?\s+\/(?:create|delete|change|run|end)\b|\bnet(?:\.exe)?\s+(?:user|localgroup|start|stop)\b/i.test(value))return true;
-  if(/(?:-enc(?:odedcommand)?\b|\bfrombase64string\b|\binvoke-expression\b|\biex\s*\()/i.test(value))return true; // opaque code cannot be reviewed by a name-only check
+  if(/\b(?:shutdown(?:\.exe)?|reboot|poweroff|halt)\b|\bsystemctl\s+(?:start|stop|restart|reload|enable|disable|mask|unmask|reboot|poweroff)\b|\bservice\s+[^\s;|&]+\s+(?:start|stop|restart|reload)\b/i.test(value))return true;
+  // Encoded/dynamic code alone is not a risk signal. argvRiskText decodes
+  // explicit PowerShell -EncodedCommand bodies for the same concrete checks.
   // A bare wildcard can clear every entry in the working directory even when
   // no -Recurse/-Force option is present. Check *all* statements, not just the
   // first command of a PowerShell/CMD chain or an interpreter's argv.
@@ -153,14 +164,14 @@ function authorizeImpl(name,a={}){
       if(/does not exist/.test(e.message))return gate('developer-task',JSON.stringify({task:a.task,cwd:a.cwd}),e.message+' — a verified owner decision is required');
       return deny(e.message);}
     const target=route(plan.cwd);
-    if(config.blacklistDefaultAllow&&!target.sensitive)return allow('Ordinary structured developer task in the owner default-allow model; project code runs as the current Windows user');
+    if(config.blacklistDefaultAllow)return allow('Owner default-allow developer task; a protected working directory alone is not a mutation');
     const trusted=config.autoDevTasks===true&&(Array.isArray(config.trustedDeveloperRoots)?config.trustedDeveloperRoots:[]).some(r=>{try{return within(plan.cwd,canonical(r));}catch{return false;}})&&target.permission==='project';
     if(trusted)return allow('Owner-opted trusted developer task: '+plan.task+' in '+plan.cwd+'; no shell, but project code runs as current Windows user');
     return gate('developer-task',JSON.stringify({task:plan.task,cwd:plan.cwd}),'Structured developer task outside the owner-trusted set: a verified owner decision substitutes for trust enrollment. No shell; project code runs as the current Windows user');
   }
   if(name==='job_submit'){
-    if(!Array.isArray(a.argv)||!a.argv.length||a.argv.length>100||a.argv.some(x=>typeof x!=='string'||x.length>12000||/[\r\n\x00]/.test(x)))return deny('Invalid job argv');
-    const t=route(a.cwd);if(t.permission==='private'||t.permission==='vault')return gate('job',JSON.stringify({argv:a.argv,cwd:a.cwd},null,2),'Job working directory is inside protected state or the vault: a verified owner decision is required',{cwd:a.cwd,targets:[t.target]});
+    if(!Array.isArray(a.argv)||!a.argv.length||a.argv.length>100||a.argv.some(x=>typeof x!=='string'||x.length>12000||/\x00/.test(x)))return deny('Invalid job argv');
+    const t=route(a.cwd);if(!config.blacklistDefaultAllow&&(t.permission==='private'||t.permission==='vault'))return gate('job',JSON.stringify({argv:a.argv,cwd:a.cwd},null,2),'Job working directory is inside protected state or the vault: a verified owner decision is required',{cwd:a.cwd,targets:[t.target]});
     if(highRiskCommand(argvRiskText(a.argv)))return gate('system-maintenance',JSON.stringify({cwd:a.cwd,argv:a.argv}),'Known destructive or privilege-sensitive job requires verified human authorization');
     if(t.permission==='project')return allow('Ordinary project background job; native Windows ACL and Job Object limits apply');
     if(config.blacklistDefaultAllow)return allow('Owner default-allow job; no explicit blacklist signal; current Windows permissions apply');

@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.0.9 — default-allow scripts and directory statistics
+
+- Fix the reported read-only directory inventory being gated merely for referencing the installation or credential-adjacent folders after its variables, loop and arithmetic fell outside the narrow read-only parser.
+- Unknown scripts, dynamic/encoded code, multiline arguments and protected working directories no longer cause approval by themselves in owner default-allow mode. Concrete destructive, privileged/system-changing, protected-write and credential-upload signals still require review.
+- Decode explicit PowerShell encoded-command bodies for the same known-risk checks. Preserve typed-write protections, per-chat ownership and Full Access activation/revocation.
+- Normalize both runtime paths through Windows realpath so 8.3 aliases retain exact manifest trust, while original linked ancestors and changed hashes are still rejected. Keep the real Recycle Bin integration test separate from portable permission coverage on volumes without an existing bin.
+
 ## 1.0.8 — fewer approvals and chat-scoped Full Access
 
 - Permit all typed reads, protected-path project inspection and dry-run patches without approval. Read-only window binding and focus are automatic; ordinary edits and small cleanup retain verified snapshots.

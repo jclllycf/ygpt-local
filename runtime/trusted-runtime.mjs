@@ -9,10 +9,12 @@ export function trustedRuntimeExecutable(executable,install){
 }
 function verifiedFile(executable,install,allowed){
  try{
-  const root=fs.realpathSync.native(install),full=path.resolve(executable),relative=path.relative(root,full).replaceAll('\\','/');
+  const input=path.resolve(executable),root=fs.realpathSync.native(install),full=fs.realpathSync.native(input),relative=path.relative(root,full).replaceAll('\\','/');
   if(!allowed.has(relative.toLowerCase()))return false;
-  const key=p=>process.platform==='win32'?p.toLowerCase():p;
-  for(let p=full;key(p)!==key(root);p=path.dirname(p)){if(p===path.dirname(p)||fs.lstatSync(p).isSymbolicLink())return false;}
+  // Resolve both sides before comparing: Windows TEMP can contain an 8.3
+  // alias while realpath returns its long name. Check the original ancestor
+  // chain separately so accepting that alias never accepts a junction/link.
+  for(let p=input;;p=path.dirname(p)){if(fs.lstatSync(p).isSymbolicLink())return false;if(p===path.dirname(p))break;}
   const manifestPath=path.join(root,'manifest.json');if(fs.lstatSync(manifestPath).isSymbolicLink())return false;
   const manifest=JSON.parse(fs.readFileSync(manifestPath,'utf8'));
   if(manifest.product!=='YGPT Local'||!Array.isArray(manifest.files))return false;

@@ -2,7 +2,7 @@
 
 Standard mode permits typed reads on all valid local paths, including protected locations, under your Windows account permissions. Ordinary file edits keep protected pre-write snapshots. Small cleanup can run automatically through `y_file_trash`: up to 64 entries and 16 MiB, or one ordinary file up to 32 MiB. Cleanup retains a verified snapshot and uses the Windows Recycle Bin.
 
-Sensitive file changes, major deletions, system/privileged changes and desktop input still require review. Window inventory, binding, inspection and focus are automatic. Recognized read-only PowerShell and SSH diagnostics are also automatic. Arbitrary scripts cannot be proven read-only; risk signals in them can still require review.
+Sensitive file changes, major deletions, system/privileged changes and desktop input still require review. Window inventory, binding, inspection and focus are automatic. Commands and scripts default to allow unless an explicit high-risk signal is identified. Unknown scripts, local variables, loops, dynamic/encoded code, multiline arguments and references to protected folders are not approval reasons by themselves. An unrecognized script is allowed without claiming that its effects have been proven read-only or safe.
 
 Bundled Node, npm, npx and Python executable paths are trusted only when their exact shipped path, size and SHA-256 match the installed manifest. Their arguments are still checked. An unrelated executable in the same folder does not inherit trust.
 
