@@ -1,8 +1,8 @@
 {
   "version": "1.0.9",
-  "at": "2026-10-24T20:33:23.560Z",
+  "at": "2026-10-24T20:47:27.102Z",
   "tests": {
-    "fullRun": {
+    "earlierFullRun": {
       "total": 147,
       "passed": 142,
       "failed": 0,
@@ -11,6 +11,30 @@
     "finalTargetedAfterPathFix": {
       "total": 14,
       "passed": 14,
+      "failed": 0,
+      "skipped": 0
+    },
+    "finalFullRun": {
+      "total": 149,
+      "passed": 137,
+      "failed": 0,
+      "skipped": 12,
+      "skipReasons": [
+        "Seven optional Chromium fixtures lack the environment override in this invocation",
+        "Three POSIX-only helper fixtures",
+        "python3 alias unavailable",
+        "Repo-local Roslyn/reference fixture unavailable"
+      ]
+    },
+    "finalColdStartupFixture": {
+      "total": 4,
+      "passed": 4,
+      "failed": 0,
+      "skipped": 0
+    },
+    "finalDesktopBinFixture": {
+      "total": 10,
+      "passed": 10,
       "failed": 0,
       "skipped": 0
     }
@@ -55,17 +79,130 @@
     ]
   },
   "installed": {
-    "applied": false,
-    "reason": "Existing pending owner decision is retained; maintenance guard prevents replacement"
+    "applied": true,
+    "manifestFiles": 5908,
+    "manifestMismatches": 0,
+    "packageManifestMatches": true,
+    "credentialsConnectionPairingUnchanged": true,
+    "stateAuditPassed": true,
+    "containedState": true,
+    "oldExternalDataAbsent": true,
+    "localReady": true,
+    "tunnelConnected": true,
+    "lastError": "",
+    "verificationAt": "2026-10-24T20:40:53.961Z"
   },
   "ci": {
     "prior108Failure": "Windows short path canonicalization and bin-dependent combined fixture; fixed and locally regressed",
-    "candidateStatus": "pending"
+    "earlier109Candidates": [
+      {
+        "run": 40130317947,
+        "issue": "Directory-statistics fixture hit the ten-second default on hosted Windows; explicit 45-second fixture timeout added."
+      },
+      {
+        "run": 40130629720,
+        "issue": "Statistics passed. Actual shell Recycle Bin timed out on hosted Actions; desktop-only integration now reports its environment requirement. Local real-bin fixture passed again."
+      }
+    ],
+    "candidate": {
+      "commit": "38b268fedcec50011b1497ac3f82e088fe598e86",
+      "url": "https://github.com/jclllycf/ygpt-local/actions/runs/40131106222",
+      "status": "completed",
+      "conclusion": "success",
+      "steps": [
+        {
+          "name": "Set up job",
+          "conclusion": "success"
+        },
+        {
+          "name": "Run actions/checkout@v4",
+          "conclusion": "success"
+        },
+        {
+          "name": "Run actions/setup-node@v4",
+          "conclusion": "success"
+        },
+        {
+          "name": "Run npm ci --ignore-scripts --registry=https://registry.npmjs.org",
+          "conclusion": "success"
+        },
+        {
+          "name": "Run node scripts/fetch-runtimes.mjs",
+          "conclusion": "success"
+        },
+        {
+          "name": "Run npm run build",
+          "conclusion": "success"
+        },
+        {
+          "name": "Run npm test",
+          "conclusion": "success"
+        },
+        {
+          "name": "Run node scripts/licenses.mjs",
+          "conclusion": "success"
+        },
+        {
+          "name": "Run npm run check:public",
+          "conclusion": "success"
+        },
+        {
+          "name": "Run npm run package",
+          "conclusion": "success"
+        },
+        {
+          "name": "Run actions/upload-artifact@v4",
+          "conclusion": "success"
+        },
+        {
+          "name": "Post Run actions/setup-node@v4",
+          "conclusion": "success"
+        },
+        {
+          "name": "Post Run actions/checkout@v4",
+          "conclusion": "success"
+        },
+        {
+          "name": "Complete job",
+          "conclusion": "success"
+        }
+      ],
+      "at": "2026-10-24T20:47:14.463Z",
+      "tests": {
+        "total": 149,
+        "passed": 137,
+        "failed": 0,
+        "skipped": 12
+      }
+    }
   },
   "limits": {
     "newChatGPTHostTask": "not exercised by this verification",
     "physicalAndroid": "not rerun; approval UI behavior unchanged",
     "freshCleanWindowsVM": "not rerun",
     "unknownCodeSafety": "Not proven; owner-requested default-allow blacklist, not an OS sandbox"
+  },
+  "installedSourceSmoke": {
+    "version": "1.0.9",
+    "scope": "Installed binaries and source with separate disposable data; not a ChatGPT host call",
+    "fullAccessToolPresent": true,
+    "initialMode": "standard",
+    "unknownCommandPolicy": "allow-unless-explicit-high-risk-signal",
+    "protectedRuntimeInfoReadWithoutApproval": true,
+    "unlistedOrdinaryExecutableWithoutApproval": true,
+    "statisticsWithLocalsLoopMathAndPrivateFixtureWithoutApproval": true,
+    "fixtureUnchanged": true,
+    "bundledNpxVersionWithoutApproval": true,
+    "bundledNpxDurableJobWithoutApproval": true,
+    "fullAccessEnabled": false,
+    "originalUserRequestExecuted": false,
+    "productionStateOrCredentialsCopied": false,
+    "at": "2026-10-24T20:45:16.948Z"
+  },
+  "pendingRequestHandling": {
+    "originalAutomaticallyExpired": true,
+    "originalExecutedByThisCheck": false,
+    "approvedOrDeniedOnBehalfOfUser": false,
+    "oldUnknownOperationRetained": true
   }
 }
