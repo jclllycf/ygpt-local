@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.0.7 — reliable daily-browser profiles
+
+- Create chat ownership when selecting a paired profile, so subsequent browser opens retain the selection.
+- Allow explicit profile switching while preserving owned tabs; list profile identities and release only the calling chat's holds across profiles.
+- Bound old group-tab initialization, preserve and skip unresponsive renderers, and suppress duplicate CDP attachment events.
+- Add broker-level concurrent-profile and stalled-renderer regression coverage.
+
 ## 1.0.6 — cross-device approval recovery
 
 - Let an approval response finish before asking for a user decision, and stop repeated pending-approval polling by the model.

@@ -18,6 +18,7 @@ import {WebSocketServer, WebSocket} from 'ws';
 const silent=()=>{};
 const EXTENSION_VERSION=JSON.parse(await fs.readFile(new URL('../../extension/manifest.json',import.meta.url),'utf8')).version;
 export class ExtensionRelay {
+  static TAB_SETUP_TIMEOUT_MS=2500;
   constructor({stateDir,port=19341,groupName='YGPT',log=silent}={}){
     this.stateDir=stateDir;this.port=port;this.groupName=groupName;this.log=log;
     this.token=null;this.server=null;this.wssExt=null;this.wssCdp=null;
@@ -26,6 +27,7 @@ export class ExtensionRelay {
                                // targetId IS its main frame's id, and Playwright
                                // looks sessions up by frame id — so tab ids must
                                // never be exposed as targetIds.
+    this.unavailableTabs=new Map(); // temporarily skip unresponsive old group tabs
     this.boundId=null;
     this.profileRelays=new Map(); // separate CDP state for each paired profile
     this.cdpClients=new Set(); // {ws,sessions:Map,sessionsByTab:Map,autoAttach}
@@ -136,7 +138,7 @@ export class ExtensionRelay {
   relaysFor(inst){return [this,...this.profileRelays.values()].filter(r=>r.boundId===inst.id);}
   profileRelay(id){
     if(this.profileRelays.has(id))return this.profileRelays.get(id);
-    const relay=Object.create(this);relay.boundId=null;relay.frameIds=new Map();relay.cdpClients=new Set();relay.tabOrder=new Map();
+    const relay=Object.create(this);relay.boundId=null;relay.frameIds=new Map();relay.unavailableTabs=new Map();relay.cdpClients=new Set();relay.tabOrder=new Map();
     // Sequence numbers must be unique across all profile transports.
     Object.defineProperty(relay,'reqSeq',{get:()=>this.reqSeq,set:n=>{this.reqSeq=n;}});
     relay.start=()=>this.start();relay.stop=async()=>relay.unbind();
@@ -145,7 +147,7 @@ export class ExtensionRelay {
   }
   bind(id){const inst=this.instances.get(id);if(!inst)throw new Error('extension instance is not connected');if(this.boundId!==id)this.unbind();this.boundId=id;return inst;}
   bound(){return this.boundId?this.instances.get(this.boundId)??null:null;}
-  unbind(){this.boundId=null;this.frameIds.clear();for(const c of this.cdpClients)c.ws.terminate();}
+  unbind(){this.boundId=null;this.frameIds.clear();this.unavailableTabs.clear();for(const c of this.cdpClients)c.ws.terminate();}
   async boundGroupTabs(){const inst=this.bound();if(!inst)return [];const {tabs,totalTabs}=await this.callExtension(inst,'tabs.list',{groupName:this.groupName});if(this.bound()!==inst)throw new Error('extension instance changed');if(typeof totalTabs==='number')inst.totalTabs=totalTabs;return tabs.filter(t=>t.inGroup);}
   async requireGroupTab(inst,tabId){const tabs=await this.boundGroupTabs();if(this.bound()!==inst||!tabs.some(t=>t.tabId===tabId))throw new Error('Tab is no longer in the YGPT group');}
   async boundTotalTabs(){const inst=this.bound();if(!inst)return 0;const {tabs,totalTabs}=await this.callExtension(inst,'tabs.list',{groupName:this.groupName});if(typeof totalTabs==='number')inst.totalTabs=totalTabs;return inst.totalTabs;}
@@ -154,13 +156,30 @@ export class ExtensionRelay {
   targetInfo(tab){const openerId=tab.openerTabId!=null?this.frameIds.get(tab.openerTabId):undefined;return {targetId:this.frameIds.get(tab.tabId)??String(tab.tabId),type:'page',title:tab.title??'',url:tab.url??'',attached:false,browserContextId:'ygpt',canAccessOpener:false,...(openerId?{openerId}:{})};}
   async frameIdFor(inst,tabId){
     const cached=this.frameIds.get(tabId);if(cached)return cached;
-    const tree=await this.callExtension(inst,'debugger.send',{tabId,method:'Page.getFrameTree',params:{}});
+    const tree=await this.callExtension(inst,'debugger.send',{tabId,method:'Page.getFrameTree',params:{}},ExtensionRelay.TAB_SETUP_TIMEOUT_MS);
     const fid=tree?.frameTree?.frame?.id;
     if(!fid)throw new Error('could not read the tab frame tree');
+    if(this.bound()!==inst)throw new Error('extension instance changed');
     this.frameIds.set(tabId,String(fid));
     return String(fid);
   }
-  async resolveFrameIds(inst,tabs){for(const t of tabs){if(!this.frameIds.has(t.tabId)){await this.callExtension(inst,'debugger.attach',{tabId:t.tabId}).catch(()=>{});await this.frameIdFor(inst,t.tabId).catch(()=>{});}}}
+  async resolveFrameIds(inst,tabs){
+    // A frozen renderer must not hold up the entire signed-in profile. Only
+    // advertise targets whose real frame ID was resolved; numeric tab IDs
+    // make Playwright wait for a page session that can never initialize.
+    await Promise.all(tabs.map(async({tabId})=>{
+      if(this.frameIds.has(tabId)||(this.unavailableTabs.get(tabId)??0)>Date.now())return;
+      try{
+        await this.callExtension(inst,'debugger.attach',{tabId},ExtensionRelay.TAB_SETUP_TIMEOUT_MS);
+        await this.frameIdFor(inst,tabId);
+        this.unavailableTabs.delete(tabId);
+      }catch{
+        this.unavailableTabs.set(tabId,Date.now()+30000);
+        if(![...this.cdpClients].some(c=>c.instance===inst&&c.byTab.has(tabId)))void this.callExtension(inst,'debugger.detach',{tabId},ExtensionRelay.TAB_SETUP_TIMEOUT_MS).catch(()=>{});
+      }
+    }));
+    return tabs.filter(t=>this.frameIds.has(t.tabId));
+  }
   tabIdForTarget(targetId){const id=String(targetId);for(const [tabId,fid] of this.frameIds)if(fid===id)return tabId;const n=Number(id);return Number.isInteger(n)&&String(n)===id?n:null;}
   // ---------- CDP client side (Playwright) ----------
   onCdpClient(ws){
@@ -186,8 +205,8 @@ export class ExtensionRelay {
   emit(client,method,params,sessionId){this.send(client,{method,params,...(sessionId?{sessionId}:{})});}
   async groupTargets(client){
     const tabs=await this.boundGroupTabs().catch(()=>[]);
-    const inst=this.bound();if(inst&&tabs.length)await this.resolveFrameIds(inst,tabs);
-    return tabs.map(t=>this.targetInfo(t));
+    const inst=this.bound(),ready=inst&&tabs.length?await this.resolveFrameIds(inst,tabs):[];
+    return ready.map(t=>this.targetInfo(t));
   }
   async onCdpMessage(client,msg){
     const {method,params={}}=msg,sessionId=msg.sessionId;
@@ -246,10 +265,10 @@ export class ExtensionRelay {
   }
   async autoAttachAll(client,params={}){
     const tabs=await this.boundGroupTabs().catch(()=>[]);
-    const inst=this.bound();if(inst&&tabs.length)await this.resolveFrameIds(inst,tabs);
-    for(const tab of tabs){
+    const inst=this.bound(),ready=inst&&tabs.length?await this.resolveFrameIds(inst,tabs):[];
+    for(const tab of ready){
       if(client.byTab.has(tab.tabId))continue;
-      try{const sid=await this.attachSession(client,tab.tabId);this.emit(client,'Target.attachedToTarget',{sessionId:sid,targetInfo:{...this.targetInfo(tab),attached:true},waitingForDebugger:false});}catch{}
+      try{const sid=await this.attachSession(client,tab.tabId);this.announceSession(client,sid,tab);}catch{}
     }
   }
   async attachSession(client,tabId){
@@ -258,11 +277,16 @@ export class ExtensionRelay {
     const pending=this.attachTabSession(client,tabId).finally(()=>client.attaching.delete(tabId));
     client.attaching.set(tabId,pending);return pending;
   }
+  announceSession(client,sid,tab){
+    const session=client.sessions.get(sid);if(!session||session.announced||client.closed)return;
+    session.announced=true;
+    this.emit(client,'Target.attachedToTarget',{sessionId:sid,targetInfo:{...this.targetInfo(tab),attached:true},waitingForDebugger:false});
+  }
   async attachTabSession(client,tabId){
     const inst=this.bound();if(!inst)throw new Error('no extension instance is bound');
     await this.requireGroupTab(inst,tabId);
-    await this.callExtension(inst,'debugger.attach',{tabId});
-    await this.frameIdFor(inst,tabId).catch(()=>{});
+    await this.callExtension(inst,'debugger.attach',{tabId},ExtensionRelay.TAB_SETUP_TIMEOUT_MS);
+    await this.frameIdFor(inst,tabId);
     if(client.closed||client.instance!==this.bound())throw new Error('extension instance disconnected');
     const sid='ygpt-session-'+(++this.reqSeq);
     client.sessions.set(sid,{tabId});client.byTab.set(tabId,sid);
@@ -279,7 +303,7 @@ export class ExtensionRelay {
     await this.callExtension(inst,'debugger.attach',{tabId:created.tabId}).catch(()=>{});
     await this.frameIdFor(inst,created.tabId).catch(()=>{});
     const info=this.targetInfo(created);
-    for(const c of this.cdpClients){this.emit(c,'Target.targetCreated',{targetInfo:info});if(c.autoAttach){try{const sid=await this.attachSession(c,created.tabId);this.emit(c,'Target.attachedToTarget',{sessionId:sid,targetInfo:{...info,attached:true},waitingForDebugger:false});}catch{}}}
+    for(const c of this.cdpClients){this.emit(c,'Target.targetCreated',{targetInfo:info});if(c.autoAttach){try{const sid=await this.attachSession(c,created.tabId);this.announceSession(c,sid,created);}catch{}}}
     return info.targetId;
   }
   async closeTarget(client,tabId){
@@ -293,6 +317,7 @@ export class ExtensionRelay {
     if(this.boundId!==inst.id)return;
     const targetId=this.frameIds.get(tabId)??String(tabId);
     this.frameIds.delete(tabId);
+    this.unavailableTabs.delete(tabId);
     for(const c of this.cdpClients){
       const sid=c.byTab.get(tabId);
       if(sid){this.emit(c,'Target.detachedFromTarget',{sessionId:sid,targetId});c.sessions.delete(sid);c.byTab.delete(tabId);}

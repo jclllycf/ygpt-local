@@ -12,6 +12,8 @@ import path from 'node:path';
 
 import {WebSocket} from 'ws';
 import {AsyncLocalStorage} from 'node:async_hooks';
+import {fixture,unpack,until} from './helpers.mjs';
+import net from 'node:net';
 
 const CHROME=process.env.YGPT_TEST_CHROMIUM??'/opt/meta-chromium/chrome';
 const available=fs.existsSync(CHROME);
@@ -34,8 +36,8 @@ async function serveFixtures(context){
 }
 
 class FakeExtension {
-  constructor(playwright,endpoint,token,{id,email}){
-    this.pw=playwright;this.id=id;this.email=email;this.tabs=new Map();this.seq=100;this.createCalls=[];
+  constructor(playwright,endpoint,token,{id,email,label}){
+    this.pw=playwright;this.id=id;this.email=email;this.label=label;this.tabs=new Map();this.seq=100;this.createCalls=[];
     this.ws=new WebSocket(endpoint.replace('http://','ws://')+'/ext?token='+encodeURIComponent(token),{origin:'chrome-extension://'+'a'.repeat(32)});
     this.ws.on('message',raw=>{void this.onMessage(JSON.parse(raw.toString()));});
   }
@@ -54,7 +56,7 @@ class FakeExtension {
   async openFromGroupTab(openerTabId,url){const page=await this.context.newPage();await page.goto(url);const tabId=++this.seq;this.tabs.set(tabId,{page,inGroup:true,session:null,openerTabId});this.send({type:'event',kind:'tabsChanged',totalTabs:this.tabs.size});return tabId;}
   tabIdFor(url){for(const [tabId,t] of this.tabs)if(t.page.url()===url)return tabId;return null;}
   async chromeDetach(tabId,reason){const t=this.tabs.get(tabId);await t?.session?.detach().catch(()=>{});if(t)t.session=null;this.send({type:'event',kind:'detached',tabId,reason});}
-  hello(){this.send({type:'hello',id:this.id,browser:'Chrome',version:'fake',profile:{email:this.email||null,id:this.email?'id-'+this.id:null},totalTabs:this.tabs.size});}
+  hello(){this.send({type:'hello',id:this.id,browser:'Chrome',version:'fake',profileLabel:this.label,profile:{email:this.email||null,id:this.email?'id-'+this.id:null},totalTabs:this.tabs.size});}
   async onMessage(msg){
     if(msg.type==='registered'){this.registration=msg;return;}
     if(msg.type!=='req')return;
@@ -80,6 +82,7 @@ class FakeExtension {
       }
       if(msg.method==='debugger.detach'){const t=this.tabs.get(p.tabId);if(t?.session){await t.session.detach().catch(()=>{});t.session=null;}return reply(true,{});}
       if(msg.method==='debugger.send'){
+        if(p.method==='Page.getFrameTree'&&p.tabId===this.hangFrameTreeTab)return;
         const t=this.tabs.get(p.tabId);if(!t?.session)throw new Error('debugger not attached');
         return reply(true,await t.session.send(p.method,p.params||{}));
       }
@@ -264,4 +267,68 @@ test('Two chats concurrently control two profiles with overlapping Chrome tab id
     assert.equal(fakes[0].createCalls.length,1);assert.equal(fakes[1].createCalls.length,1);
     assert.ok(browsers.every(b=>b.isConnected()),'personal browsers remain running');
   }finally{await facade.close();await Promise.all(browsers.map(b=>b.close()));}
+});
+
+test('Broker attach returns a private chat context that preserves profile selection on subsequent tool calls',{skip:!available&&'no chromium on this host',timeout:120000},async()=>{
+  const {chromium}=await import('playwright');
+  const f=fixture(),listener=net.createServer();await new Promise(r=>listener.listen(0,'127.0.0.1',r));
+  const port=listener.address().port;await new Promise(r=>listener.close(r));
+  f.config.browser.extension.port=port;fs.writeFileSync(f.file,JSON.stringify(f.config));
+  const c=await f.client().start(),browsers=[],fakes=[];
+  const call=async(name,args={})=>{const r=await c.call(name,args);assert.ok(!r.isError,JSON.stringify(r));return unpack(r);};
+  try{
+    const pairing=await until(async()=>{try{return JSON.parse(fs.readFileSync(path.join(f.config.stateDir,'extension-pairing.json'),'utf8'));}catch{return null;}});
+    for(const [i,label] of ['Work profile','Personal profile'].entries()){
+      const browser=await chromium.launch({executablePath:CHROME});browsers.push(browser);
+      const fake=new FakeExtension(null,'http://127.0.0.1:'+port,pairing.token,{id:'broker-profile-'+i,email:'',label});fakes.push(fake);
+      await fake.init(browser);fake.hello();await until(()=>fake.registration);
+    }
+    const choice=await call('y_browser_attach');assert.equal(choice.result.needsChoice,true);
+    assert.ok(choice.ygptContext?.contextToken,'even the profile picker must return this chat context');
+    const a=await call('y_browser_attach',{instance:'Work profile',contextToken:choice.ygptContext.contextToken});
+    assert.equal(a.result.identity.profileLabel,'Work profile');
+    const b=await call('y_browser_attach',{instance:'Personal profile'});
+    assert.ok(b.ygptContext?.contextToken,'a different chat creates its own context at attach');
+    const ac={contextToken:choice.ygptContext.contextToken},bc={contextToken:b.ygptContext.contextToken};
+    assert.notEqual(ac.contextToken,bc.contextToken);
+    const [openedA,openedB]=await Promise.all([
+      call('y_browser_open',{url:'https://fixture.invalid/work',target:'existing',...ac}),
+      call('y_browser_open',{url:'https://fixture.invalid/work',target:'existing',...bc})
+    ]);
+    await call('y_browser_action',{tabId:openedA.result.tabId,action:'click',target:{role:'button',name:'Add one'},...ac});
+    assert.match((await call('y_browser_snapshot',{tabId:openedA.result.tabId,...ac})).result.aria,/1/);
+    assert.match((await call('y_browser_snapshot',{tabId:openedB.result.tabId,...bc})).result.aria,/0/);
+    const foreign=await c.call('y_browser_snapshot',{tabId:openedB.result.tabId,...ac});assert.ok(foreign.isError);assert.equal(unpack(foreign).error.code,'SESSION_FOREIGN');
+    await call('y_browser_attach',{instance:'Personal profile',...ac});
+    const switched=await call('y_browser_open',{url:'https://fixture.invalid/work',target:'existing',...ac});
+    const mine=(await call('y_browser_tabs',ac)).result.tabs;
+    assert.ok(mine.some(t=>t.tabId===openedA.result.tabId&&t.profileLabel==='Work profile'));
+    assert.ok(mine.some(t=>t.tabId===switched.result.tabId&&t.profileLabel==='Personal profile'));
+    assert.match((await call('y_browser_snapshot',{tabId:openedA.result.tabId,...ac})).result.aria,/1/,'switching preserves the first profile tab');
+    const expired=await c.call('y_browser_detach',{contextToken:'invalid-context'});assert.equal(unpack(expired).code,'CONTEXT_EXPIRED');
+    await call('y_browser_detach',ac);
+    assert.equal((await call('y_browser_tabs',bc)).result.existingAttached,true);
+    assert.equal(fakes[0].createCalls.length,1);assert.equal(fakes[1].createCalls.length,2);
+    assert.ok(browsers.every(browser=>browser.isConnected()),'detaching leaves both browser processes running');
+  }finally{await c.close();await Promise.all(browsers.map(browser=>browser.close()));}
+});
+
+test('An unresponsive old group tab cannot block profile attach or new group tabs',{skip:!available&&'no chromium on this host',timeout:60000},async()=>{
+  const {YExtensionBrowser}=await import('../engine/src/browser-engine.mjs');
+  const {chromium}=await import('playwright');
+  const engine=new YExtensionBrowser({stateDir:tmp(),port:0});
+  const browser=await chromium.launch({executablePath:CHROME});
+  try{
+    await engine.ensureRelay();const fake=new FakeExtension(null,engine.relay.endpoint(),engine.relay.token,{id:'stalled-profile',email:'',label:'Work profile'});
+    await fake.init(browser);fake.hello();await until(()=>fake.registration);
+    fake.hangFrameTreeTab=fake.tabIdFor('https://fixture.invalid/previous');
+    await fake.openFromGroupTab(fake.hangFrameTreeTab,'https://fixture.invalid/work');
+    const started=Date.now(),attached=await engine.attach({instance:'stalled-profile'});
+    assert.equal(attached.attached,true);assert.equal(attached.adopted,1);
+    assert.ok(Date.now()-started<9000,'one frozen renderer cannot consume the 10-second connection deadline');
+    const opened=await engine.open('https://fixture.invalid/work');
+    assert.match((await engine.act(opened.tabId,'click',{role:'button',name:'Add one'})).aria,/1/);
+    assert.equal(fake.tabs.has(fake.hangFrameTreeTab),true,'the skipped group tab is preserved');
+    assert.equal((await engine.list()).ownerTabsNotTouched,1);
+  }finally{await engine.close();await browser.close();}
 });

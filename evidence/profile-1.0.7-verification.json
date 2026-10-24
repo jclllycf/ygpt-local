@@ -1,0 +1,78 @@
+{
+  "version": "1.0.7",
+  "at": "2026-10-24T12:52:49.428Z",
+  "tests": {
+    "tests": 45,
+    "passed": 45,
+    "failed": 0,
+    "skipped": 0,
+    "files": [
+      "tests/core.test.mjs",
+      "tests/extension-safety.test.mjs",
+      "tests/extension-takeover.test.mjs",
+      "tests/upgrade-new-tools.test.mjs"
+    ],
+    "browser": "actual Chrome-backed isolated extension fixtures"
+  },
+  "regressions": {
+    "brokerAttachReturnsPrivateContext": true,
+    "profileSelectionSurvivesNextCall": true,
+    "concurrentProfiles": true,
+    "explicitSwitchPreservesOldProfileTabs": true,
+    "foreignChatDenied": true,
+    "detachRetainsOtherChatConnection": true,
+    "stalledOldGroupTabSkippedWithoutClosing": true,
+    "duplicateAttachmentSuppressed": true
+  },
+  "physicalWindows": {
+    "profilesTested": 2,
+    "concurrentOpen": true,
+    "clickAndRead": true,
+    "independentPageState": true,
+    "crossChatDenied": true,
+    "switchPreservesOriginalProfileTab": true,
+    "unresponsiveOldGroupTabsSkipped": 2,
+    "temporaryFixtureTabsCreated": 3,
+    "fixtureTabsClosed": true,
+    "scope": "Installed broker through the existing real Chrome profile extensions; not a ChatGPT-generated browser task"
+  },
+  "installed": {
+    "manifestMismatches": 0,
+    "packageManifestMatches": true,
+    "credentialsConnectionPairingUnchanged": true,
+    "stateAuditPassed": true,
+    "containedState": true,
+    "localReady": true,
+    "tunnelConnected": true
+  },
+  "package": {
+    "version": "1.0.7",
+    "manifestFiles": 5896,
+    "manifestMismatches": 0,
+    "forbiddenMembers": 0,
+    "currentRuntimeServiceExtensionMatch": true,
+    "currentNativeBinariesMatch": true,
+    "artifacts": [
+      {
+        "file": "YGPTLocal-Setup-1.0.7-win-x64.exe",
+        "bytes": 94545920,
+        "sha256": "515cbfa212d7197ca95595a2da5f116ec0e49bc51327587ecee4be20179ab78b"
+      },
+      {
+        "file": "YGPTLocal-Update-1.0.7-win-x64.exe",
+        "bytes": 94545920,
+        "sha256": "2680861df32880b9d04c47956bcad1a05a9e1ddc0962ec5cd5e41bae89a7e813"
+      },
+      {
+        "file": "ygpt-local-portable-1.0.7-win-x64.zip",
+        "bytes": 93548980,
+        "sha256": "9d579d6888aef52bcbccc751f6fe8da0efe3f87b90859441ca7a59756362a0f7"
+      }
+    ]
+  },
+  "limits": {
+    "freshCleanVm": "not rerun for this patch",
+    "physicalAndroid": "not rerun; approval UI unchanged",
+    "newChatGPTHostTask": "not independently exercised in this run"
+  }
+}

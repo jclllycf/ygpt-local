@@ -174,7 +174,7 @@ export class YExtensionBrowser {
       if(owner!=null)this.track(pg,owner);
     }).catch(()=>{});
   }
-  status(){const mine=[...this.tabs].filter(([,t])=>t.owner===this.owner());return {attached:!!this.browser,identity:this.identity,group:this.browser?{name:this.groupName,tabs:mine.length}:null,pairingUrl:this.pairingUrl(),tabs:mine.map(([tabId,t])=>({tabId,url:t.page.url()}))};}
+  status(){const mine=[...this.tabs].filter(([,t])=>t.owner===this.owner());return {attached:!!this.browser,identity:this.identity,unavailableGroupTabs:this.relay.unavailableTabs.size,group:this.browser?{name:this.groupName,tabs:mine.length}:null,pairingUrl:this.pairingUrl(),tabs:mine.map(([tabId,t])=>({tabId,url:t.page.url()}))};}
   track(page,owner=this.owner(),claim=false){
     for(const [id,t] of this.tabs)if(t.page===page){if(claim)t.owner=owner;return id;}
     const id=crypto.randomUUID();this.tabs.set(id,{page,owner});
@@ -263,7 +263,8 @@ export class YMultiExtensionBrowser {
     const matches=instance?candidates.filter(c=>c.id===instance||c.profileEmail?.toLowerCase()===String(instance).toLowerCase()||c.browser.toLowerCase()===String(instance).toLowerCase()||c.profileLabel?.toLowerCase()===String(instance).toLowerCase()):candidates;
     if(matches.length!==1){if(!matches.length)throw new EngineError('BROWSER_INSTANCE_UNKNOWN','The selected paired profile is not connected');return {needsChoice:true,candidates:matches.map(c=>({instance:c.id,browser:c.browser,profileEmail:c.profileEmail,profileLabel:c.profileLabel,tabs:c.totalTabs})),note:'Select an exact instance. Each chat keeps its own browser profile selection.'};}
     const id=matches[0].id;
-    if(current&&this.selections.get(owner)!==id&&current.owned(owner).length)throw new EngineError('BROWSER_PROFILE_IN_USE','Detach this chat before changing its profile; its current tabs were preserved');
+    // An explicit profile choice changes only the destination for new tabs.
+    // Existing tab IDs remain bound to their own profile and chat owner.
     let engine=this.engines.get(id);if(!engine){engine=new YExtensionBrowser({...this.opts,relay:this.relay.profileRelay(id)});this.engines.set(id,engine);}
     const result=await engine.attach({instance:id});this.selections.set(owner,id);return result;
   }
@@ -272,8 +273,17 @@ export class YMultiExtensionBrowser {
   forTab(id){const engine=[...this.engines.values()].find(e=>e.has(id));if(!engine)throw new EngineError('NO_TAB','Unknown daily-browser tab');return engine;}
   page(id){return this.forTab(id).page(id);}
   async open(url){if(!this.selected()?.browser){const result=await this.attach({});if(result.needsChoice)throw new EngineError('BROWSER_CHOICE_REQUIRED','Choose an exact paired instance with y_browser_attach before opening a daily-browser tab');}return this.selected().open(url);}
-  async list(){const engine=this.selected();return engine?engine.list():{attached:false,tabs:[],ownerTabsNotTouched:0};}
-  async detach(){const owner=this.owner(),engine=this.selected();const result=engine?await engine.detach():{detached:true};this.selections.delete(owner);return result;}
+  async list(){
+    const owner=this.owner(),selected=this.selected();
+    const profiles=await Promise.all([...this.engines.values()].filter(e=>e===selected||e.holders.has(owner)||e.owned(owner).length).map(e=>e.list()));
+    return {attached:profiles.some(p=>p.attached),identity:selected?.identity??null,tabs:profiles.flatMap(p=>p.tabs.map(t=>({...t,instance:p.identity?.instance,profileLabel:p.identity?.profileLabel}))),profiles:profiles.map(({tabs,...p})=>({...p,tabs:tabs.length})),ownerTabsNotTouched:profiles.reduce((n,p)=>n+p.ownerTabsNotTouched,0)};
+  }
+  async detach(){
+    const owner=this.owner(),selected=this.selected(),profiles=[];
+    for(const [instance,engine] of this.engines)if(engine===selected||engine.holders.has(owner)||engine.owned(owner).length)profiles.push({instance,...await engine.detach()});
+    this.selections.delete(owner);
+    return {detached:true,released:profiles.reduce((n,p)=>n+(p.released??0),0),profiles,...(profiles.some(p=>p.sharedConnectionKept)?{sharedConnectionKept:true}:{})};
+  }
   release(owner=this.owner()){let n=0;for(const e of this.engines.values())n+=e.release(owner);this.selections.delete(owner);return n;}
   owned(owner=this.owner()){return [...this.engines.values()].flatMap(e=>e.owned(owner));}
   async close(){await Promise.allSettled([...this.engines.values()].map(e=>e.close()));this.engines.clear();this.selections.clear();await this.relay.stop();}

@@ -22,6 +22,8 @@
 | Cleanup skipped | Inspect the receipt. Changed, linked, open, unknown, referenced or foreign files are preserved. Do not sweep Downloads or Temp. |
 | Settings after Setup deletion | Start menu Settings uses the installed verified runtime without the download. Damaged files or version upgrade require a full installer. |
 | Maintenance refused | Active work, pending approvals or unknown task state prevent replacement. The application does not kill uncertain work. |
+| Both browser profiles are connected but new tabs ask for a profile again | Update to 1.0.7. Keep the contextToken returned by y_browser_attach on the explicit profile choice, open with target=existing, and later browser calls. Profile labels or exact instance IDs select the account. |
+| One daily profile times out while the other works | An old YGPT group tab may have stopped answering Chrome debugging commands. Version 1.0.7 bounds each old tab's setup and skips unresponsive tabs without closing them; unavailableGroupTabs reports the count. Healthy group tabs remain usable. |
 | Restore conflict | CONFLICT / executed:false / filesRestored:0 preserves later edits. Review the diff; do not repeat the stale restore. |
 | Desktop app lacks your login | Tool processes use a sanitized HOME/APPDATA; they are not your normal interactive profile. |
 | Tunnel disconnected | Check the connector token, outbound HTTPS/proxy, route and credentials. A Cloudflare connector token cannot create DNS. Do not replace an unrelated tunnel. |
