@@ -139,6 +139,7 @@ test('Standard mode reads protected files and dry-run patches automatically; ord
 });
 
 test('Small cleanup uses verified snapshots and the actual Windows Recycle Bin',async t=>{
+ if(process.env.GITHUB_ACTIONS==='true'&&process.env.RUNNER_ENVIRONMENT==='github-hosted'&&process.env.YGPT_TEST_RECYCLE_BIN!=='1'){t.skip('Hosted Actions has no interactive desktop Recycle Bin; run this integration fixture on a desktop (or explicitly opt in). Permission and snapshot checks remain separate.');return;}
  const f=fixture(),bin=path.join(path.parse(f.project).root,'$Recycle.Bin');
  if(process.platform!=='win32'||!fs.existsSync(bin)){t.skip('No existing Windows Recycle Bin on this fixture volume; snapshot policy is tested separately');return;}
  const c=await f.client().start();try{
