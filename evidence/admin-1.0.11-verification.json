@@ -1,0 +1,175 @@
+{
+  "version": "1.0.11",
+  "at": "2026-10-25T10:56:17.410Z",
+  "testedCodeCommit": "0c1a61cbed75338a0bc1e2a2ebe746d57b4acb3c",
+  "ownerReport": {
+    "version": "1.0.10",
+    "mobileFullAccessSuccessful": true,
+    "source": "Direct owner report in this conversation on 2026-10-25",
+    "notAnAutomatedPhysicalDeviceTest": true
+  },
+  "display": {
+    "ordinaryApprovals": "inline only; no automatic panel request",
+    "explicitFullAccess": "separate resource allows inline and PiP; automatic panel request while pending, return inline after decision",
+    "ordinaryResource": "ui://ygpt/approval/strip-v9-access-options.html",
+    "fullAccessResource": "ui://ygpt/access/full-v1.html",
+    "phoneAndDesktopNoFloatAssertionsPassed": true,
+    "hostOwnsOuterLayout": true
+  },
+  "administrator": {
+    "optional": true,
+    "request": {
+      "tool": "y_chat_access",
+      "action": "request_full",
+      "administrator": true
+    },
+    "confirmation": "Explicit chat card followed by Windows UAC on the PC",
+    "normalFullAccessRequestsUac": false,
+    "commandTool": "y_admin_run",
+    "normalTypedFileAndDesktopToolsKeepOrdinaryToken": true,
+    "maximumCommandMilliseconds": 25000,
+    "outputBounded": true,
+    "sameWindowsAccountRequired": true,
+    "pipeAclAndBothPeerPidsChecked": true,
+    "helperManifestHashChecked": true,
+    "perChatExecutor": true,
+    "noLongLivedElevatedMainService": true,
+    "endsOn": [
+      "grant expiry",
+      "revoke",
+      "context close",
+      "broker disconnect"
+    ],
+    "jobOwnedProcessTreeStops": true,
+    "completedChangesNotUndone": true,
+    "interruptedDispatchedCommandOutcome": "unknown; do not replay",
+    "overlappingActivationIsolationVerified": true,
+    "cancellingUac": "Ordinary Full Access remains active; Administrator inactive",
+    "grantDoesNotSurviveBrokerRestart": true,
+    "realUacAcceptanceNotTested": true,
+    "liveChatNotElevatedByTests": true
+  },
+  "validation": {
+    "fullLocal": {
+      "total": 162,
+      "passed": 157,
+      "failed": 0,
+      "skipped": 5
+    },
+    "finalAccessAfterLastMetadataAdjustment": {
+      "total": 12,
+      "passed": 12,
+      "failed": 0,
+      "skipped": 0
+    },
+    "phoneDesktopUi": {
+      "total": 10,
+      "passed": 10,
+      "failed": 0,
+      "skipped": 0
+    },
+    "nativeTransport": "Actual current-user Windows fixture without requesting UAC; literal argv, parent identity, timeout and descendant termination",
+    "sourceReview": "Two lifecycle findings fixed and regression-tested; focused source review found no remaining concrete blocker in helper, manager and integration",
+    "initialFullAttempt": "Interrupted after isolated browser teardown hung; no UI assertion failure established in that attempt",
+    "fixtureCleanupFix": "Own disposable browser through BrowserServer and stop its exact process; avoids the observed local Windows graceful/taskkill teardown hang",
+    "hostedWindows": {
+      "total": 162,
+      "passed": 150,
+      "failed": 0,
+      "skipped": 12
+    },
+    "ciUrl": "https://github.com/jclllycf/ygpt-local/actions/runs/40186410906",
+    "ciConclusion": "success"
+  },
+  "package": {
+    "version": "1.0.11",
+    "manifestFiles": 5913,
+    "manifestMismatches": 0,
+    "forbiddenMembers": 0,
+    "currentRuntimeServiceExtensionMatch": true,
+    "currentNativeBinariesMatch": true,
+    "retiredResolverAndShippedInstructionsAbsent": true,
+    "currentSkillIncluded": true,
+    "artifacts": [
+      {
+        "file": "YGPTLocal-Setup-1.0.11-win-x64.exe",
+        "bytes": 94762496,
+        "sha256": "b882d7b67182d76012b273d4d3b1342cd19fc698a58e00e96bb6ac306578c9e8"
+      },
+      {
+        "file": "YGPTLocal-Update-1.0.11-win-x64.exe",
+        "bytes": 94762496,
+        "sha256": "3b2113eae5a3a92d0add8c73e1ec9208aef99d0d6e19089b7195384a437ef934"
+      },
+      {
+        "file": "ygpt-local-portable-1.0.11-win-x64.zip",
+        "bytes": 93765226,
+        "sha256": "24d9289209b75030f094ea67b054b99a2dfe2acbfd94955431482bb83652d176"
+      }
+    ]
+  },
+  "installed": {
+    "applied": true,
+    "version": "1.0.11",
+    "manifestFiles": 5913,
+    "manifestMismatches": 0,
+    "packageManifestMatches": true,
+    "credentialsConnectionPairingUnchanged": true,
+    "stateAuditPassed": true,
+    "containedState": true,
+    "oldExternalDataAbsent": true,
+    "localReady": true,
+    "tunnelConnected": true,
+    "lastError": "",
+    "restarts": 0,
+    "initializedByTunnel": true,
+    "toolCatalog": {
+      "total": 69,
+      "public": 67,
+      "appOnly": 2
+    },
+    "isolatedInstalledSmoke": {
+      "version": "1.0.11",
+      "scope": "Installed binaries and source with separate disposable data; not a ChatGPT host call",
+      "fullAccessToolPresent": true,
+      "initialMode": "standard",
+      "unknownCommandPolicy": "allow-unless-explicit-high-risk-signal",
+      "protectedRuntimeInfoReadWithoutApproval": true,
+      "unlistedOrdinaryExecutableWithoutApproval": true,
+      "statisticsWithLocalsLoopMathAndPrivateFixtureWithoutApproval": true,
+      "fixtureUnchanged": true,
+      "bundledNpxVersionWithoutApproval": true,
+      "bundledNpxDurableJobWithoutApproval": true,
+      "fullAccessEnabled": false,
+      "originalUserRequestExecuted": false,
+      "productionStateOrCredentialsCopied": false,
+      "at": "2026-10-25T10:52:53.915Z",
+      "inChatFullAccessCardWithoutSeparateShow": true,
+      "isolatedFixtureDecisionResumedWaitingTool": true,
+      "currentContextOnly": true,
+      "revocationVerified": true,
+      "productionFullAccessChanged": false,
+      "administratorToolAvailable": true,
+      "administratorRefusedWithoutGrant": true,
+      "administratorOptionCardVerifiedAndDeniedInFixture": true,
+      "windowsUacNotInvoked": true
+    }
+  },
+  "cleanup": {
+    "state": "complete",
+    "removedFiles": 0,
+    "bytesReclaimed": 0,
+    "removedRollbackCopies": 0,
+    "retainedRollbackVersion": "1.0.10",
+    "privateDataKept": true,
+    "snapshotsSwept": false
+  },
+  "limits": [
+    "The owner reported mobile success for 1.0.10; this release has automated phone/desktop fixtures, not a new physical Android test.",
+    "No real chat Administrator confirmation or UAC acceptance was performed by these tests.",
+    "Windows UAC requires a person at the PC; the chat card and model cannot substitute for it.",
+    "Administrator commands have OS-wide effects; this is not an OS sandbox or an automatic rollback for arbitrary commands.",
+    "Normal file/desktop tools do not silently switch to an elevated token.",
+    "Host-controlled presentation may vary by ChatGPT client."
+  ]
+}
