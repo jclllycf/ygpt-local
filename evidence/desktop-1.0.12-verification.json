@@ -1,0 +1,152 @@
+{
+  "version": "1.0.12",
+  "at": "2026-10-25T11:51:41.524Z",
+  "testedCodeCommit": "d2aac850a40369db1679e037beb5265fc0f01f93",
+  "diagnosis": {
+    "fieldAttemptVersion": "1.0.10",
+    "desktopGrantSucceeded": true,
+    "subsequentKeyboardCallsSucceeded": true,
+    "recordedFailure": "SELECTOR_REQUIRED for type without a control selector",
+    "correspondingKeyboardPolicyRejectionRecorded": false,
+    "oldInspectionMaxDepth": 8,
+    "oldDepthTruncationReported": false,
+    "disposableChromeExtensionReloadButtonDepth": 9,
+    "realObsidianExtensionNotChanged": true,
+    "originalP3rAcceptanceNotClaimed": true
+  },
+  "changes": {
+    "defaultMaxDepth": 32,
+    "defaultMaxNodes": 600,
+    "maximumDepth": 64,
+    "maximumNodes": 1200,
+    "truncationReasons": [
+      "maxDepth",
+      "maxNodes",
+      "treeChanged"
+    ],
+    "subtreeSelectors": [
+      "runtimeId",
+      "automationId",
+      "name"
+    ],
+    "toggleStateIncluded": true,
+    "selectorErrorActionable": true,
+    "desktopGrantDurationUnchanged": true,
+    "administratorNotRequiredForExtensionReload": true
+  },
+  "validation": {
+    "local": {
+      "total": 163,
+      "passed": 158,
+      "failed": 0,
+      "skipped": 5
+    },
+    "targeted": {
+      "total": 7,
+      "passed": 7,
+      "failed": 0,
+      "skipped": 0
+    },
+    "installedNativeChrome": {
+      "total": 1,
+      "passed": 1,
+      "failed": 0
+    },
+    "disposableChrome": {
+      "scope": "Actual Windows UIA and Chrome in a disposable profile; no personal browser or real extension touched",
+      "shallowDepth8ReportedTruncated": true,
+      "deepReloadVisible": true,
+      "distinctReloadButtons": true,
+      "developerModeStateVerified": true,
+      "scopedInspectionPassed": true,
+      "verifiedPointerClick": true,
+      "extensionVersionBefore": "1.0",
+      "extensionVersionAfter": "1.1",
+      "extensionEnabled": true,
+      "workerStarts": 2,
+      "at": "2026-10-25T11:49:35.535Z"
+    },
+    "installedBroker": {
+      "version": "1.0.12",
+      "scope": "Installed broker with isolated data; production private configuration was not copied",
+      "catalogCount": 70,
+      "deepInspectionSchema": true,
+      "defaultDepth": 32,
+      "defaultNodes": 600,
+      "subtreeSelection": true,
+      "at": "2026-10-25T11:49:17.981Z"
+    },
+    "hostedWindows": {
+      "total": 163,
+      "passed": 150,
+      "failed": 0,
+      "skipped": 13
+    },
+    "ciUrl": "https://github.com/jclllycf/ygpt-local/actions/runs/40190218556",
+    "ciConclusion": "success"
+  },
+  "package": {
+    "version": "1.0.12",
+    "manifestFiles": 5916,
+    "manifestMismatches": 0,
+    "forbiddenMembers": 0,
+    "currentRuntimeServiceExtensionMatch": true,
+    "currentNativeBinariesMatch": true,
+    "retiredResolverAndShippedInstructionsAbsent": true,
+    "currentSkillIncluded": true,
+    "artifacts": [
+      {
+        "file": "YGPTLocal-Setup-1.0.12-win-x64.exe",
+        "bytes": 94805504,
+        "sha256": "7a50abeec213cb7eba9400d5c5b777ef4633c0d30c23699a9ca40a1cb2151089"
+      },
+      {
+        "file": "YGPTLocal-Update-1.0.12-win-x64.exe",
+        "bytes": 94805504,
+        "sha256": "fc28857b5d929387d9daef5a4740c8fb43e5ecb595b92634ac41733b5b0c46c0"
+      },
+      {
+        "file": "ygpt-local-portable-1.0.12-win-x64.zip",
+        "bytes": 93808436,
+        "sha256": "951e63abb91ec45980984a4de4469cf45735ba8918e1ca62db09bc4418ab9362"
+      }
+    ]
+  },
+  "installed": {
+    "applied": true,
+    "version": "1.0.12",
+    "manifestFiles": 5916,
+    "manifestMismatches": 0,
+    "packageManifestMatches": true,
+    "credentialsConnectionPairingUnchanged": true,
+    "stateAuditPassed": true,
+    "containedState": true,
+    "oldExternalDataAbsent": true,
+    "localReady": true,
+    "tunnelConnected": true,
+    "lastError": "",
+    "initializedByTunnel": true,
+    "catalog": {
+      "total": 69,
+      "public": 67,
+      "appOnly": 2
+    }
+  },
+  "cleanup": {
+    "state": "complete",
+    "removedFiles": 5912,
+    "bytesReclaimed": 349368815,
+    "removedRollbackCopies": 1,
+    "retainedRollbackVersion": "1.0.11",
+    "privateDataKept": true,
+    "developerFixtureDirectoryRetained": true,
+    "developerFixtureBytes": 156420228,
+    "reasonForRetainedDeveloperFixture": "Automatic approval review rejected the separate recursive fixture deletion with blocked by policy"
+  },
+  "limits": [
+    "The controlled fixture verifies the installed desktop adapter, not a human ChatGPT task or the real Obsidian extension.",
+    "ChatGPT may cache old tool schemas or choose not to use the available tools; refresh the catalog or start a new chat if needed.",
+    "Hosted Windows skipped the optional real-Chrome fixture; it passed on the actual local Windows host and again with the installed adapter.",
+    "Private diagnostic fixture files remain in the development tree following a deletion policy rejection."
+  ]
+}
