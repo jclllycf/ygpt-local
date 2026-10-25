@@ -8,7 +8,7 @@
  let floatingRequest=null;const floatAttempts=new Set();
  async function followApproval(){const api=window.openai;if(!card?.uiToken||typeof api?.requestDisplayMode!=='function')return;const id=card.requestId;
   if(card.state==='awaiting_user'&&!floatAttempts.has(id)){floatAttempts.add(id);try{await api.requestDisplayMode({mode:'pip'});if(card?.requestId===id&&card.state==='awaiting_user')floatingRequest=id;else await api.requestDisplayMode({mode:'inline'});}catch{}}
-  else if(terminal.has(card.state)&&floatingRequest===id){floatingRequest=null;try{await api.requestDisplayMode({mode:'inline'});}catch{}}
+  else if(card.state!=='awaiting_user'&&floatingRequest===id){floatingRequest=null;try{await api.requestDisplayMode({mode:'inline'});}catch{}}
  }
  function unwrap(value){for(let n=0;n<8;n++){
   if(typeof value==='string'){value=JSON.parse(value);continue;}
