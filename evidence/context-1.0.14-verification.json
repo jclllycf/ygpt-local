@@ -1,0 +1,150 @@
+{
+  "version": "1.0.14",
+  "at": "2026-10-25T13:03:18.638Z",
+  "testedCodeCommit": "e22d875b22bdb9aeed0dfc29938c7e489df4c191",
+  "diagnosis": {
+    "fieldScreenshot": "Disabled desktop approval buttons with original-context warning",
+    "cause": "Approval rendering did not match the saved request context, yet previously displayed Awaiting approval",
+    "existingRequestHandledByHumanWindowsOwnerReview": true,
+    "existingRequestOutcome": "succeeded",
+    "existingOperationNotReplayed": true
+  },
+  "changes": {
+    "requiredOriginalArguments": [
+      "requestId",
+      "resultToken",
+      "contextToken"
+    ],
+    "recoverableCodes": [
+      "APPROVAL_CONTEXT_REQUIRED",
+      "APPROVAL_CONTEXT_MISMATCH",
+      "APPROVAL_CONTEXT_EXPIRED"
+    ],
+    "unavailableLabel": "Refresh approval",
+    "unavailableActionsHidden": true,
+    "unavailableContinueWaiting": false,
+    "noDecisionCapabilityOnContextError": true,
+    "originalRequestPreserved": true,
+    "correctOriginalContextRecoversSameRequest": true,
+    "ordinaryResource": "ui://ygpt/approval/strip-v10-context-recovery.html",
+    "legacyResourceCompatibility": true,
+    "desktopDefaultMinutes": 100,
+    "oldGrantsNotExtended": true
+  },
+  "validation": {
+    "targetedApprovalAndUi": {
+      "total": 16,
+      "passed": 16,
+      "failed": 0,
+      "skipped": 0
+    },
+    "localFull": {
+      "total": 165,
+      "passed": 159,
+      "failed": 1,
+      "skipped": 5
+    },
+    "localFullFailure": {
+      "test": "Optional real-Chrome desktop reload probe",
+      "code": "FOREGROUND_NOT_TARGET",
+      "effectStarted": false,
+      "reason": "Target window did not acquire foreground while another program held the owner desktop",
+      "separateRecheck": "Same foreground guard blocked the probe; no input was sent",
+      "desktopBackendSourceUnchangedFrom": "v1.0.12"
+    },
+    "hostedWindows": {
+      "total": 165,
+      "passed": 152,
+      "failed": 0,
+      "skipped": 13
+    },
+    "ciConclusion": "success",
+    "ciUrl": "https://github.com/jclllycf/ygpt-local/actions/runs/40194873900",
+    "installedRecoveryFixture": {
+      "version": "1.0.14",
+      "scope": "Installed broker with isolated data and fixture-only denial; no production decision or desktop input",
+      "originalContextRequired": true,
+      "missingContextRecoveryError": true,
+      "noDecisionCapabilityOnError": true,
+      "noGrantOnError": true,
+      "pendingPreserved": true,
+      "correctOriginalContextRecoversSameRequest": true,
+      "fixtureDenialPassed": true,
+      "defaultDesktopMinutes": 100,
+      "at": "2026-10-25T13:00:19.079Z"
+    },
+    "installedDesktopGrantFixture": {
+      "version": "1.0.14",
+      "scope": "Installed broker and native fixture with isolated data; no production approval decided",
+      "defaultDesktopMinutes": 100,
+      "cardMinutes": 100,
+      "actualGrantedMinutesWithinTolerance": true,
+      "grantRemainingMilliseconds": 5999967,
+      "foreignChatStandard": true,
+      "revokePassed": true,
+      "at": "2026-10-25T13:00:27.367Z"
+    }
+  },
+  "package": {
+    "version": "1.0.14",
+    "manifestFiles": 5923,
+    "manifestMismatches": 0,
+    "forbiddenMembers": 0,
+    "currentRuntimeServiceExtensionMatch": true,
+    "currentNativeBinariesMatch": true,
+    "retiredResolverAndShippedInstructionsAbsent": true,
+    "currentSkillIncluded": true,
+    "artifacts": [
+      {
+        "file": "YGPTLocal-Setup-1.0.14-win-x64.exe",
+        "bytes": 94887424,
+        "sha256": "3ec4220930a7ba37f1c3543d2ee300f0c786f25a819df512c79c3bb64d3ddac0"
+      },
+      {
+        "file": "YGPTLocal-Update-1.0.14-win-x64.exe",
+        "bytes": 94887424,
+        "sha256": "f28b2202e42ffb763df9d76f53b581ef4f6eaecb1d16984153903545e3aaab70"
+      },
+      {
+        "file": "ygpt-local-portable-1.0.14-win-x64.zip",
+        "bytes": 93890185,
+        "sha256": "33e5bcc13e23591bfcdc7d30acc426a0e434c84912e2f20a41850dd29179e358"
+      }
+    ]
+  },
+  "installed": {
+    "applied": true,
+    "version": "1.0.14",
+    "manifestFiles": 5923,
+    "manifestMismatches": 0,
+    "packageManifestMatches": true,
+    "credentialsConnectionPairingUnchanged": true,
+    "stateAuditPassed": true,
+    "containedState": true,
+    "oldExternalDataAbsent": true,
+    "localReady": true,
+    "tunnelConnected": true,
+    "restarts": 0,
+    "lastError": "",
+    "initializedByTunnel": false,
+    "existingGrantCheck": {
+      "existingGrantExpiriesUnchanged": true,
+      "grants": 0
+    }
+  },
+  "cleanup": {
+    "state": "complete",
+    "removedFiles": 5917,
+    "bytesReclaimed": 349570830,
+    "removedRollbackCopies": 1,
+    "retainedRollbackVersion": "1.0.12",
+    "privateDataKept": true
+  },
+  "limits": [
+    "The original saved request succeeded through a human Windows-owner decision, not by re-enabling its old disabled widget.",
+    "Phone and desktop recovery fixtures and installed broker checks passed; a fresh real ChatGPT card click after this update has not been attested.",
+    "The optional local real-Chrome input probe was blocked by foreground checks with no input dispatched; those checks remain enforced.",
+    "A host may retain an already rendered old widget or cached catalog. Refresh the plugin tools or start a new conversation; do not repeat a completed operation.",
+    "Backend/Tunnel readiness is separate from a fresh authenticated ChatGPT-host interaction."
+  ]
+}
