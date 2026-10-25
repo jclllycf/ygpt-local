@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.0.11
+
+- Ordinary approvals remain inline; only explicit Full Access requests may automatically open a panel.
+- Optional chat-scoped Administrator command executor after explicit card and Windows UAC confirmation; closes on expiry, revoke or disconnect.
+- Preserve unknown outcomes for interrupted elevated commands and isolate overlapping activations.
+- Record the owner's successful mobile Full Access report for 1.0.10 separately from automated checks.
+
 ## 1.0.10
 
 - One explicit ten-minute desktop Full Access grant per chat, direct in-chat development activation, fresh approval instances and bounded continuation.

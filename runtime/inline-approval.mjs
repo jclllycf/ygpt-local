@@ -3,7 +3,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {config,RUNTIME,INSTALL} from './config.mjs';
 // New resource URI forces hosts to fetch the revised CSP and bridge bundle.
-export const BAR_URI='ui://ygpt/approval/strip-v8-desktop-flow.html';
+export const BAR_URI='ui://ygpt/approval/strip-v9-access-options.html';
+export const FULL_ACCESS_URI='ui://ygpt/access/full-v1.html';
 // The prior ChatGPT tool catalog can retain this URI across conversations.
 // Serve the NEW strip at this legacy address rather than the retired large card.
 export const LEGACY_BAR_URI='ui://ygpt/approval/card-v1.html';
@@ -11,7 +12,7 @@ export const LEGACY_BAR_URI='ui://ygpt/approval/card-v1.html';
 export const INSPECTION_URI=config.chatAppConsent?BAR_URI:'ui://ygpt/approval/inspection-v1.html';
 // Resource addresses are protocol identifiers, not display branding. Old chats
 // retain these exact addresses and must still receive the current component.
-const knownResources=[BAR_URI,LEGACY_BAR_URI,INSPECTION_URI,'ui://ygpt/approval/strip-v5.html','ui://ygpt/approval/compact-v1-rc2.html','ui://ygpt/approval/strip-v4-rc18.html','ui://ygpt/approval/strip-v3.html',...['compact-v11-3','interactive-v11-2c','interactive-v11-2b','interactive-v11-2','interactive-v11-1','interactive-v11','inspection-v1'].map(n=>'ui://ygpt/approval/'+n+'.html')];
+const knownResources=[BAR_URI,FULL_ACCESS_URI,'ui://ygpt/approval/strip-v8-desktop-flow.html',LEGACY_BAR_URI,INSPECTION_URI,'ui://ygpt/approval/strip-v5.html','ui://ygpt/approval/compact-v1-rc2.html','ui://ygpt/approval/strip-v4-rc18.html','ui://ygpt/approval/strip-v3.html',...['compact-v11-3','interactive-v11-2c','interactive-v11-2b','interactive-v11-2','interactive-v11-1','interactive-v11','inspection-v1'].map(n=>'ui://ygpt/approval/'+n+'.html')];
 export const approvalGuidance='Show this fresh approval card at the current conversation step, then use y_wait_approval with the original requestId, resultToken and contextToken for a bounded wait. Keep the task pending while the person decides; do not report it finished or repeat the original action. A saved decision resumes the existing result automatically. If this client cannot mount the card during a running response, open the same conversation on the web or use the Windows approval center. Only an explicit card or local-center decision grants permission.';
 export function approvalResourceUris(){
  const modern=config.rc10Candidate?knownResources:!config.rc9Candidate&&uiEnabled()?(barEnabled()?[BAR_URI,LEGACY_BAR_URI]:[BAR_URI]):[];
@@ -72,7 +73,7 @@ function rehashCsp(text){
  const patch=(src,kind,h)=>{const marker=kind+"-src 'sha256-",i=src.indexOf(marker);if(i<0)return src;const j=src.indexOf("'",i+marker.length);return src.slice(0,i+marker.length)+h+src.slice(j);};
  return patch(patch(text,'script',hash(script)),'style',hash(style));
 }
-export function barResource(uri=BAR_URI){const legacy=config.approvalStyle==='legacy';let text=fs.readFileSync(path.join(RUNTIME,legacy?'approval-bar-legacy.html':'approval-bar.html'),'utf8');text=text.replace("img-src 'none'","img-src data:").replace(/<script>[\s\S]*?<\/script>/,()=>'<script>'+fs.readFileSync(path.join(RUNTIME,'approval-ui.js'),'utf8')+'</script>');if(!legacy){text=text.replace('__YGPT_BRAND_ICON__',brandIconDataUrl());if(GREEN_ICON_FILES.includes(config.brandIcon))for(const [from,to] of GREEN_THEME)text=text.replace(from,to);}text=rehashCsp(text);return {uri,name:legacy?'YGPT approval (classic)':'YGPT approval',description:'Review an exact local operation. Approval stays pending until you choose; phone and desktop show the same saved result.',mimeType:'text/html;profile=mcp-app',text,_meta:{ui:{prefersBorder:false,csp:{connectDomains:[],resourceDomains:[],frameDomains:[]}},'openai/ui':{availableDisplayModes:['inline','fullscreen','pip']},'openai/widgetDescription':'Approve or deny the displayed local operation. Changes made on another device are synchronized.','openai/widgetPrefersBorder':false,'openai/widgetCSP':{connect_domains:[],resource_domains:[]}}};}
+export function barResource(uri=BAR_URI){const legacy=config.approvalStyle==='legacy';let text=fs.readFileSync(path.join(RUNTIME,legacy?'approval-bar-legacy.html':'approval-bar.html'),'utf8');text=text.replace("img-src 'none'","img-src data:").replace(/<script>[\s\S]*?<\/script>/,()=>'<script>'+fs.readFileSync(path.join(RUNTIME,'approval-ui.js'),'utf8')+'</script>');if(!legacy){text=text.replace('__YGPT_BRAND_ICON__',brandIconDataUrl());if(GREEN_ICON_FILES.includes(config.brandIcon))for(const [from,to] of GREEN_THEME)text=text.replace(from,to);}text=rehashCsp(text);return {uri,name:legacy?'YGPT approval (classic)':'YGPT approval',description:'Review an exact local operation. Approval stays pending until you choose; phone and desktop show the same saved result.',mimeType:'text/html;profile=mcp-app',text,_meta:{ui:{prefersBorder:false,csp:{connectDomains:[],resourceDomains:[],frameDomains:[]}},'openai/ui':{availableDisplayModes:uri===FULL_ACCESS_URI?['inline','pip']:['inline']},'openai/widgetDescription':'Approve or deny the displayed local operation. Changes made on another device are synchronized.','openai/widgetPrefersBorder':false,'openai/widgetCSP':{connect_domains:[],resource_domains:[]}}};}
 // Test hook: the exact HTML a host receives for the current configuration.
 export function barHtmlForTest(){return barResource(BAR_URI).text;}
 export function handleBar(name,args,ledger,onApproved,isWaiting=()=>false){

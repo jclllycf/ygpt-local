@@ -1,29 +1,29 @@
 // Full Access is a human-approved, revocable capability for one server-issued
 // chat context. Neither a tool argument nor host metadata can activate it.
-import {BAR_URI} from './inline-approval.mjs';
+import {FULL_ACCESS_URI} from './inline-approval.mjs';
 export const chatAccessTool={
  name:'y_chat_access',title:'Full Access in this chat',
- description:'Enable Full Access directly inside this ChatGPT conversation: when the user asks for Full Access, call action=request_full to return its in-chat confirmation card, then wait for their click. No Windows settings or local permissions window is required. action=status only checks; it does not request activation. action=revoke disables this chat grant. Preserve contextToken on later calls; other chats stay separate.',
- inputSchema:{type:'object',properties:{action:{type:'string',enum:['status','request_full','revoke'],default:'status'},durationMinutes:{type:'integer',minimum:1,maximum:720,default:120}},additionalProperties:false},
+ description:'Enable Full Access directly inside this ChatGPT conversation: call action=request_full and wait for the owner card click. Set administrator=true only when the user requests the extra Administrator option; after the card it needs Windows UAC on this PC and enables y_admin_run. Normal Full Access never requests UAC. action=status only checks; action=revoke ends the grant and its Administrator executor. Preserve contextToken; other chats stay separate.',
+ inputSchema:{type:'object',properties:{action:{type:'string',enum:['status','request_full','revoke'],default:'status'},durationMinutes:{type:'integer',minimum:1,maximum:720,default:120},administrator:{type:'boolean',default:false,description:'Optional Windows Administrator command executor. Requires this chat card plus a separate Windows UAC confirmation; never enabled by ordinary Full Access.'}},additionalProperties:false},
  annotations:{readOnlyHint:false,destructiveHint:false,openWorldHint:false},
- _meta:{ui:{resourceUri:BAR_URI},'openai/outputTemplate':BAR_URI}
+ _meta:{ui:{resourceUri:FULL_ACCESS_URI},'openai/outputTemplate':FULL_ACCESS_URI}
 };
 export const chatAccessGate={decision:'approve',kind:'chat-full-access',reason:'The owner must explicitly enable Full Access for this chat context.'};
 export const DESKTOP_FULL_ACCESS_MINUTES=10;
 export function desktopAccessPresentation(){
  const p=chatAccessPresentation({durationMinutes:DESKTOP_FULL_ACCESS_MINUTES});
- return {...p,title:'Allow desktop control for 10 minutes',purpose:'Temporarily enable Full Access for this chat so desktop control can finish without repeated approval clicks.',impact:'For 10 minutes this chat can operate desktop windows, read and change files, and run commands without another YGPT approval. Other chats keep their existing permissions. The requested desktop step runs once after you confirm.',reversible:'Revoke with y_chat_access action=revoke, or close the chat context. Access expires after 10 minutes. Completed actions are not undone.',approveLabel:'Allow Full Access for 10 minutes'};
+ return {...p,displayMode:'inline',title:'Allow desktop control for 10 minutes',purpose:'Temporarily enable Full Access for this chat so desktop control can finish without repeated approval clicks.',impact:'For 10 minutes this chat can operate desktop windows, read and change files, and run commands without another YGPT approval. Other chats keep their existing permissions. The requested desktop step runs once after you confirm.',reversible:'Revoke with y_chat_access action=revoke, or close the chat context. Access expires after 10 minutes. Completed actions are not undone.',approveLabel:'Allow Full Access for 10 minutes'};
 }
 export function chatAccessPresentation(args={}){
  const minutes=args.durationMinutes??120;
- return {title:'Enable Full Access for this chat',target:'This chat only · '+minutes+' minutes',
+ return {displayMode:'pip',title:args.administrator?'Enable Full Access + Administrator':'Enable Full Access for this chat',target:'This chat only · '+minutes+' minutes',
  purpose:'Let this development chat run all YGPT actions with your current Windows permissions.',
- impact:'While active, this chat can read private files, change files, run commands and operate desktop windows without further YGPT approval. Other chats keep their existing permissions.',
+ impact:'While active, this chat can read private files, change files, run commands and operate desktop windows without further YGPT approval. Other chats keep their existing permissions.'+(args.administrator?' Administrator commands can also change protected system files and settings through y_admin_run. Normal file and desktop tools keep their ordinary Windows token.':''),
  denied:'Keep the standard approval rules for this chat.',risk:'Full Access to this Windows user environment',
  reversible:'Revoke with y_chat_access action=revoke, or close the chat context. Completed actions are not undone. Pending requests are not executed by enabling this mode.',
- administrator:'Current Windows user; no automatic elevation. Resource ownership and path integrity checks still apply.',
+ administrator:args.administrator?'After this card, confirm Windows UAC on this PC. Administrator commands use a temporary executor for this chat only. It closes on expiry, revoke or disconnect. Cancelling UAC keeps ordinary Full Access enabled.':'Current Windows user; no automatic elevation. Resource ownership and path integrity checks still apply.',
  technical:'Capability: current server-issued chat context only\nDuration: '+minutes+' minutes\nAutomatic execution of pending approvals: no',
- approveLabel:'Enable Full Access'};
+ approveLabel:args.administrator?'Enable Full Access + Administrator':'Enable Full Access'};
 }
 export function chatAccessStatus(ledger,contextHash){
  const grant=contextHash?ledger.fullAccess(contextHash):null;

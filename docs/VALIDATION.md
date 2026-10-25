@@ -1,4 +1,8 @@
-# Current validation: 1.0.10
+# Current validation: 1.0.11
+
+The owner reports successful mobile Full Access use on 1.0.10. Version 1.0.11 separates ordinary inline approvals from explicit Full Access panels and adds optional Windows UAC Administrator commands. Native non-elevated transport fixtures check process-ID binding, literal arguments, timeout and descendant cleanup; manager fixtures check isolation, cancellation, interrupted-command uncertainty and overlapping activations. No real UAC or live chat grant is decided by these tests. Exact current counts, package and installed results accompany the release.
+
+## Previous 1.0.10 validation
 
 The full local regression passed 147 of 152 tests with five environment skips and no failures. It includes real native Windows input, one desktop approval covering two disposable windows, keyboard chords, precise native errors, inline screenshots with immediate PNG deletion, ordinary commands, grant revocation and foreign-context refusal. The final UI follow-up separately checks PiP requests and return to inline, read-only bridge timeout recovery without decision replay, fresh card instances and direct in-chat Full Access activation.
 

@@ -1,3 +1,4 @@
+import {launchFixtureBrowser} from './browser-fixture.mjs';
 // Take-over via the YGPT browser extension, end to end. A fake extension
 // (WebSocket client speaking the real extension protocol) is backed by a real
 // Chromium through Playwright, translating chrome.debugger calls to CDP
@@ -98,8 +99,8 @@ test('Extension takeover: pairing, choice, group discipline, detach',{skip:!avai
   const port=0;
   const scope=new AsyncLocalStorage();
   const engine=new YExtensionBrowser({stateDir:tmp(),port,currentOwner:()=>scope.getStore()??'local'});
-  const browserA=await chromium.launch({executablePath:CHROME,args:['--no-sandbox']});
-  const browserB=await chromium.launch({executablePath:CHROME,args:['--no-sandbox']});
+  const browserA=await launchFixtureBrowser({executablePath:CHROME,args:['--no-sandbox']});
+  const browserB=await launchFixtureBrowser({executablePath:CHROME,args:['--no-sandbox']});
   try{
     await engine.ensureRelay();
     const {token}=await engine.relay.pairing();
@@ -159,7 +160,7 @@ test('Extension takeover: a session Chrome ended is dropped and re-adopted; Canc
   const {YExtensionBrowser}=await import('../engine/src/browser-engine.mjs');
   const {chromium}=await import('playwright');
   const engine=new YExtensionBrowser({stateDir:tmp(),port:0});
-  const browser=await chromium.launch({executablePath:CHROME,args:['--no-sandbox']});
+  const browser=await launchFixtureBrowser({executablePath:CHROME,args:['--no-sandbox']});
   const until=async(check,what)=>{for(let i=0;i<200;i++){if(await check())return;await new Promise(r=>setTimeout(r,25));}assert.fail('timed out waiting for '+what);};
   try{
     await engine.ensureRelay();
@@ -191,7 +192,7 @@ test('Extension takeover: a popup opened by one chat\'s group tab stays with tha
   const {chromium}=await import('playwright');
   const scope=new AsyncLocalStorage();
   const engine=new YExtensionBrowser({stateDir:tmp(),port:0,currentOwner:()=>scope.getStore()??'local'});
-  const browser=await chromium.launch({executablePath:CHROME,args:['--no-sandbox']});
+  const browser=await launchFixtureBrowser({executablePath:CHROME,args:['--no-sandbox']});
   const until=async(check,what)=>{for(let i=0;i<200;i++){if(await check())return;await new Promise(r=>setTimeout(r,25));}assert.fail('timed out waiting for '+what);};
   try{
     await engine.ensureRelay();
@@ -215,7 +216,7 @@ test('Extension takeover: unsigned Chrome profiles attach by stable identity and
   const {YExtensionBrowser}=await import('../engine/src/browser-engine.mjs');
   const {chromium}=await import('playwright');
   const engine=new YExtensionBrowser({stateDir:tmp(),port:0});
-  const a=await chromium.launch({executablePath:CHROME,args:['--no-sandbox']}),b=await chromium.launch({executablePath:CHROME,args:['--no-sandbox']});
+  const a=await launchFixtureBrowser({executablePath:CHROME,args:['--no-sandbox']}),b=await launchFixtureBrowser({executablePath:CHROME,args:['--no-sandbox']});
   try{
     await engine.ensureRelay();const {token}=await engine.relay.pairing();
     // Run the pairing page with its real HTTP CSP. Proxy a fixture origin
@@ -251,7 +252,7 @@ test('Two chats concurrently control two profiles with overlapping Chrome tab id
   const {YBrowserFacade}=await import('../engine/src/browser-engine.mjs');
   const {chromium}=await import('playwright');const scope=new AsyncLocalStorage();
   const facade=new YBrowserFacade({stateDir:tmp(),currentOwner:()=>scope.getStore()??'local',extension:{port:0}});
-  const browsers=await Promise.all([chromium.launch({executablePath:CHROME}),chromium.launch({executablePath:CHROME})]);
+  const browsers=await Promise.all([launchFixtureBrowser({executablePath:CHROME}),launchFixtureBrowser({executablePath:CHROME})]);
   try{
     await facade.existing.ensureRelay();const relay=facade.existing.relay;
     const fakes=await Promise.all(browsers.map(async(browser,i)=>{const fake=new FakeExtension(null,relay.endpoint(),relay.token,{id:'profile-'+i,email:''});await fake.init(browser);fake.hello();return fake;}));
@@ -279,7 +280,7 @@ test('Broker attach returns a private chat context that preserves profile select
   try{
     const pairing=await until(async()=>{try{return JSON.parse(fs.readFileSync(path.join(f.config.stateDir,'extension-pairing.json'),'utf8'));}catch{return null;}});
     for(const [i,label] of ['Work profile','Personal profile'].entries()){
-      const browser=await chromium.launch({executablePath:CHROME});browsers.push(browser);
+      const browser=await launchFixtureBrowser({executablePath:CHROME});browsers.push(browser);
       const fake=new FakeExtension(null,'http://127.0.0.1:'+port,pairing.token,{id:'broker-profile-'+i,email:'',label});fakes.push(fake);
       await fake.init(browser);fake.hello();await until(()=>fake.registration);
     }
@@ -317,7 +318,7 @@ test('An unresponsive old group tab cannot block profile attach or new group tab
   const {YExtensionBrowser}=await import('../engine/src/browser-engine.mjs');
   const {chromium}=await import('playwright');
   const engine=new YExtensionBrowser({stateDir:tmp(),port:0});
-  const browser=await chromium.launch({executablePath:CHROME});
+  const browser=await launchFixtureBrowser({executablePath:CHROME});
   try{
     await engine.ensureRelay();const fake=new FakeExtension(null,engine.relay.endpoint(),engine.relay.token,{id:'stalled-profile',email:'',label:'Work profile'});
     await fake.init(browser);fake.hello();await until(()=>fake.registration);

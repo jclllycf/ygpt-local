@@ -10,6 +10,12 @@ On Windows, shipped npm/npx `.cmd` launchers are translated to the equivalent ma
 
 ## Enable Full Access for one development chat
 
+Ordinary approvals stay inline. Only explicit Full Access requests may automatically open their panel, returning inline after the decision.
+
+For the optional Administrator executor, ask **Enable Full Access with Administrator access for this chat for 120 minutes**. Use `action: "request_full"`, `administrator: true` and `durationMinutes: 120`. Confirm the chat card and then Windows UAC on the PC. Check `administrator.active`, not only `mode: "full"`. Cancelling UAC leaves ordinary Full Access active.
+
+Use `y_admin_run` with an explicit `.exe`, literal `args`, absolute `cwd` and optional `timeoutMs` up to 25,000. Normal typed file and desktop tools remain unprivileged. Expiry, revoke, context close or broker disconnect ends the executor and its job-owned process tree; completed changes remain. Interrupted dispatched commands have unknown effects and must not be replayed automatically. Administrator access requires the same Windows account's elevated token and is not restored after bridge restart. Never approve Windows UAC for the person.
+
 1. Ask YGPT in that chat: **Request Full Access for this chat for 120 minutes.** The tool call is `y_chat_access` with `action: "request_full"` and optional `durationMinutes` (1–720; default 120).
 2. That tool request directly returns the **Enable Full Access for this chat** card in this conversation. Choose **Enable Full Access** or **Deny**; Windows settings are not required. Checking status alone does not request activation. The model cannot activate the mode by passing a flag or treating a text reply as a card decision.
 3. Keep the returned `contextToken` private in this conversation and include it on later YGPT calls. Check the mode and expiration with `y_chat_access` and `action: "status"`, or `y_policy`.

@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import http from 'node:http';
 import {setTimeout as delay} from 'node:timers/promises';
-import {chromium} from 'playwright';
+import {launchFixtureBrowser} from './browser-fixture.mjs';
 import {fixture,unpack,until} from './helpers.mjs';
 import {BAR_URI,barHtmlForTest} from '../runtime/inline-approval.mjs';
 import {DurableLedger} from '../runtime/durable.mjs';
@@ -20,7 +20,7 @@ test('Fresh approval instances support bounded pending waits and retain decision
   assert.ok(!BAR_URI.includes('rc2'));
   const current=(await c.rpc('resources/read',{uri:BAR_URI})).contents[0];
   const old=(await c.rpc('resources/read',{uri:'ui://ygpt/approval/compact-v1-rc2.html'})).contents[0];
-  assert.equal(current.text,old.text);assert.deepEqual(current._meta['openai/ui'].availableDisplayModes,['inline','fullscreen','pip']);
+  assert.equal(current.text,old.text);assert.deepEqual(current._meta['openai/ui'].availableDisplayModes,['inline']);
   const pending=unpack(await c.call('y_process_run',{executable:process.execPath,args:['-e',"if(false){};console.log('Clear-Disk fixture')"],cwd:f.project}));
   assert.equal(pending.code,'APPROVAL_REQUIRED');
   const args={requestId:pending.requestId,resultToken:pending.resultToken,contextToken:pending.contextToken};
@@ -65,7 +65,7 @@ test('Phone-sized and desktop cards receive delayed metadata, synchronize an ext
  const html=barHtmlForTest(),server=http.createServer((_q,r)=>{r.setHeader('Content-Type','text/html;charset=utf-8');r.end(html);});
  await new Promise(r=>server.listen(0,'127.0.0.1',r));let browser,state='awaiting_user',reserved=false,sent=false,messages=0,decisions=0;
  try{
-  browser=await chromium.launch({channel:'msedge',headless:true});
+  browser=await launchFixtureBrowser({channel:'msedge',headless:true});
   const pages=[];
   for(const viewport of [{width:390,height:844},{width:1100,height:760}]){
    const context=await browser.newContext({viewport}),page=await context.newPage();pages.push(page);
@@ -102,7 +102,7 @@ test('Standard MCP Apps bridge accepts canonical metadata delivered after initia
  const html=barHtmlForTest(),fixtureBar=bar();let browser;
  const outer='<!doctype html><iframe id="app" style="width:390px;height:700px;border:0" src="/frame"></iframe><script>window.addEventListener("message",event=>{if(event.source!==document.getElementById("app").contentWindow)return;const m=event.data;if(m.method==="ui/initialize"){event.source.postMessage({jsonrpc:"2.0",id:m.id,result:{hostCapabilities:{}}},"*");setTimeout(()=>event.source.postMessage({jsonrpc:"2.0",method:"ui/notifications/tool-result",params:{call_tool_result:{_meta:{yBar:'+JSON.stringify(fixtureBar)+'}}}},"*"),100);}else if(m.method==="tools/call")event.source.postMessage({jsonrpc:"2.0",id:m.id,result:{structuredContent:{state:"awaiting_user",continuation:"follow-up"}}},"*");});</script>';
  const server=http.createServer((q,r)=>{r.setHeader('Content-Type','text/html;charset=utf-8');r.end(q.url==='/frame'?html:outer);});await new Promise(r=>server.listen(0,'127.0.0.1',r));
- try{browser=await chromium.launch({channel:'msedge',headless:true});const page=await browser.newPage();await page.goto('http://127.0.0.1:'+server.address().port);const button=page.frameLocator('#app').getByRole('button',{name:'Allow once',exact:true});await button.waitFor();await assert.doesNotReject(()=>button.click({trial:true,timeout:5000}));}
+ try{browser=await launchFixtureBrowser({channel:'msedge',headless:true});const page=await browser.newPage();await page.goto('http://127.0.0.1:'+server.address().port);const button=page.frameLocator('#app').getByRole('button',{name:'Allow once',exact:true});await button.waitFor();await assert.doesNotReject(()=>button.click({trial:true,timeout:5000}));}
  finally{await browser?.close();await new Promise(r=>server.close(r));}
 });
 
@@ -112,7 +112,7 @@ test('Unsupported standard methods use compatibility once; an uncertain decision
  const server=http.createServer((q,r)=>{r.setHeader('Content-Type','text/html;charset=utf-8');r.end(q.url==='/frame'?html:outer);});await new Promise(r=>server.listen(0,'127.0.0.1',r));
  let state='awaiting_user',decisions=0,messages=0,reserved=false;
  try{
-  browser=await chromium.launch({channel:'msedge',headless:true});const page=await browser.newPage();
+  browser=await launchFixtureBrowser({channel:'msedge',headless:true});const page=await browser.newPage();
   await page.exposeFunction('fixtureCompatibility',async(name,args)=>{
    assert.equal(args.uiToken,fixtureBar.uiToken);
    if(name==='y_bar_decide'){decisions++;state='denied';throw Error('Reply lost after the decision committed');}
@@ -136,7 +136,7 @@ test('Full Access card names the chat scope, duration and explicit action on pho
  const html=barHtmlForTest(),card={...bar(),presentation:chatAccessPresentation({durationMinutes:120}),chatScope:{eligible:false,explanation:'Only this chat, for the displayed duration.'}};
  let browser;
  try{
-  browser=await chromium.launch({channel:'msedge',headless:true});
+  browser=await launchFixtureBrowser({channel:'msedge',headless:true});
   for(const viewport of [{width:390,height:844},{width:1100,height:760}]){
    const page=await browser.newPage({viewport});
    await page.addInitScript(value=>{window.openai={toolResponseMetadata:{yBar:value},callTool:async()=>({structuredContent:{state:'awaiting_user'}})};},card);
@@ -152,11 +152,18 @@ test('Full Access card names the chat scope, duration and explicit action on pho
  }finally{await browser?.close();}
 });
 
+test('Ordinary and desktop approvals never request a floating panel on phone or desktop',async()=>{
+ let browser;try{browser=await launchFixtureBrowser({channel:'msedge',headless:true});for(const viewport of [{width:390,height:844},{width:1100,height:760}]){
+  let modes=0,reads=0;const page=await browser.newPage({viewport});await page.exposeFunction('ordinaryDisplayMode',()=>{modes++;});await page.exposeFunction('ordinaryStatus',()=>{reads++;return {structuredContent:{state:'awaiting_user'}};});
+  await page.addInitScript(value=>{window.openai={toolResponseMetadata:{yBar:value},callTool:()=>window.ordinaryStatus(),requestDisplayMode:()=>window.ordinaryDisplayMode()};},bar());await page.route('https://ygpt-fixture.invalid/',route=>route.fulfill({body:barHtmlForTest(),contentType:'text/html'}));await page.goto('https://ygpt-fixture.invalid/');await until(()=>reads>0);assert.equal(modes,0);assert.equal(await page.getByRole('button',{name:'Allow once',exact:true}).isEnabled(),true);await page.close();
+ }}finally{await browser?.close();}
+});
+
 test('A silent standard read recovers through compatibility; a following approval floats and returns inline without replay',async()=>{
- const html=barHtmlForTest(),fixtureBar=bar();let browser,compatibilityCalls=0,decisions=0;const modes=[];
+ const html=barHtmlForTest(),fixtureBar=bar();fixtureBar.presentation.displayMode='pip';let browser,compatibilityCalls=0,decisions=0;const modes=[];
  const outer='<!doctype html><iframe id="app" style="width:390px;height:760px;border:0" src="/frame"></iframe><script>window.addEventListener("message",event=>{const frame=document.getElementById("app").contentWindow;if(event.source!==frame)return;const m=event.data;if(m.method==="ui/initialize"){frame.postMessage({jsonrpc:"2.0",id:m.id,result:{hostCapabilities:{}}},"*");setTimeout(()=>frame.postMessage({jsonrpc:"2.0",method:"ui/notifications/tool-result",params:{_meta:{yBar:'+JSON.stringify(fixtureBar)+'}}},"*"),50);}else if(m.method==="ui/message")frame.postMessage({jsonrpc:"2.0",id:m.id,result:{}},"*");});</script>';
  const server=http.createServer((q,r)=>{r.setHeader('Content-Type','text/html;charset=utf-8');r.end(q.url==='/frame'?html:outer);});await new Promise(r=>server.listen(0,'127.0.0.1',r));
- try{browser=await chromium.launch({channel:'msedge',headless:true});const page=await browser.newPage();
+ try{browser=await launchFixtureBrowser({channel:'msedge',headless:true});const page=await browser.newPage();
   await page.exposeFunction('fixtureRecoveredTool',async(name,args)=>{compatibilityCalls++;if(name==='y_bar_decide')decisions++;return {structuredContent:{state:decisions?'approved':'awaiting_user',continuation:'follow-up',delivery:args.notifyAction?{granted:false,status:'sent'}:undefined}};});
   await page.exposeFunction('fixtureDisplayMode',async value=>{modes.push(value.mode);return value;});
   await page.addInitScript(()=>{window.openai={callTool:(n,a)=>window.fixtureRecoveredTool(n,a),requestDisplayMode:a=>window.fixtureDisplayMode(a)};});await page.goto('http://127.0.0.1:'+server.address().port);

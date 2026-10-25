@@ -289,7 +289,7 @@ test('An unknown operation is never replayed: the same request key after a resta
 
 // YGPT_TEST_CHROMIUM can select a portable fixture executable. This checks
 // isolation in real Chromium; production defaults to the owner's Chrome.
-const testLaunch=async()=>{const {chromium}=await import('playwright');return chromium.launch(process.env.YGPT_TEST_CHROMIUM?{executablePath:process.env.YGPT_TEST_CHROMIUM,headless:true,args:['--no-sandbox']}:process.platform==='win32'?{channel:'chrome',headless:true}:{headless:true});};
+const testLaunch=async()=>{const {launchFixtureBrowser}=await import('./browser-fixture.mjs');return launchFixtureBrowser(process.env.YGPT_TEST_CHROMIUM?{executablePath:process.env.YGPT_TEST_CHROMIUM,headless:true,args:['--no-sandbox']}:process.platform==='win32'?{channel:'chrome',headless:true}:{headless:true});};
 async function chromiumAvailable(){try{const b=await testLaunch();await b.close();return true;}catch{return false;}}
 const haveChromium=await chromiumAvailable();
 test('Browser: one lazy instance, a private context per chat; tabs, cookies and closing never cross chats',{skip:haveChromium?false:'no Playwright Chromium in this environment'},async()=>{
