@@ -17,15 +17,16 @@ test('Full Access activation returns its own in-chat card without a Windows deto
  }finally{await c.close();}
 });
 
-test('Temporary desktop Full Access is exact, ten-minute, revocable and private to its approving context',()=>{
+test('Temporary desktop Full Access is exactly 100 minutes, revocable and private to its approving context',()=>{
  const f=fixture(),ledger=new DurableLedger(path.join(f.dir,'mode.sqlite3'),{owner:'test',vault:{seal:v=>'test:'+v,open:v=>v.slice(5)}});
  try{const a=ledger.context(),b=ledger.context(),args={hwnd:'fixture'},op=ledger.create('y_desktop_bind',args,{contextHash:a.hash,kind:'desktop-full-access',presentation:desktopAccessPresentation()});
-  assert.throws(()=>ledger.enableFullAccess(a.hash,op.operation.id,10),/ACCESS_NOT_APPROVED/);assert.equal(ledger.fullAccess(a.hash),null);
+  const card=desktopAccessPresentation();for(const key of ['title','target','impact','reversible','approveLabel'])assert.match(card[key],/100 minutes/);
+  assert.throws(()=>ledger.enableFullAccess(a.hash,op.operation.id,100),/ACCESS_NOT_APPROVED/);assert.equal(ledger.fullAccess(a.hash),null);
   assert.equal(ledger.decideLocal(op.operation.id,'once').approved,true);assert.equal(ledger.claim(op.operation.id,'y_desktop_bind',args),true);
-  assert.throws(()=>ledger.enableFullAccess(b.hash,op.operation.id,10),/ACCESS_NOT_APPROVED/);assert.throws(()=>ledger.enableFullAccess(a.hash,op.operation.id,120),/ACCESS_NOT_APPROVED/);
-  const before=Date.now();ledger.enableFullAccess(a.hash,op.operation.id,10);assert.ok(ledger.fullAccess(a.hash).expires>=before+599000);assert.ok(ledger.fullAccess(a.hash).expires<=Date.now()+600000);assert.equal(ledger.fullAccess(b.hash),null);
+  assert.throws(()=>ledger.enableFullAccess(b.hash,op.operation.id,100),/ACCESS_NOT_APPROVED/);for(const duration of [10,120])assert.throws(()=>ledger.enableFullAccess(a.hash,op.operation.id,duration),/ACCESS_NOT_APPROVED/);
+  const before=Date.now();ledger.enableFullAccess(a.hash,op.operation.id,100);assert.ok(ledger.fullAccess(a.hash).expires>=before+5999000);assert.ok(ledger.fullAccess(a.hash).expires<=Date.now()+6000000);assert.equal(ledger.fullAccess(b.hash),null);
   ledger.db.prepare('UPDATE chat_access SET expires=? WHERE context_hash=?').run(Date.now()-1,a.hash);assert.equal(ledger.fullAccess(a.hash),null);
-  ledger.enableFullAccess(a.hash,op.operation.id,10);assert.equal(ledger.revokeFullAccess(a.hash),true);assert.equal(ledger.fullAccess(a.hash),null);
+  ledger.enableFullAccess(a.hash,op.operation.id,100);assert.equal(ledger.revokeFullAccess(a.hash),true);assert.equal(ledger.fullAccess(a.hash),null);
  }finally{ledger.close();}
 });
 

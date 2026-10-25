@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.0.13
+
+- Desktop-triggered Full Access now defaults to 100 minutes, with matching card text, server validation and guidance. Existing grants keep their original expiry; revocation and chat isolation remain unchanged.
+
 ## 1.0.12
 
 - Inspect deep Chrome/Edge controls, report all traversal limits honestly, and support selected-subtree inspection.

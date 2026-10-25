@@ -200,11 +200,11 @@ test('UIA inventory and reads are automatic; control requests one temporary Full
   assert.match(card.technical,/SHA-256: a{64}/);
   assert.equal(uiaChatScope('y_desktop_bind',{hwnd:'100'},win).eligible,false,'binding uses the explicit temporary Full Access card');
   const typing=uiaChatScope('y_desktop_action',{targetId:'t1',action:'type'},win),clicking=uiaChatScope('y_desktop_action',{targetId:'t1',action:'click'},win);
-  assert.equal(typing.eligible,false);assert.equal(clicking.eligible,false);assert.match(typing.explanation,/Full Access.*10 minutes/);
+  assert.equal(UIA_ACTION_GRANT_MS,100*60000);assert.equal(typing.eligible,false);assert.equal(clicking.eligible,false);assert.match(typing.explanation,/Full Access.*100 minutes/);
   assert.equal(uiaChatScope('y_desktop_action',{targetId:'gone',action:'type'},null).eligible,false);
 });
 
-test('A UIA conversation grant lasts ten minutes, not the two-hour default',()=>{
+test('A remembered-action scope retains its approved ten-minute TTL rather than inheriting a new default',()=>{
   const {ledger}=newLedger();const ctx=ledger.context();
   const key='k'.repeat(64),hold=ledger.create('y_desktop_action',{targetId:'t',action:'type'},{contextHash:ctx.hash,chatScope:{eligible:true,key,ttlMs:600000},presentation:{title:'t'}});
   const before=Date.now();assert.equal(ledger.decideLocal(hold.operation.id,'chat','test').ok,true);

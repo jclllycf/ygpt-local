@@ -26,9 +26,11 @@ test('Actual isolated Edge, native UIA fixture and durable job output',async()=>
     }
     return unpack(response).result.windows.find(w=>w.pid===created.pid);
   },120000);
-  // A single explicit decision enables ten-minute Full Access and binds once.
+  // A single explicit decision enables 100-minute Full Access and binds once.
   const binding=await call('y_desktop_bind',{hwnd:window.hwnd,...ctx});assert.equal(binding.code,'APPROVAL_REQUIRED');
+  const desktopCard=await c.call('y_show_approval',{requestId:binding.requestId,resultToken:binding.resultToken,...ctx});assert.match(desktopCard._meta.yBar.presentation.title,/100 minutes/);
   const enabled=await decide(c,binding,'once',ctx.contextToken);const bound=unpack(enabled.result);assert.equal(bound.ok,true);target=bound.result.targetId;
+  const desktopAccess=await call('y_chat_access',ctx);assert.equal(desktopAccess.active,true);assert.ok(Date.parse(desktopAccess.expiresAt)>Date.now()+99*60000);assert.ok(Date.parse(desktopAccess.expiresAt)<=Date.now()+100*60000);
   const tree=await call('y_desktop_inspect',{targetId:target,...ctx});assert.ok(tree.result.result.elements.some(e=>e.automationId==='FixtureInput'));
   const limited=await call('y_desktop_inspect',{targetId:target,maxNodes:1,...ctx});assert.equal(limited.result.result.elements.length,1);assert.equal(limited.result.result.truncated,true);assert.ok(limited.result.result.truncationReasons.includes('maxNodes'));
   const scoped=await call('y_desktop_inspect',{targetId:target,automationId:'FixtureInput',maxDepth:1,maxNodes:10,...ctx});assert.equal(scoped.result.result.scoped,true);assert.equal(scoped.result.result.elements[0].automationId,'FixtureInput');assert.equal(scoped.result.result.maxDepth,1);

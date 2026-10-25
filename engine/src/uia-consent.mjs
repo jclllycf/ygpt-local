@@ -6,7 +6,8 @@
 // application and window. The broker asks once for temporary, chat-scoped
 // Full Access before control; individual inputs do not request further clicks.
 // An owner enrollment list (path + SHA-256) is NOT consent for an operation.
-export const UIA_ACTION_GRANT_MS=10*60000;
+import {DESKTOP_FULL_ACCESS_MINUTES} from './access-defaults.mjs';
+export const UIA_ACTION_GRANT_MS=DESKTOP_FULL_ACCESS_MINUTES*60000;
 const allow=reason=>({decision:'allow',reason}),approve=reason=>({decision:'approve',kind:'desktop',reason});
 export function uiaDecision(tool){
  if(tool==='y_desktop_windows')return allow('Read-only window inventory; every window listed with its real title and identity');
@@ -40,8 +41,7 @@ export function uiaPresentation(tool,args={},win=null){
   reversible:'YGPT cannot undo what the application does in response.',administrator:'Current user; no elevation.',
   technical:`Tool: y_desktop_action\naction: ${action}\ncontrol: ${control(args)}\ntargetId: ${clip(args.targetId,40)}${exe}`};
 }
-// Optional narrow conversation grant: same chat, same bound window identity,
-// same action type, for ten minutes. Binding itself is always Allow once.
+// Narrow remembered-action grants are replaced by the explicit desktop Full Access card.
 export function uiaChatScope(tool,args={},win=null){
- return {eligible:false,key:null,explanation:'One confirmation enables Full Access for this chat for 10 minutes, covering all desktop actions, windows, files and commands. Revoke with y_chat_access action=revoke.'};
+ return {eligible:false,key:null,explanation:`One confirmation enables Full Access for this chat for ${DESKTOP_FULL_ACCESS_MINUTES} minutes, covering all desktop actions, windows, files and commands. Revoke with y_chat_access action=revoke.`};
 }

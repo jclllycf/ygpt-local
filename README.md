@@ -6,7 +6,7 @@ Bring files, projects and approved Windows tools to the ChatGPT account you alre
 
 **Positioning:** YGPT Local is a free, open-source, lightweight local semi-automated agent for using your own Windows PC through ChatGPT conversations. In supported ChatGPT web or desktop experiences, you can ask it to work with local files, browser tasks and approved tools while you stay in control of sensitive actions. YGPT itself needs no paid membership; ChatGPT plugin access, Platform Tunnels and any third-party services have their own account, workspace and cost requirements. See [OpenAI's plugin availability guidance](https://help.openai.com/en/articles/20001256-plugins-in-chatgpt) and [custom MCP requirements](https://help.openai.com/en/articles/12584461-connecting-custom-mcp-servers-in-chatgpt).
 
-**1.0.12 is the current stable release, with English-only UI.** Download from [GitHub Releases](https://github.com/jclllycf/ygpt-local/releases/tag/v1.0.12). Source and downloads are public. See the [release notes](docs/RELEASE_1.0.12.md) for the desktop inspection fix and its verification scope.
+**1.0.13 is the current stable release, with English-only UI.** Download from [GitHub Releases](https://github.com/jclllycf/ygpt-local/releases/tag/v1.0.13). Source and downloads are public. See the [release notes](docs/RELEASE_1.0.13.md) for the 100-minute desktop Full Access default.
 
 **Free-account field result:** on October 23, 2026, the project owner reported successful real use with a ChatGPT Free account. This is a concrete user-reported feasibility milestone; account availability, workspace permissions and Platform Tunnel access still need to be checked for each setup. It is not a promise of access for every Free account.
 
@@ -18,7 +18,7 @@ Bring files, projects and approved Windows tools to the ChatGPT account you alre
 
 ## Install
 
-1. Obtain `YGPTLocal-Setup-1.0.12-win-x64.exe` and compare its SHA-256 with `SHA256SUMS.txt`. The installers are unsigned. Already installed? Run `YGPTLocal-Update-1.0.12-win-x64.exe` instead: it preserves your data, keys, connection identity, snapshots and ChatGPT plugin; legacy external data moves inside the application folder ([upgrade guide](docs/UPGRADE_USER_GUIDE.md)).
+1. Obtain `YGPTLocal-Setup-1.0.13-win-x64.exe` and compare its SHA-256 with `SHA256SUMS.txt`. The installers are unsigned. Already installed? Run `YGPTLocal-Update-1.0.13-win-x64.exe` instead: it preserves your data, keys, connection identity, snapshots and ChatGPT plugin; legacy external data moves inside the application folder ([upgrade guide](docs/UPGRADE_USER_GUIDE.md)).
 2. Follow the nine-step native Windows wizard. Choose an application folder and an authorized working folder. Node, Python and the official Tunnel Client are bundled; normal installation needs no developer tools or administrator privileges.
 3. Keep **OpenAI Secure MCP Tunnel** selected. Create a dedicated Tunnel in your eligible Platform organization and associate the intended ChatGPT workspace. Do not reuse a Tunnel already run by another installation.
 4. Enter the full ID and a dedicated runtime API key in the masked local field. DPAPI encrypts it for your Windows user. It authenticates the Tunnel Client; setup does not call generation models or create keys.
@@ -61,7 +61,7 @@ RC3 development leaves existing working production Tunnels running. Different Tu
 
 Prefer `y_file_read`, `y_file_edit`, `y_search_text`, `y_sqlite_read`, `y_backup_diff` and `y_backup_restore`. One canonical `y_` catalog is served; `y_ping` reports it by group. Removed names have no routes or alias resolver and return `NO_TOOL`; refresh the live catalog. Actual ChatGPT discovery needs independent verification.
 
-Permission model: typed reads and ordinary changes run automatically. File changes keep protected pre-write snapshots; small cleanups use verified snapshots and the Recycle Bin. Sensitive changes, major deletions and privileged/system changes require review in Standard mode. The first desktop control asks once for **10 minutes of Full Access in this chat**; subsequent desktop, file and command actions within the grant need no repeated approval. Expiry or revoke restores review. Wait for the original result instead of replaying the operation. `y_policy` shows the active rules.
+Permission model: typed reads and ordinary changes run automatically. File changes keep protected pre-write snapshots; small cleanups use verified snapshots and the Recycle Bin. Sensitive changes, major deletions and privileged/system changes require review in Standard mode. The first desktop control asks once for **100 minutes of Full Access in this chat**; subsequent desktop, file and command actions within the grant need no repeated approval. Expiry or revoke restores review. Wait for the original result instead of replaying the operation. `y_policy` shows the active rules.
 
 Commands and scripts are default allow: unfamiliar code, loops, variables, encoded/dynamic scripts and protected-folder references alone do not require approval. Only an identified high-risk signal triggers review. This is the owner's blacklist policy, not an OS sandbox or a proof that unknown code is safe.
 

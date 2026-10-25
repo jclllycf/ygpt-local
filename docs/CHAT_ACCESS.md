@@ -2,7 +2,7 @@
 
 Standard mode permits typed reads on all valid local paths, including protected locations, under your Windows account permissions. Ordinary file edits keep protected pre-write snapshots. Small cleanup can run automatically through `y_file_trash`: up to 64 entries and 16 MiB, or one ordinary file up to 32 MiB. Cleanup retains a verified snapshot and uses the Windows Recycle Bin.
 
-Sensitive file changes, major deletions and system/privileged changes require review in Standard mode. Window inventory and inspection of a chat-owned bound window are automatic. The first desktop binding or input asks once for ten-minute Full Access to this chat; within that period all desktop windows, files and commands need no further YGPT approval. Commands and scripts otherwise default to allow unless an explicit high-risk signal is identified. Unknown scripts, variables, loops, dynamic/encoded code, multiline arguments and protected-folder references alone do not require approval.
+Sensitive file changes, major deletions and system/privileged changes require review in Standard mode. Window inventory and inspection of a chat-owned bound window are automatic. The first desktop binding or input asks once for 100-minute Full Access to this chat; within that period all desktop windows, files and commands need no further YGPT approval. Commands and scripts otherwise default to allow unless an explicit high-risk signal is identified. Unknown scripts, variables, loops, dynamic/encoded code, multiline arguments and protected-folder references alone do not require approval.
 
 Bundled Node, npm, npx and Python executable paths are trusted only when their exact shipped path, size and SHA-256 match the installed manifest. Their arguments are still checked. An unrelated executable in the same folder does not inherit trust.
 
@@ -31,7 +31,7 @@ If a mobile client does not display the card, open the same conversation in Chat
 
 ## Desktop tasks and screenshots
 
-The first desktop-control card explicitly grants Full Access for 10 minutes and executes that one requested desktop step after confirmation. Later bindings, clicks, keyboard chords and commands within this chat reuse the grant. Other pending operations are not replayed. Expiry or revoke restores review before another input. `y_desktop_action action=keys` accepts a chord such as `CTRL+L`, `CTRL+T` or `ENTER`; selectors, native errors and unknown outcomes must still be checked.
+The first desktop-control card explicitly grants Full Access for 100 minutes and executes that one requested desktop step after confirmation. Later bindings, clicks, keyboard chords and commands within this chat reuse the grant. Other pending operations are not replayed. Expiry or revoke restores review before another input. `y_desktop_action action=keys` accepts a chord such as `CTRL+L`, `CTRL+T` or `ENTER`; selectors, native errors and unknown outcomes must still be checked.
 
 Desktop automation primarily reads Windows UIA control trees. Screenshots are separate image observations. Generated PNGs are sent inline and removed locally before return; local result history retains metadata, not image bytes. Startup reclaims old generated screenshots. Unrelated images, credentials and snapshots stay intact. Images already delivered to ChatGPT follow the host's retention rules.
 

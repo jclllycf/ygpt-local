@@ -3,6 +3,7 @@ import {randomUUID,createHash,randomBytes,timingSafeEqual} from 'node:crypto';
 import {vault} from './secure-state.mjs';
 import path from 'node:path';
 import {withoutImageBytes} from './screenshot-cleanup.mjs';
+import {DESKTOP_FULL_ACCESS_MINUTES} from '../engine/src/access-defaults.mjs';
 export const digest=value=>createHash('sha256').update(value).digest('hex');
 export const stable=value=>JSON.stringify(value,(_k,v)=>v&&typeof v==='object'&&!Array.isArray(v)?Object.fromEntries(Object.entries(v).sort(([a],[b])=>a.localeCompare(b))):v);
 export const scrub=value=>String(value??'').replace(/-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?-----END [A-Z ]*PRIVATE KEY-----/g,'[PRIVATE KEY REDACTED]').replace(/Bearer\s+[\w.\/+\-=]+/gi,'Bearer [REDACTED]').replace(/((?:authorization|password|token|secret|api[_-]?key|cookie)["']?\s*[:=]\s*)(?:"[^"\r\n]*"|'[^'\r\n]*'|[^\s,;&}]+)/gi,'$1[REDACTED]').replace(/(?:sk-[\w-]{10,}|gh[pousr]_[\w]{12,})/g,'[REDACTED]');
@@ -101,7 +102,7 @@ export class DurableLedger {
       if(choice==='chat'){
         const context=this.db.prepare('SELECT expires FROM contexts WHERE owner=? AND token_hash=?').get(this.owner,p.contextHash??'');
         if(!p.chatScope?.eligible||!context||context.expires<=Date.now())return {ok:false,reason:'Conversation scope unavailable/expired; use Allow once'};
-        // A scope may ask for a shorter lifetime (UIA: ten minutes), never longer.
+        // A remembered-action scope may ask for a shorter lifetime, never longer.
         const ttl=Math.min(CHAT_GRANT_MS,Number.isInteger(p.chatScope.ttlMs)&&p.chatScope.ttlMs>0?p.chatScope.ttlMs:CHAT_GRANT_MS);
         this.db.prepare('INSERT OR REPLACE INTO chat_grants(owner,context_hash,scope_key,expires) VALUES(?,?,?,?)').run(this.owner,p.contextHash,p.chatScope.key,Math.min(context.expires,Date.now()+ttl));
       }
@@ -179,7 +180,7 @@ export class DurableLedger {
       if(!operation||operation.state!=='running'||operation.expires<=Date.now()||!context||context.expires<=Date.now())throw fail('ACCESS_NOT_APPROVED','A claimed, live Full Access approval is required');
       const preview=JSON.parse(this.vault.open(operation.preview)),args=JSON.parse(this.vault.open(operation.args));
       const dedicated=operation.tool==='y_chat_access'&&preview.kind==='chat-full-access'&&args.action==='request_full'&&(args.durationMinutes??120)===durationMinutes;
-      const desktop=['y_desktop_bind','y_desktop_action'].includes(operation.tool)&&preview.kind==='desktop-full-access'&&durationMinutes===10;
+      const desktop=['y_desktop_bind','y_desktop_action'].includes(operation.tool)&&preview.kind==='desktop-full-access'&&durationMinutes===DESKTOP_FULL_ACCESS_MINUTES;
       if(preview.contextHash!==contextHash||!dedicated&&!desktop)throw fail('ACCESS_NOT_APPROVED','Approval belongs to another chat or duration');
       const expires=Math.min(context.expires,Date.now()+durationMinutes*60000);
       this.db.prepare('INSERT INTO chat_access(owner,context_hash,expires,operation_id) VALUES(?,?,?,?) ON CONFLICT(owner,context_hash) DO UPDATE SET expires=excluded.expires,operation_id=excluded.operation_id').run(this.owner,contextHash,expires,operationId);

@@ -1,6 +1,8 @@
 // Full Access is a human-approved, revocable capability for one server-issued
 // chat context. Neither a tool argument nor host metadata can activate it.
 import {FULL_ACCESS_URI} from './inline-approval.mjs';
+import {DESKTOP_FULL_ACCESS_MINUTES} from '../engine/src/access-defaults.mjs';
+export {DESKTOP_FULL_ACCESS_MINUTES};
 export const chatAccessTool={
  name:'y_chat_access',title:'Full Access in this chat',
  description:'Enable Full Access directly inside this ChatGPT conversation: call action=request_full and wait for the owner card click. Set administrator=true only when the user requests the extra Administrator option; after the card it needs Windows UAC on this PC and enables y_admin_run. Normal Full Access never requests UAC. action=status only checks; action=revoke ends the grant and its Administrator executor. Preserve contextToken; other chats stay separate.',
@@ -9,10 +11,10 @@ export const chatAccessTool={
  _meta:{ui:{resourceUri:FULL_ACCESS_URI},'openai/outputTemplate':FULL_ACCESS_URI}
 };
 export const chatAccessGate={decision:'approve',kind:'chat-full-access',reason:'The owner must explicitly enable Full Access for this chat context.'};
-export const DESKTOP_FULL_ACCESS_MINUTES=10;
 export function desktopAccessPresentation(){
  const p=chatAccessPresentation({durationMinutes:DESKTOP_FULL_ACCESS_MINUTES});
- return {...p,displayMode:'inline',title:'Allow desktop control for 10 minutes',purpose:'Temporarily enable Full Access for this chat so desktop control can finish without repeated approval clicks.',impact:'For 10 minutes this chat can operate desktop windows, read and change files, and run commands without another YGPT approval. Other chats keep their existing permissions. The requested desktop step runs once after you confirm.',reversible:'Revoke with y_chat_access action=revoke, or close the chat context. Access expires after 10 minutes. Completed actions are not undone.',approveLabel:'Allow Full Access for 10 minutes'};
+ const minutes=DESKTOP_FULL_ACCESS_MINUTES;
+ return {...p,displayMode:'inline',title:`Allow desktop control for ${minutes} minutes`,purpose:'Temporarily enable Full Access for this chat so desktop control can finish without repeated approval clicks.',impact:`For ${minutes} minutes this chat can operate desktop windows, read and change files, and run commands without another YGPT approval. Other chats keep their existing permissions. The requested desktop step runs once after you confirm.`,reversible:`Revoke with y_chat_access action=revoke, or close the chat context. Access expires after ${minutes} minutes. Completed actions are not undone.`,approveLabel:`Allow Full Access for ${minutes} minutes`};
 }
 export function chatAccessPresentation(args={}){
  const minutes=args.durationMinutes??120;
