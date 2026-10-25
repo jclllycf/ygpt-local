@@ -41,7 +41,12 @@ class YDesktop {
   [DllImport("user32.dll")] static extern IntPtr WindowFromPoint(POINT p);
   [DllImport("user32.dll")] static extern IntPtr GetAncestor(IntPtr h,uint flags);
   [DllImport("user32.dll")] static extern bool IsChild(IntPtr parent,IntPtr child);
-  [DllImport("user32.dll")] static extern uint SendInput(uint n,INPUT[] input,int size);
+  [DllImport("user32.dll",SetLastError=true)] static extern uint SendInput(uint n,INPUT[] input,int size);
+  [DllImport("kernel32.dll")] static extern void SetLastError(uint error);
+  [DllImport("advapi32.dll",SetLastError=true)] static extern bool OpenProcessToken(IntPtr process,uint access,out IntPtr token);
+  [DllImport("advapi32.dll",SetLastError=true)] static extern bool GetTokenInformation(IntPtr token,int info,IntPtr buffer,int size,out int needed);
+  [DllImport("advapi32.dll")] static extern IntPtr GetSidSubAuthorityCount(IntPtr sid);
+  [DllImport("advapi32.dll")] static extern IntPtr GetSidSubAuthority(IntPtr sid,uint index);
   [DllImport("user32.dll",SetLastError=true)] static extern IntPtr OpenInputDesktop(uint flags,bool inherit,uint access);
   [DllImport("user32.dll")] static extern bool CloseDesktop(IntPtr h);
   [DllImport("user32.dll")] static extern bool SetProcessDpiAwarenessContext(IntPtr value);
@@ -59,6 +64,8 @@ class YDesktop {
   static string[] extraProtected=new string[0];
   static bool effectStarted=false;
   static string requestedAction="";
+  static IntPtr inputWindow=IntPtr.Zero;
+  internal static Dictionary<string,object> inputDiagnostics;
   static string[] agentNames={"chatgpt","codex","openai"};
   static string[] agentPaths={@"\windowsapps\openai.",@"\appdata\local\packages\openai.",@"\appdata\local\programs\chatgpt\",@"\appdata\local\programs\codex\",@"\appdata\local\openai\",@"\appdata\roaming\openai\",@"\appdata\local\chatgpt\",@"\appdata\roaming\chatgpt\"};
   static Ident Identify(int pid) {
@@ -105,9 +112,23 @@ class YDesktop {
   }
   struct RECT { public int Left,Top,Right,Bottom; }
   struct POINT { public int X,Y; }
-  [StructLayout(LayoutKind.Sequential)] struct MOUSEINPUT { public int dx,dy;public uint mouseData,dwFlags,time;public IntPtr extra; }
-  [StructLayout(LayoutKind.Sequential)] struct KEYBDINPUT { public ushort vk,scan;public uint flags,time;public IntPtr extra; }
-  [StructLayout(LayoutKind.Explicit,Size=40)] struct INPUT { [FieldOffset(0)]public uint type;[FieldOffset(8)]public MOUSEINPUT mouse;[FieldOffset(8)]public KEYBDINPUT key; }
+  [StructLayout(LayoutKind.Sequential)] internal struct MOUSEINPUT { public int dx,dy;public uint mouseData,dwFlags,time;public IntPtr extra; }
+  [StructLayout(LayoutKind.Sequential)] internal struct KEYBDINPUT { public ushort vk,scan;public uint flags,time;public IntPtr extra; }
+  [StructLayout(LayoutKind.Explicit,Size=40)] internal struct INPUT { [FieldOffset(0)]public uint type;[FieldOffset(8)]public MOUSEINPUT mouse;[FieldOffset(8)]public KEYBDINPUT key; }
+  class TokenLevel { public int? Rid;public bool? UiAccess; }
+  static TokenLevel TokenInfo(int pid){
+    var result=new TokenLevel();IntPtr process=OpenProcess(0x1000,false,pid),token=IntPtr.Zero;if(process==IntPtr.Zero)return result;
+    try{if(!OpenProcessToken(process,8,out token))return result;int needed;GetTokenInformation(token,25,IntPtr.Zero,0,out needed);
+      if(needed>0&&needed<65536){IntPtr buffer=Marshal.AllocHGlobal(needed);try{if(GetTokenInformation(token,25,buffer,needed,out needed)){IntPtr sid=Marshal.ReadIntPtr(buffer);byte count=Marshal.ReadByte(GetSidSubAuthorityCount(sid));if(count>0)result.Rid=Marshal.ReadInt32(GetSidSubAuthority(sid,(uint)(count-1)));}}finally{Marshal.FreeHGlobal(buffer);}}
+      IntPtr flag=Marshal.AllocHGlobal(4);try{if(GetTokenInformation(token,26,flag,4,out needed))result.UiAccess=Marshal.ReadInt32(flag)!=0;}finally{Marshal.FreeHGlobal(flag);}
+    }finally{if(token!=IntPtr.Zero)CloseHandle(token);CloseHandle(process);}return result;
+  }
+  static object InputAccess(int pid){var source=TokenInfo(Process.GetCurrentProcess().Id);var target=TokenInfo(pid);return new {sourceIntegrityRid=source.Rid,targetIntegrityRid=target.Rid,sourceUiAccess=source.UiAccess,higherIntegrityTarget=source.Rid.HasValue&&target.Rid.HasValue?(bool?)(target.Rid.Value>source.Rid.Value):null};}
+  static void PrepareInput(IntPtr win){
+    inputWindow=win;uint pid;GetWindowThreadProcessId(win,out pid);var source=TokenInfo(Process.GetCurrentProcess().Id);var target=TokenInfo((int)pid);
+    inputDiagnostics=new Dictionary<string,object>{{"sourceIntegrityRid",source.Rid},{"targetIntegrityRid",target.Rid},{"sourceUiAccess",source.UiAccess},{"requested",0u},{"inserted",0u}};
+    if(source.Rid.HasValue&&target.Rid.HasValue&&target.Rid.Value>source.Rid.Value&&source.UiAccess==false)throw new Exception("INPUT_INTEGRITY_MISMATCH: target has a higher Windows integrity level; no input was sent. Full Access does not elevate desktop tools. Use a normal-permission target or explicitly arrange owner-approved elevation; do not repeat the same approval.");
+  }
   static string S(Dictionary<string,object> d,string k,string fallback="") { return d.ContainsKey(k)?Convert.ToString(d[k]):fallback; }
   static bool Interactive() { IntPtr h=OpenInputDesktop(0,false,1);if(h==IntPtr.Zero)return false;try{var s=new StringBuilder(100);uint n;return GetUserObjectInformation(h,2,s,200,out n)&&s.ToString()=="Default";}finally{CloseDesktop(h);} }
   static string Title(IntPtr h){var s=new StringBuilder(1000);GetWindowText(h,s,s.Capacity);return s.ToString();}
@@ -115,7 +136,7 @@ class YDesktop {
     // Owner blacklist model (rc.13): every window is listed with its real
     // title and identity. Nothing is shielded or refused at this layer; the
     // human approval in the broker is the control point for binding/actions.
-    return new {hwnd=h.ToInt64().ToString(),pid=id,parentPid=ident.Parent,process=p.ProcessName,executablePath=exe,signer=ident.Signer,title=Title(h),birth=p.StartTime.ToUniversalTime().Ticks.ToString(),session=p.SessionId,@protected=false,protectedReason=(string)null};}
+    return new {hwnd=h.ToInt64().ToString(),pid=id,parentPid=ident.Parent,process=p.ProcessName,executablePath=exe,signer=ident.Signer,title=Title(h),birth=p.StartTime.ToUniversalTime().Ticks.ToString(),session=p.SessionId,inputAccess=InputAccess((int)id),@protected=false,protectedReason=(string)null};}
   static void Allowed(Process p) {if(p.SessionId!=Process.GetCurrentProcess().SessionId)throw new Exception("SESSION_MISMATCH");}
   static IntPtr Target(Dictionary<string,object> d) {var h=new IntPtr(long.Parse(S(d,"hwnd")));uint pid;if(!IsWindow(h))throw new Exception("STALE_WINDOW");GetWindowThreadProcessId(h,out pid);if(pid!=uint.Parse(S(d,"pid")))throw new Exception("WINDOW_IDENTITY_CHANGED");var p=Process.GetProcessById((int)pid);Allowed(p);if(p.StartTime.ToUniversalTime().Ticks.ToString()!=S(d,"birth"))throw new Exception("PROCESS_IDENTITY_CHANGED");
     string exe=Identify((int)pid).Exe;if(S(d,"executablePath").Length>0&&(exe==null||!string.Equals(exe,S(d,"executablePath"),StringComparison.OrdinalIgnoreCase)))throw new Exception("PROCESS_IDENTITY_CHANGED");return h;}
@@ -150,10 +171,24 @@ class YDesktop {
     finally{if(joinedTarget)AttachThreadInput(current,target,false);if(joinedFront)AttachThreadInput(current,front,false);}
     if(GetForegroundWindow()!=h)throw new Exception("FOREGROUND_NOT_TARGET: Windows did not activate the requested window; no input was sent");
   }
-  static void Input(INPUT[] a){effectStarted=true;if(SendInput((uint)a.Length,a,Marshal.SizeOf(typeof(INPUT)))!=a.Length)throw new Exception("INPUT_BLOCKED_UIPI");}
+  // SendInput cannot identify UIPI as the reason for a zero return. Keep the
+  // actual delivery count and Win32 error; never turn an unconfirmed cause into
+  // another permission request. A partial batch must not be replayed.
+  internal static void InputResult(uint requested,uint inserted,int error){
+    if(inputDiagnostics==null)inputDiagnostics=new Dictionary<string,object>();
+    inputDiagnostics["requested"]=requested;inputDiagnostics["inserted"]=inserted;inputDiagnostics["win32Error"]=error;
+    if(inserted>0)effectStarted=true;if(inserted==requested)return;
+    string code=inserted>0?"INPUT_PARTIAL":error==87?"INPUT_INVALID_PARAMETER":error==5?"INPUT_ACCESS_DENIED":"INPUT_NOT_INSERTED";
+    throw new Exception(code+": Windows inserted "+inserted+" of "+requested+" input events (Win32 error "+error+"). "+(inserted>0?"Inspect the window and keyboard state; do not replay this batch.":"No events from this batch were inserted. The return value does not prove UIPI; inspect inputDiagnostics and the input desktop before a new action."));
+  }
+  static void Input(INPUT[] a){
+    if(!Interactive())throw new Exception("NO_INTERACTIVE_DESKTOP: no input was sent");
+    if(inputWindow==IntPtr.Zero||GetForegroundWindow()!=inputWindow)throw new Exception("FOREGROUND_NOT_TARGET: no input was sent");
+    SetLastError(0);uint inserted=SendInput((uint)a.Length,a,Marshal.SizeOf(typeof(INPUT)));int error=Marshal.GetLastWin32Error();InputResult((uint)a.Length,inserted,error);
+  }
   static bool OwnedWindow(IntPtr candidate,IntPtr target){if(candidate==target||IsChild(target,candidate))return true;for(int n=0;n<16&&candidate!=IntPtr.Zero;n++){candidate=GetWindow(candidate,4);if(candidate==target)return true;}return false;}
   static object Click(IntPtr win,AutomationElement element,string method){
-    Focus(win);var box=element.Current.BoundingRectangle;if(box.IsEmpty||element.Current.IsOffscreen)throw new Exception("CONTROL_NOT_VISIBLE");
+    PrepareInput(win);Focus(win);var box=element.Current.BoundingRectangle;if(box.IsEmpty||element.Current.IsOffscreen)throw new Exception("CONTROL_NOT_VISIBLE");
     var points=new List<System.Windows.Point>();System.Windows.Point clickable;try{if(element.TryGetClickablePoint(out clickable))points.Add(clickable);}catch{}
     points.Add(new System.Windows.Point(box.X+box.Width/2,box.Y+box.Height/2));
     foreach(var point in points){int x=(int)Math.Round(point.X),y=(int)Math.Round(point.Y);if(!SystemInformation.VirtualScreen.Contains(x,y))continue;
@@ -168,7 +203,8 @@ class YDesktop {
     switch(value.ToUpperInvariant()){case "CTRL":case "CONTROL":return 0x11;case "SHIFT":return 0x10;case "ALT":return 0x12;case "ENTER":case "RETURN":return 0x0D;case "TAB":return 0x09;case "ESC":case "ESCAPE":return 0x1B;case "SPACE":return 0x20;case "BACKSPACE":return 0x08;case "DELETE":return 0x2E;case "HOME":return 0x24;case "END":return 0x23;case "PAGEUP":return 0x21;case "PAGEDOWN":return 0x22;case "LEFT":return 0x25;case "UP":return 0x26;case "RIGHT":return 0x27;case "DOWN":return 0x28;}
     if(value.Length==1&&char.IsLetterOrDigit(value[0]))return (ushort)char.ToUpperInvariant(value[0]);int number;if(value.StartsWith("F",StringComparison.OrdinalIgnoreCase)&&int.TryParse(value.Substring(1),out number)&&number>=1&&number<=24)return (ushort)(0x6F+number);throw new Exception("BAD_KEY_CHORD");
   }
-  static object Keys(IntPtr win,string value){var keys=value.Split('+').Select(s=>Key(s.Trim())).ToArray();if(keys.Length<1||keys.Length>5||keys.Distinct().Count()!=keys.Length)throw new Exception("BAD_KEY_CHORD");Focus(win);var down=new List<ushort>();try{foreach(ushort key in keys){Input(new[]{new INPUT{type=1,key=new KEYBDINPUT{vk=key}}});down.Add(key);}}finally{for(int n=down.Count-1;n>=0;n--)Input(new[]{new INPUT{type=1,key=new KEYBDINPUT{vk=down[n],flags=2}}});}return new {pressed=value,method="verified-window-keyboard"};}
+  internal static INPUT[] KeyInputs(string value){var keys=value.Split('+').Select(s=>Key(s.Trim())).ToArray();if(keys.Length<1||keys.Length>5||keys.Distinct().Count()!=keys.Length)throw new Exception("BAD_KEY_CHORD");return keys.Select(k=>new INPUT{type=1,key=new KEYBDINPUT{vk=k}}).Concat(keys.Reverse().Select(k=>new INPUT{type=1,key=new KEYBDINPUT{vk=k,flags=2}})).ToArray();}
+  static object Keys(IntPtr win,string value){var events=KeyInputs(value);PrepareInput(win);Focus(win);Input(events);return new {pressed=value,method="verified-window-keyboard",inputDiagnostics=inputDiagnostics};}
   static object Run(Dictionary<string,object> d) {
     string action=S(d,"action");requestedAction=action;ReadProtected(d);
     if(action=="windows"){var list=new List<object>();EnumWindows((h,l)=>{if(IsWindowVisible(h)&&Title(h).Length>0){try{list.Add(WindowInfo(h));}catch{}}return true;},IntPtr.Zero);return new {windows=list,interactive=Interactive()};}
@@ -197,7 +233,7 @@ class YDesktop {
       effectStarted=true;((InvokePattern)pat).Invoke();return new {invoked=true,method="UIA.InvokePattern"};
     }
     if(action=="click")return Click(win,element,"verified-pointer-click");
-    if(action=="type"){Focus(win);element.SetFocus();if(GetForegroundWindow()!=win)throw new Exception("FOREGROUND_NOT_TARGET");if(!AutomationElement.FocusedElement.GetRuntimeId().SequenceEqual(element.GetRuntimeId()))throw new Exception("FOCUS_CHANGED");string text=S(d,"value");if(text.Length>10000)throw new Exception("INPUT_LIMIT");foreach(char c in text){if(GetForegroundWindow()!=win)throw new Exception("FOCUS_CHANGED");Input(new[]{new INPUT{type=1,key=new KEYBDINPUT{scan=c,flags=4}},new INPUT{type=1,key=new KEYBDINPUT{scan=c,flags=6}}});}return new {typed=text.Length};}
+    if(action=="type"){PrepareInput(win);Focus(win);element.SetFocus();if(GetForegroundWindow()!=win)throw new Exception("FOREGROUND_NOT_TARGET");if(!AutomationElement.FocusedElement.GetRuntimeId().SequenceEqual(element.GetRuntimeId()))throw new Exception("FOCUS_CHANGED");string text=S(d,"value");if(text.Length>10000)throw new Exception("INPUT_LIMIT");foreach(char c in text){if(GetForegroundWindow()!=win)throw new Exception("FOCUS_CHANGED");Input(new[]{new INPUT{type=1,key=new KEYBDINPUT{scan=c,flags=4}},new INPUT{type=1,key=new KEYBDINPUT{scan=c,flags=6}}});}return new {typed=text.Length};}
     throw new Exception("BAD_ACTION");
   }
   static void Fixture(string id) {
@@ -212,6 +248,6 @@ class YDesktop {
     if(args.Length==2&&args[0]=="--fixture"){Fixture(args[1]);return;}
     Console.InputEncoding=Encoding.UTF8;Console.OutputEncoding=new UTF8Encoding(false);
     try{string raw=Console.ReadLine();if(raw==null||raw.Length>1048576)throw new Exception("INPUT_LIMIT");Console.WriteLine(json.Serialize(new {ok=true,result=Run(json.Deserialize<Dictionary<string,object>>(raw))}));}
-    catch(Exception e){string message=e.Message??"",code=Regex.Match(message,@"^[A-Z][A-Z0-9_]{2,}(?=:|$)").Value;if(code.Length==0)code=requestedAction=="invoke"?"UIA_INVOKE_FAILED":"UIA_EXECUTION_FAILED";string hresult="0x"+e.HResult.ToString("X8");if(message.Length==0)message=code+" ("+e.GetType().Name+", HRESULT "+hresult+")";Console.WriteLine(json.Serialize(new {ok=false,error=message,code=code,hresult=hresult,exceptionType=e.GetType().Name,action=requestedAction,effectStarted=effectStarted,outcomeUnknown=effectStarted}));Environment.ExitCode=1;}
+    catch(Exception e){string message=e.Message??"",code=Regex.Match(message,@"^[A-Z][A-Z0-9_]{2,}(?=:|$)").Value;if(code.Length==0)code=requestedAction=="invoke"?"UIA_INVOKE_FAILED":"UIA_EXECUTION_FAILED";string hresult="0x"+e.HResult.ToString("X8");if(message.Length==0)message=code+" ("+e.GetType().Name+", HRESULT "+hresult+")";Console.WriteLine(json.Serialize(new {ok=false,error=message,code=code,hresult=hresult,exceptionType=e.GetType().Name,action=requestedAction,inputDiagnostics=inputDiagnostics,effectStarted=effectStarted,outcomeUnknown=effectStarted}));Environment.ExitCode=1;}
   }
 }

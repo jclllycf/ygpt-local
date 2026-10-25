@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.0.15
+
+- Report actual native input delivery and Win32 errors instead of labelling every SendInput failure as UIPI. Keep zero and partial delivery distinct, preserve diagnostics through typed tools, and identify observed integrity mismatches before injection.
+- Send complete keyboard chords in one ordered batch with foreground and interactive-desktop checks. Keep unknown outcomes and existing approvals intact. The development PC still reports a Windows input refusal; its source is not yet confirmed.
+
 ## 1.0.14
 
 - Require the original chat context when displaying an approval. Missing, mismatched or expired contexts return actionable errors and a recovery state instead of disabled buttons labelled Awaiting approval.
