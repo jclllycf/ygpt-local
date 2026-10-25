@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0.12
+
+- Inspect deep Chrome/Edge controls, report all traversal limits honestly, and support selected-subtree inspection.
+- Include toggle states and actionable selector errors; distinguish missing controls from actual permission errors.
+- Verify a real disposable Chrome extension reload from version 1.0 to 1.1 through Windows UIA.
+
 ## 1.0.11
 
 - Ordinary approvals remain inline; only explicit Full Access requests may automatically open a panel.

@@ -30,6 +30,8 @@ test('Actual isolated Edge, native UIA fixture and durable job output',async()=>
   const binding=await call('y_desktop_bind',{hwnd:window.hwnd,...ctx});assert.equal(binding.code,'APPROVAL_REQUIRED');
   const enabled=await decide(c,binding,'once',ctx.contextToken);const bound=unpack(enabled.result);assert.equal(bound.ok,true);target=bound.result.targetId;
   const tree=await call('y_desktop_inspect',{targetId:target,...ctx});assert.ok(tree.result.result.elements.some(e=>e.automationId==='FixtureInput'));
+  const limited=await call('y_desktop_inspect',{targetId:target,maxNodes:1,...ctx});assert.equal(limited.result.result.elements.length,1);assert.equal(limited.result.result.truncated,true);assert.ok(limited.result.result.truncationReasons.includes('maxNodes'));
+  const scoped=await call('y_desktop_inspect',{targetId:target,automationId:'FixtureInput',maxDepth:1,maxNodes:10,...ctx});assert.equal(scoped.result.result.scoped,true);assert.equal(scoped.result.result.elements[0].automationId,'FixtureInput');assert.equal(scoped.result.result.maxDepth,1);
   const foreign=await c.call('y_desktop_inspect',{targetId:target});assert.ok(foreign.isError&&/SESSION_FOREIGN/.test(JSON.stringify(foreign)),'another chat cannot read this window');
   const setValue=await call('y_desktop_action',{targetId:target,action:'setValue',automationId:'FixtureInput',value:'YGPT_UIA_OK',...ctx});assert.equal(setValue.ok,true);
   const invoke=await call('y_desktop_action',{targetId:target,action:'invoke',automationId:'ApplyButton',...ctx});assert.equal(invoke.ok,true);

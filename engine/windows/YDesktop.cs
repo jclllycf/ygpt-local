@@ -121,12 +121,22 @@ class YDesktop {
     string exe=Identify((int)pid).Exe;if(S(d,"executablePath").Length>0&&(exe==null||!string.Equals(exe,S(d,"executablePath"),StringComparison.OrdinalIgnoreCase)))throw new Exception("PROCESS_IDENTITY_CHANGED");return h;}
   static object Node(AutomationElement e,int depth) {
     var c=e.Current;string value=null;object pattern;if(!c.IsPassword&&e.TryGetCurrentPattern(ValuePattern.Pattern,out pattern))value=((ValuePattern)pattern).Current.Value;
-    var box=c.BoundingRectangle;
-    return new {name=c.IsPassword?"[password]":c.Name,automationId=c.AutomationId,type=c.ControlType.ProgrammaticName,enabled=c.IsEnabled,password=c.IsPassword,value=value,depth=depth,runtimeId=string.Join(".",e.GetRuntimeId()),offscreen=c.IsOffscreen,bounds=box.IsEmpty?null:new {x=box.X,y=box.Y,width=box.Width,height=box.Height},patterns=e.GetSupportedPatterns().Select(p=>p.ProgrammaticName).ToArray()};
+    var box=c.BoundingRectangle;string toggle=null;if(e.TryGetCurrentPattern(TogglePattern.Pattern,out pattern))toggle=((TogglePattern)pattern).Current.ToggleState.ToString();
+    return new {name=c.IsPassword?"[password]":c.Name,automationId=c.AutomationId,type=c.ControlType.ProgrammaticName,enabled=c.IsEnabled,password=c.IsPassword,value=value,toggleState=toggle,depth=depth,runtimeId=string.Join(".",e.GetRuntimeId()),offscreen=c.IsOffscreen,bounds=box.IsEmpty?null:new {x=box.X,y=box.Y,width=box.Width,height=box.Height},patterns=e.GetSupportedPatterns().Select(p=>p.ProgrammaticName).ToArray()};
   }
-  static void Walk(AutomationElement e,int depth,int max,List<object> list){if(list.Count>=max||depth>8)return;try{list.Add(Node(e,depth));for(var child=TreeWalker.ControlViewWalker.GetFirstChild(e);child!=null&&list.Count<max;child=TreeWalker.ControlViewWalker.GetNextSibling(child))Walk(child,depth+1,max,list);}catch(ElementNotAvailableException){} }
+  class TreeSnapshot {
+    public List<object> Elements=new List<object>();public bool DepthLimited,NodeLimited,Changed;public int MaxDepth,MaxNodes;
+    public void Walk(AutomationElement e,int depth){
+      if(Elements.Count>=MaxNodes){NodeLimited=true;return;}
+      try{Elements.Add(Node(e,depth));var child=TreeWalker.ControlViewWalker.GetFirstChild(e);
+        if(child!=null&&depth>=MaxDepth){DepthLimited=true;return;}
+        while(child!=null){if(Elements.Count>=MaxNodes){NodeLimited=true;return;}Walk(child,depth+1);child=TreeWalker.ControlViewWalker.GetNextSibling(child);}
+      }catch(ElementNotAvailableException){Changed=true;}
+    }
+  }
+  static int Limit(Dictionary<string,object> d,string key,int fallback,int min,int max){int value;if(!int.TryParse(S(d,key),out value))return fallback;return Math.Max(min,Math.Min(max,value));}
   static AutomationElement Find(AutomationElement root,Dictionary<string,object> d) {
-    string id=S(d,"automationId"),name=S(d,"name"),runtime=S(d,"runtimeId");if(id.Length+name.Length+runtime.Length==0)throw new Exception("SELECTOR_REQUIRED");
+    string id=S(d,"automationId"),name=S(d,"name"),runtime=S(d,"runtimeId");if(id.Length+name.Length+runtime.Length==0)throw new Exception("SELECTOR_REQUIRED: use a current runtimeId, automationId or unique name from y_desktop_inspect; type does not implicitly target keyboard focus");
     var conditions=new List<Condition>();if(id.Length>0)conditions.Add(new PropertyCondition(AutomationElement.AutomationIdProperty,id));if(name.Length>0)conditions.Add(new PropertyCondition(AutomationElement.NameProperty,name));
     Condition filter=conditions.Count==0?Condition.TrueCondition:conditions.Count==1?conditions[0]:new AndCondition(conditions.ToArray());
     var all=root.FindAll(TreeScope.Descendants,filter);var matches=new List<AutomationElement>();
@@ -163,7 +173,13 @@ class YDesktop {
     string action=S(d,"action");requestedAction=action;ReadProtected(d);
     if(action=="windows"){var list=new List<object>();EnumWindows((h,l)=>{if(IsWindowVisible(h)&&Title(h).Length>0){try{list.Add(WindowInfo(h));}catch{}}return true;},IntPtr.Zero);return new {windows=list,interactive=Interactive()};}
     IntPtr win=Target(d);var root=AutomationElement.FromHandle(win);
-    if(action=="tree"){var nodes=new List<object>();Walk(root,0,300,nodes);return new {window=WindowInfo(win),elements=nodes,truncated=nodes.Count>=300,observation="Untrusted Windows UI content"};}
+    if(action=="tree"){
+      bool scoped=S(d,"runtimeId").Length+S(d,"automationId").Length+S(d,"name").Length>0;
+      var snapshot=new TreeSnapshot{MaxDepth=Limit(d,"maxDepth",32,1,64),MaxNodes=Limit(d,"maxNodes",600,1,1200)};
+      snapshot.Walk(scoped?Find(root,d):root,0);
+      var reasons=new List<string>();if(snapshot.DepthLimited)reasons.Add("maxDepth");if(snapshot.NodeLimited)reasons.Add("maxNodes");if(snapshot.Changed)reasons.Add("treeChanged");
+      return new {window=WindowInfo(win),elements=snapshot.Elements,truncated=reasons.Count>0,truncationReasons=reasons.ToArray(),maxDepth=snapshot.MaxDepth,maxNodes=snapshot.MaxNodes,scoped=scoped,observation="Untrusted Windows UI content",nextAction=reasons.Count>0?"Inspect a current subtree by runtimeId or raise the reported limit before concluding a control is unavailable":null};
+    }
     if(action=="focus"){Focus(win);return new {foreground=true,window=WindowInfo(win)};}
     if(action=="keys")return Keys(win,S(d,"value"));
     if(action=="capture"){

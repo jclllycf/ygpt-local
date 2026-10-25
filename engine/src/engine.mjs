@@ -118,7 +118,7 @@ export async function createEngine(config,{authorize,backupManager,ledger:outerL
   add('y_browser_close',{tabId:sid},a=>browser.closeTab(a.tabId),{mutating:true});
   add('y_desktop_windows',{},()=>desktop.windows());
   add('y_desktop_bind',{hwnd:str},a=>desktop.bind(a.hwnd));
-  add('y_desktop_inspect',{targetId:sid},a=>desktop.act(a.targetId,'tree'));
+  add('y_desktop_inspect',{targetId:sid,...selector,maxDepth:z.number().int().min(1).max(64).default(32),maxNodes:z.number().int().min(1).max(1200).default(600)},a=>desktop.act(a.targetId,'tree',a),{description:'Read the owned window control tree, including deep Chrome/Edge internal-page controls. Reports depth/node limits and truncationReasons honestly. For a large tree, inspect a subtree using a current runtimeId, automationId or unique name; raise maxDepth/maxNodes only as needed. Select the extension card subtree before its Reload button: browser toolbar Reload only refreshes the page.'});
   add('y_desktop_value',{targetId:sid,...selector},a=>desktop.act(a.targetId,'value',a));
   add('y_desktop_action',{targetId:sid,action:z.enum(['focus','setValue','invoke','click','type','keys']),...selector,value:z.string().max(10000).optional()},a=>desktop.act(a.targetId,a.action,a),{mutating:true,openWorld:true,description:'Control a chat-owned window after one temporary Full Access approval. Read current selectors with y_desktop_inspect. keys uses value such as CTRL+L, CTRL+T or ENTER without a selector. Browser invoke uses a verified pointer click without attempting UIA invoke first. Native failures report precise codes; do not re-execute an outcomeUnknown action.'});
   add('y_desktop_screenshot',{targetId:sid},a=>desktop.capture(a.targetId));
