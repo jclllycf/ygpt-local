@@ -1,0 +1,84 @@
+{
+  "version": "1.0.13",
+  "at": "2026-10-25T12:36:12.607Z",
+  "testedCodeCommit": "6e5767704ea8130cbf34cd0b7ee1d93caa7e9efc",
+  "desktopDefaultMinutes": 100,
+  "sharedDefaultSource": "engine/src/access-defaults.mjs",
+  "cardAndServerDurationMatch": true,
+  "currentChatOnly": true,
+  "explicitConfirmationRequired": true,
+  "revocable": true,
+  "expiredGrantsRequireRenewal": true,
+  "previouslyApprovedExpiriesNotExtended": true,
+  "explicitChatAccessCustomDurationUnchanged": true,
+  "administratorRemainsSeparate": true,
+  "validation": {
+    "targeted": {
+      "total": 45,
+      "passed": 41,
+      "failed": 0,
+      "skipped": 4
+    },
+    "packagedNativeFixture": {
+      "version": "1.0.13",
+      "scope": "Packaged broker and native fixture with isolated data; no production approval decided",
+      "defaultDesktopMinutes": 100,
+      "cardMinutes": 100,
+      "actualGrantedMinutesWithinTolerance": true,
+      "grantRemainingMilliseconds": 5999975,
+      "foreignChatStandard": true,
+      "revokePassed": true,
+      "at": "2026-10-25T12:33:15.975Z"
+    },
+    "hostedWindows": {
+      "total": 163,
+      "passed": 150,
+      "failed": 0,
+      "skipped": 13
+    },
+    "ciConclusion": "success",
+    "ciUrl": "https://github.com/jclllycf/ygpt-local/actions/runs/40193438918",
+    "otherChatRemainsStandard": true,
+    "revocationPassed": true,
+    "unapprovedOrWrongDurationActivationRejected": true
+  },
+  "package": {
+    "version": "1.0.13",
+    "manifestFiles": 5920,
+    "manifestMismatches": 0,
+    "forbiddenMembers": 0,
+    "currentRuntimeServiceExtensionMatch": true,
+    "currentNativeBinariesMatch": true,
+    "retiredResolverAndShippedInstructionsAbsent": true,
+    "currentSkillIncluded": true,
+    "artifacts": [
+      {
+        "file": "YGPTLocal-Setup-1.0.13-win-x64.exe",
+        "bytes": 94845952,
+        "sha256": "52e47eabb206896821990867580d6a00945b48d787bb9bdaaffba32e22d24f2f"
+      },
+      {
+        "file": "YGPTLocal-Update-1.0.13-win-x64.exe",
+        "bytes": 94845952,
+        "sha256": "1fd23a868a7a73c31d88548bc6fa03361a07219fccb371084c87ee4146f9a42a"
+      },
+      {
+        "file": "ygpt-local-portable-1.0.13-win-x64.zip",
+        "bytes": 93848513,
+        "sha256": "961c9704c599fc8d6aaf6a3565be7566c3c109da349f08cbd3cef7185269db0a"
+      }
+    ]
+  },
+  "local": {
+    "applied": false,
+    "currentVersion": "1.0.12",
+    "verifiedUpdaterStagedInsideInstall": true,
+    "state": "awaiting-owner-decision-on-existing-operation",
+    "reason": "An existing pending operation prevents safe maintenance. No production approval was decided or bypassed; current service remains installed and running."
+  },
+  "limits": [
+    "Packaged tests use isolated data and fixture decisions, not a real ChatGPT human card click.",
+    "The desktop default applies to new approvals; an existing grant is not extended by updating.",
+    "Existing pending production operations must be resolved by the owner before applying the local update."
+  ]
+}
