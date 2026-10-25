@@ -1,0 +1,183 @@
+{
+  "version": "1.0.10",
+  "at": "2026-10-25T10:01:41.447Z",
+  "testedCodeCommit": "fe47a02e269934497ae3509231d2875853a5f1dc",
+  "reportedFailures": {
+    "approvedBrowserInvokeReturnedEmptyGenericError": true,
+    "subsequentVerifiedPointerClickSucceeded": true,
+    "separateOccludedTargetObserved": true,
+    "originalUserActionReplayed": false,
+    "oldPendingRequestExpiredNaturally": true,
+    "unrelatedUnknownResultPreserved": true
+  },
+  "tests": {
+    "earlierFullLocalRegression": {
+      "total": 152,
+      "passed": 147,
+      "failed": 0,
+      "skipped": 5
+    },
+    "finalUiAndAccessRegression": {
+      "total": 13,
+      "passed": 13,
+      "failed": 0,
+      "skipped": 0
+    },
+    "hostedWindowsFinalSource": {
+      "total": 153,
+      "passed": 141,
+      "failed": 0,
+      "skipped": 12
+    },
+    "ciUrl": "https://github.com/jclllycf/ygpt-local/actions/runs/40182638325",
+    "ciConclusion": "success",
+    "hostedSkips": "Seven optional Chromium fixtures without the local browser override; three POSIX helper fixtures; python3 alias and repo-local Roslyn fixture unavailable"
+  },
+  "permissions": {
+    "desktopFirstApproval": "Ten minutes of Full Access to this chat; explicit owner confirmation",
+    "coversDesktopFilesAndCommands": true,
+    "otherChatContextsIsolated": true,
+    "expiryAndRevocationVerified": true,
+    "developmentAccess": "y_chat_access action=request_full directly returns the in-chat card; default 120 minutes with an explicit duration",
+    "noWindowsDetourRequired": true,
+    "noProductionGrantActivatedByTests": true,
+    "existingPendingActionsNotDrainedOrReplayed": true
+  },
+  "desktop": {
+    "browserInvoke": "Target-verified pointer click without first attempting InvokePattern",
+    "nativeErrorCodeAndHresultPreserved": true,
+    "uncertainEffectsNotRetried": true,
+    "keyboardChords": true,
+    "foregroundAttachmentAlwaysDetached": true,
+    "actualChromeProbe": {
+      "scope": "Actual Chrome and Windows UIA in a disposable browser only; no signed-in user profile or production ChatGPT task touched",
+      "invokeUsedVerifiedClick": true,
+      "newTabOpened": true,
+      "keyboardChordSucceeded": true,
+      "personalTabsTouched": false,
+      "browserClosedAndTemporaryProfileRemoved": true,
+      "at": "2026-10-25T09:36:45.635Z"
+    }
+  },
+  "approvalUi": {
+    "resource": "ui://ygpt/approval/strip-v8-desktop-flow.html",
+    "freshWidgetSessionPerRender": true,
+    "boundedWaitResumesOriginalResult": true,
+    "readOnlyBridgeFallbackAfterTimeout": true,
+    "uncertainDecisionNotReplayed": true,
+    "optionalPictureInPictureWhilePending": true,
+    "returnInlineBeforeDesktopInput": true,
+    "hostControlsPlacementMountingAndPip": true
+  },
+  "screenshots": {
+    "inlineImageReturnedAndGeneratedPngDeletedBeforeResponse": true,
+    "localLedgerExcludesImageBytes": true,
+    "staleGeneratedPngStartupCleanup": true,
+    "currentProductionGeneratedFiles": 0,
+    "currentProductionGeneratedBytes": 0,
+    "manualPassRemoved": 0,
+    "unrelatedImagesPreserved": true,
+    "chatHostRetentionUnchanged": true
+  },
+  "toolCatalog": {
+    "total": 68,
+    "public": 66,
+    "appOnly": 2,
+    "retiredResolverAbsent": true,
+    "retiredAliasesDoNotResolve": true,
+    "duplicateApprovalCenterRemoved": true,
+    "desktopTestFixtureExcludedFromProduction": true,
+    "currentSkillShipped": true,
+    "historicalMigrationPlansExcludedFromInstalledPackage": true
+  },
+  "package": {
+    "version": "1.0.10",
+    "manifestFiles": 5908,
+    "manifestMismatches": 0,
+    "forbiddenMembers": 0,
+    "currentRuntimeServiceExtensionMatch": true,
+    "currentNativeBinariesMatch": true,
+    "retiredResolverAndShippedInstructionsAbsent": true,
+    "currentSkillIncluded": true,
+    "artifacts": [
+      {
+        "file": "YGPTLocal-Setup-1.0.10-win-x64.exe",
+        "bytes": 94665728,
+        "sha256": "8f2168d62f7c82f40a403d03ceb49013d0d2a6e087ae98c142552e129a99f803"
+      },
+      {
+        "file": "YGPTLocal-Update-1.0.10-win-x64.exe",
+        "bytes": 94665728,
+        "sha256": "c607263d9da061c846a7fa5e35570d7d95265888fbf6d44332200d3a553a9cfb"
+      },
+      {
+        "file": "ygpt-local-portable-1.0.10-win-x64.zip",
+        "bytes": 93668592,
+        "sha256": "02d05d30ba6478a3f235cf6fc453e03a6395165f7c6473c8f1a8d91548075b8a"
+      }
+    ]
+  },
+  "installed": {
+    "applied": true,
+    "manifestFiles": 5908,
+    "manifestMismatches": 0,
+    "packageManifestMatches": true,
+    "credentialsConnectionPairingUnchanged": true,
+    "stateAuditPassed": true,
+    "containedState": true,
+    "oldExternalDataAbsent": true,
+    "localReady": true,
+    "tunnelConnected": true,
+    "lastError": "",
+    "restarts": 0,
+    "freshTrustedHostHandshake": false,
+    "isolatedInstalledSmoke": {
+      "version": "1.0.10",
+      "scope": "Installed binaries and source with separate disposable data; not a ChatGPT host call",
+      "fullAccessToolPresent": true,
+      "initialMode": "standard",
+      "unknownCommandPolicy": "allow-unless-explicit-high-risk-signal",
+      "protectedRuntimeInfoReadWithoutApproval": true,
+      "unlistedOrdinaryExecutableWithoutApproval": true,
+      "statisticsWithLocalsLoopMathAndPrivateFixtureWithoutApproval": true,
+      "fixtureUnchanged": true,
+      "bundledNpxVersionWithoutApproval": true,
+      "bundledNpxDurableJobWithoutApproval": true,
+      "fullAccessEnabled": false,
+      "originalUserRequestExecuted": false,
+      "productionStateOrCredentialsCopied": false,
+      "at": "2026-10-25T09:58:25.859Z",
+      "inChatFullAccessCardWithoutSeparateShow": true,
+      "isolatedFixtureDecisionResumedWaitingTool": true,
+      "currentContextOnly": true,
+      "revocationVerified": true,
+      "productionFullAccessChanged": false
+    }
+  },
+  "cleanup": {
+    "installation": {
+      "state": "complete",
+      "removedFiles": 5909,
+      "bytesReclaimed": 349182308,
+      "removedRollbackCopies": 1,
+      "rollbackRetention": 1,
+      "retainedRollbackVersion": "1.0.9",
+      "reviewRequired": false,
+      "privateDataKept": true,
+      "snapshotsSwept": false
+    },
+    "supersededUnpublishedBuild": {
+      "removedArtifacts": 2,
+      "bytes": 348231522,
+      "currentPackageKept": true
+    },
+    "privateRecoveryStateAndNecessaryRollbackKept": true
+  },
+  "limits": [
+    "Physical Android and a new trusted human ChatGPT card click were not rerun.",
+    "Desktop fixtures, installed isolated calls and an actual disposable Chrome probe are not ChatGPT host acceptance.",
+    "The plugin cannot insert the native Codex composer permission menu or control the host outer diagnostic header.",
+    "When a host cannot mount a pending card, the same conversation on the web and the local owner center remain fallback options.",
+    "Images already delivered to the chat host follow its retention rules."
+  ]
+}
