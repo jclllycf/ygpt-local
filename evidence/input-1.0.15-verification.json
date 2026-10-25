@@ -1,0 +1,156 @@
+{
+  "version": "1.0.15",
+  "at": "2026-10-25T14:15:51.684Z",
+  "testedCodeCommit": "7b51136501e93cbe583d4e780151e952a53c77d5",
+  "diagnosis": {
+    "priorProductionVersion": "1.0.14",
+    "savedDesktopApprovalSucceeded": true,
+    "subsequentKeyboardCallFailed": true,
+    "priorError": "INPUT_BLOCKED_UIPI",
+    "priorCodeDidNotCaptureWin32Error": true,
+    "initialStaleDesktopTargetAlsoObserved": true,
+    "originalFailureCauseNotRecoverableFromOldErrorAlone": true
+  },
+  "changes": {
+    "nativeErrorCodes": [
+      "INPUT_NOT_INSERTED",
+      "INPUT_ACCESS_DENIED",
+      "INPUT_INVALID_PARAMETER",
+      "INPUT_PARTIAL",
+      "INPUT_INTEGRITY_MISMATCH"
+    ],
+    "actualInputCountsAndWin32Error": true,
+    "observedIntegrityLevels": true,
+    "higherIntegrityPreflight": true,
+    "noUipiConclusionFromZeroReturn": true,
+    "completeOrderedKeyboardChordBatch": true,
+    "foregroundAndInteractiveDesktopChecks": true,
+    "partialAndEarlierInputRemainUnknown": true,
+    "noAutomaticReplayOrElevation": true,
+    "restartRequiresFreshDesktopBinding": true,
+    "desktopDefaultMinutes": 100
+  },
+  "validation": {
+    "targeted": {
+      "total": 2,
+      "passed": 2,
+      "failed": 0
+    },
+    "localFull": {
+      "total": 167,
+      "passed": 154,
+      "failed": 0,
+      "skipped": 13
+    },
+    "hostedWindows": {
+      "total": 167,
+      "passed": 154,
+      "failed": 0,
+      "skipped": 13
+    },
+    "ciConclusion": "success",
+    "ciUrl": "https://github.com/jclllycf/ygpt-local/actions/runs/40200883798",
+    "nativeDesktopProbe": {
+      "scope": "Owned disposable Windows fixture only",
+      "succeeded": false,
+      "code": "INPUT_ACCESS_DENIED",
+      "requested": 2,
+      "inserted": 0,
+      "win32Error": 5,
+      "sourceIntegrityRid": 8192,
+      "targetIntegrityRid": 8192,
+      "sourceUiAccess": false,
+      "effectStarted": false,
+      "outcomeUnknown": false,
+      "sourceOfOsRefusalConfirmed": false,
+      "fixtureClosed": true,
+      "personalChromeTouched": false
+    },
+    "installedReadOnlySmoke": {
+      "version": "1.0.15",
+      "readOnlyInstalledBrokerSmoke": true,
+      "tools": 70,
+      "inventoryIntegrityDiagnostics": true,
+      "modelRecoveryGuidanceInstalled": true,
+      "desktopDefaultMinutes": 100,
+      "noInputSent": true,
+      "noProductionApprovalDecision": true,
+      "at": "2026-10-25T14:11:06.103Z"
+    },
+    "installedNativeKeyProbe": {
+      "scope": "Installed adapter with a second owned disposable fixture",
+      "succeeded": false,
+      "code": "FOREGROUND_NOT_TARGET",
+      "action": "type-empty-string-to-focus-control",
+      "requested": 0,
+      "inserted": 0,
+      "effectStarted": false,
+      "outcomeUnknown": false,
+      "fixtureClosed": true,
+      "noInputDispatched": true
+    }
+  },
+  "package": {
+    "version": "1.0.15",
+    "manifestFiles": 5926,
+    "manifestMismatches": 0,
+    "forbiddenMembers": 0,
+    "currentRuntimeServiceExtensionMatch": true,
+    "currentNativeBinariesMatch": true,
+    "retiredResolverAndShippedInstructionsAbsent": true,
+    "currentSkillIncluded": true,
+    "artifacts": [
+      {
+        "file": "YGPTLocal-Setup-1.0.15-win-x64.exe",
+        "bytes": 94932992,
+        "sha256": "130b66e9a8328729c05d3013c25df546810c98db88776c9d17019ee24a9b29c6"
+      },
+      {
+        "file": "YGPTLocal-Update-1.0.15-win-x64.exe",
+        "bytes": 94932992,
+        "sha256": "6512e04b64591a4218912ee142babb2cea575756ff993682d56196278d65e357"
+      },
+      {
+        "file": "ygpt-local-portable-1.0.15-win-x64.zip",
+        "bytes": 93935833,
+        "sha256": "7f4a3e38d7e40d8b55b1f1a7a7428710c2c90e17b7f742df39acec8bfeb0ee53"
+      }
+    ]
+  },
+  "installed": {
+    "applied": true,
+    "version": "1.0.15",
+    "manifestFiles": 5926,
+    "manifestMismatches": 0,
+    "packageManifestMatches": true,
+    "credentialsConnectionPairingUnchanged": true,
+    "stateAuditPassed": true,
+    "containedState": true,
+    "oldExternalDataAbsent": true,
+    "localReady": true,
+    "tunnelConnected": true,
+    "restarts": 0,
+    "lastError": "",
+    "initializedByTunnel": false,
+    "existingGrantExpiriesUnchanged": true,
+    "grants": 1
+  },
+  "housekeeping": {
+    "state": "complete",
+    "retainedRollbackVersion": "1.0.14",
+    "privateDataKept": true,
+    "reviewRequired": false,
+    "retryPending": false
+  },
+  "limits": [
+    "The native probe reproduced a Windows refusal at equal medium integrity; the blocking source has not been identified.",
+    "This release fixes error reporting and chord delivery, but does not attest that the development PC can inject input again.",
+    "The optional real-Chrome input probe was not repeated after the native fixture refusal; no personal browser input or extension reload was performed.",
+    "A fresh real ChatGPT-host click after this update and the unrelated extension real-chat acceptance are not attested.",
+    "No Windows protection was disabled and no owner approval or UAC was selected by the agent.",
+    "The installed native key probe could not acquire the fixture foreground; it sent no input and was not retried."
+  ],
+  "sources": [
+    "https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-sendinput"
+  ]
+}
