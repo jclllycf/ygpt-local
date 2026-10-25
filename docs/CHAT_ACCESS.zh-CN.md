@@ -31,11 +31,13 @@
 
 组合键一次发送完整的按下与松开序列。输入失败保留 inputDiagnostics：请求/实际送入的事件数量、Win32 错误和进程完整性级别。返回零本身不能证明 UIPI 拦截，见 [Microsoft SendInput](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-sendinput)。INPUT_INTEGRITY_MISMATCH 在输入前确认目标权限更高；其他错误不能据此反复申请授权或自动提权。部分输入成功、或此前已输入后再失败时，结果仍可能不确定，应核对窗口与键盘状态，不能重放操作。服务重启后需要重新选择并绑定当前窗口，旧桌面 targetId 不会恢复。
 
-先显示当前授权卡，再用 `y_wait_approval` 进行有界等待，保持原任务待处理，确认后自动返回已有结果继续。每次渲染使用独立组件实例，避免复用更早的卡片。外层卡片位置和生成过程中是否挂载由 ChatGPT 宿主控制，插件无法把卡片强行插入宿主原生输入框菜单。
+在当前请求步骤显示一次新的授权卡，随后用 `y_wait_approval` 有界等待。只要 taskPending 或 continueWaiting 为 true，就携带原参数继续等待，包括已批准、操作仍在执行的阶段。等待到时不代表任务完成，不应结束回复并要求用户再发一条消息。确认后从已保存结果继续。等待结束但结果尚未返回时，卡片重新核对状态并发送一次续接通知；等待已返回结果时不会重复通知。通知是否送达无法确认时，保留只重发消息、不重放操作的 Resume chat。
+
+每次授权渲染使用应用自己的标识，不再设置 ChatGPT 宿主提供的组件会话 ID。挂载、精确位置和对话生命周期由宿主控制；当前 [OpenAI UI 规范](https://developers.openai.com/plugins/concepts/ui-guidelines)将内嵌卡片放在本轮生成正文之前，插件不能将其插进任意两段正文之间，也不能保证宿主永远不结束回复。旧缓存面板可能需要在 ChatGPT 关闭一次，新资源仅声明内嵌模式。
 
 
 ## 可选管理员权限
 
-普通授权留在对话内，仅主动申请 Full Access 才自动弹出面板。要求为当前对话启用 Full Access 和管理员权限时，使用 y_chat_access action=request_full、administrator=true，并指定分钟数。先确认聊天卡片，再在电脑上确认 Windows UAC；模型不能代选 UAC。
+普通授权、Full Access 和管理员申请都默认留在对话内，详情收起，不自动请求右侧面板、PiP 或全屏。新卡片只请求一次恢复内嵌，后续状态更新保留用户手动展开详情的选择。要求为当前对话启用 Full Access 和管理员权限时，使用 y_chat_access action=request_full、administrator=true，并指定分钟数。先确认聊天卡片，再在电脑上确认 Windows UAC；模型不能代选 UAC。
 
 管理员命令通过 y_admin_run 执行，每次最长 25 秒，普通文件和桌面工具仍使用普通令牌。取消 UAC 会保留普通 Full Access，但管理员状态为未启用。到期、撤销、关闭上下文或桥接断开后，临时执行器及其 Job 进程树关闭；已完成的修改不会撤销。中断命令的结果可能未知，不得自动重放。当前仅支持同一 Windows 账户提权，重启桥接后需要重新申请。

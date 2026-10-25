@@ -18,7 +18,7 @@ export function desktopAccessPresentation(){
 }
 export function chatAccessPresentation(args={}){
  const minutes=args.durationMinutes??120;
- return {displayMode:'pip',title:args.administrator?'Enable Full Access + Administrator':'Enable Full Access for this chat',target:'This chat only · '+minutes+' minutes',
+ return {displayMode:'inline',title:args.administrator?'Enable Full Access + Administrator':'Enable Full Access for this chat',target:'This chat only · '+minutes+' minutes',
  purpose:'Let this development chat run all YGPT actions with your current Windows permissions.',
  impact:'While active, this chat can read private files, change files, run commands and operate desktop windows without further YGPT approval. Other chats keep their existing permissions.'+(args.administrator?' Administrator commands can also change protected system files and settings through y_admin_run. Normal file and desktop tools keep their ordinary Windows token.':''),
  denied:'Keep the standard approval rules for this chat.',risk:'Full Access to this Windows user environment',

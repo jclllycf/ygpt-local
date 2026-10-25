@@ -39,10 +39,10 @@ test('A superseded Administrator activation cannot stop its replacement',async()
  const a=access.start('chat'),b=access.start('chat');assert.equal((await a).state,'superseded');assert.equal((await b).active,true);assert.equal(workers[1].closed,false);assert.equal(access.status('chat').active,true);access.stopAll();
 });
 
-test('Full Access alone never asks Windows UAC; ordinary approvals are inline and only explicit access cards may float',async()=>{
+test('Full Access alone never asks Windows UAC and every approval resource defaults inline',async()=>{
  const f=fixture(),c=await f.client().start();try{const catalog=(await c.rpc('tools/list')).tools;assert.equal(catalog.find(t=>t.name==='y_chat_access')._meta.ui.resourceUri,FULL_ACCESS_URI);assert.ok(catalog.some(t=>t.name==='y_admin_run'));
-  const normal=(await c.rpc('resources/read',{uri:BAR_URI})).contents[0],full=(await c.rpc('resources/read',{uri:FULL_ACCESS_URI})).contents[0];assert.deepEqual(normal._meta['openai/ui'].availableDisplayModes,['inline']);assert.deepEqual(full._meta['openai/ui'].availableDisplayModes,['inline','pip']);
-  assert.equal(chatAccessPresentation().displayMode,'pip');assert.equal(desktopAccessPresentation().displayMode,'inline');assert.match(chatAccessPresentation({administrator:true}).administrator,/Windows UAC/);
+  const normal=(await c.rpc('resources/read',{uri:BAR_URI})).contents[0],full=(await c.rpc('resources/read',{uri:FULL_ACCESS_URI})).contents[0];assert.deepEqual(normal._meta['openai/ui'].availableDisplayModes,['inline']);assert.deepEqual(full._meta['openai/ui'].availableDisplayModes,['inline']);
+  assert.equal(chatAccessPresentation().displayMode,'inline');assert.equal(chatAccessPresentation({administrator:true}).displayMode,'inline');assert.equal(desktopAccessPresentation().displayMode,'inline');assert.match(chatAccessPresentation({administrator:true}).administrator,/Windows UAC/);
   const initial=unpack(await c.call('y_chat_access'));assert.equal(initial.administrator.active,false);const refused=unpack(await c.call('y_admin_run',{executable:process.execPath,cwd:f.project}));assert.equal(refused.code,'ADMIN_NOT_ACTIVE');
   const card=await c.call('y_chat_access',{action:'request_full',durationMinutes:10}),pending=unpack(card),ctx={contextToken:pending.contextToken};await c.call('y_bar_decide',{requestId:pending.requestId,uiToken:card._meta.yBar.uiToken,decision:'once'});await until(async()=>unpack(await c.call('y_chat_access',ctx)).mode==='full');const active=unpack(await c.call('y_chat_access',ctx));assert.equal(active.windowsElevation,false);assert.equal(active.administrator.active,false);await c.call('y_chat_access',{action:'revoke',...ctx});
  }finally{await c.close();}

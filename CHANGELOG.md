@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0.16
+
+- Default every approval, including Full Access and Administrator requests, to inline with details collapsed. Clear inherited expanded mode once per card, ignore old PiP hints, and preserve manual details choices during status updates.
+- Keep approval and execution pending across bounded waits, restore one continuation notification when a wait ends without a result, and suppress duplicate messages after a result is returned.
+- Use app-owned render markers instead of supplying host widget session IDs. Exact card placement and response lifecycle remain host-controlled.
+
 ## 1.0.15
 
 - Report actual native input delivery and Win32 errors instead of labelling every SendInput failure as UIPI. Keep zero and partial delivery distinct, preserve diagnostics through typed tools, and identify observed integrity mismatches before injection.
