@@ -5,28 +5,30 @@ import path from 'node:path';
 import http from 'node:http';
 import {setTimeout as delay} from 'node:timers/promises';
 import {chromium} from 'playwright';
-import {fixture,unpack} from './helpers.mjs';
+import {fixture,unpack,until} from './helpers.mjs';
 import {BAR_URI,barHtmlForTest} from '../runtime/inline-approval.mjs';
 import {DurableLedger} from '../runtime/durable.mjs';
 import {createLocalReview} from '../runtime/local-review.mjs';
 import {chatAccessPresentation} from '../runtime/chat-access.mjs';
 
-test('Pending approval yields immediately for mobile mounting; old URIs remain valid and decisions stay capability-protected',async()=>{
+test('Fresh approval instances support bounded pending waits and retain decision capabilities',async()=>{
  const f=fixture(),c=await f.client().start();
  try{
   const tools=(await c.rpc('tools/list')).tools;
-  for(const name of ['y_show_approval','y_approval_center','y_preview_approval_ui'])assert.equal(tools.find(t=>t.name===name)._meta.ui.resourceUri,BAR_URI);
+  for(const name of ['y_show_approval','y_preview_approval_ui'])assert.equal(tools.find(t=>t.name===name)._meta.ui.resourceUri,BAR_URI);
+  assert.equal(tools.some(t=>t.name==='y_approval_center'),false);
   assert.ok(!BAR_URI.includes('rc2'));
   const current=(await c.rpc('resources/read',{uri:BAR_URI})).contents[0];
   const old=(await c.rpc('resources/read',{uri:'ui://ygpt/approval/compact-v1-rc2.html'})).contents[0];
-  assert.equal(current.text,old.text);assert.deepEqual(current._meta['openai/ui'].availableDisplayModes,['inline','fullscreen']);
+  assert.equal(current.text,old.text);assert.deepEqual(current._meta['openai/ui'].availableDisplayModes,['inline','fullscreen','pip']);
   const pending=unpack(await c.call('y_process_run',{executable:process.execPath,args:['-e',"if(false){};console.log('Clear-Disk fixture')"],cwd:f.project}));
   assert.equal(pending.code,'APPROVAL_REQUIRED');
   const args={requestId:pending.requestId,resultToken:pending.resultToken,contextToken:pending.contextToken};
-  const card=await c.call('y_show_approval',args);assert.equal(card.structuredContent.continueWaiting,false);
+  const card=await c.call('y_show_approval',args);assert.equal(card.structuredContent.continueWaiting,true);
+  const fresh=await c.call('y_show_approval',args);assert.notEqual(card._meta['openai/widgetSessionId'],fresh._meta['openai/widgetSessionId']);
   assert.ok(!JSON.stringify(card.structuredContent).includes(card._meta.yBar.uiToken));
-  const start=Date.now(),wait=unpack(await c.call('y_wait_approval',{...args,waitMs:25000}));
-  assert.ok(Date.now()-start<2000);assert.equal(wait.state,'awaiting_user');assert.equal(wait.continueWaiting,false);
+  const start=Date.now(),wait=unpack(await c.call('y_wait_approval',{...args,waitMs:200}));
+  assert.ok(Date.now()-start>=190);assert.equal(wait.state,'awaiting_user');assert.equal(wait.continueWaiting,true);
   await assert.rejects(c.call('y_bar_decide',{requestId:pending.requestId,uiToken:pending.resultToken,decision:'once'}),/APP_CAPABILITY_INVALID/);
   const ui={requestId:pending.requestId,uiToken:card._meta.yBar.uiToken};
   assert.equal(unpack(await c.call('y_bar_decide',{...ui,decision:'deny'})).state,'denied');
@@ -148,4 +150,16 @@ test('Full Access card names the chat scope, duration and explicit action on pho
    fs.mkdirSync('build',{recursive:true});await page.screenshot({path:'build/chat-access-'+viewport.width+'.png',fullPage:true});await page.close();
   }
  }finally{await browser?.close();}
+});
+
+test('A silent standard read recovers through compatibility; a following approval floats and returns inline without replay',async()=>{
+ const html=barHtmlForTest(),fixtureBar=bar();let browser,compatibilityCalls=0,decisions=0;const modes=[];
+ const outer='<!doctype html><iframe id="app" style="width:390px;height:760px;border:0" src="/frame"></iframe><script>window.addEventListener("message",event=>{const frame=document.getElementById("app").contentWindow;if(event.source!==frame)return;const m=event.data;if(m.method==="ui/initialize"){frame.postMessage({jsonrpc:"2.0",id:m.id,result:{hostCapabilities:{}}},"*");setTimeout(()=>frame.postMessage({jsonrpc:"2.0",method:"ui/notifications/tool-result",params:{_meta:{yBar:'+JSON.stringify(fixtureBar)+'}}},"*"),50);}else if(m.method==="ui/message")frame.postMessage({jsonrpc:"2.0",id:m.id,result:{}},"*");});</script>';
+ const server=http.createServer((q,r)=>{r.setHeader('Content-Type','text/html;charset=utf-8');r.end(q.url==='/frame'?html:outer);});await new Promise(r=>server.listen(0,'127.0.0.1',r));
+ try{browser=await chromium.launch({channel:'msedge',headless:true});const page=await browser.newPage();
+  await page.exposeFunction('fixtureRecoveredTool',async(name,args)=>{compatibilityCalls++;if(name==='y_bar_decide')decisions++;return {structuredContent:{state:decisions?'denied':'awaiting_user',continuation:'follow-up',delivery:args.notifyAction?{granted:false,status:'sent'}:undefined}};});
+  await page.exposeFunction('fixtureDisplayMode',async value=>{modes.push(value.mode);return value;});
+  await page.addInitScript(()=>{window.openai={callTool:(n,a)=>window.fixtureRecoveredTool(n,a),requestDisplayMode:a=>window.fixtureDisplayMode(a)};});await page.goto('http://127.0.0.1:'+server.address().port);
+  await until(()=>compatibilityCalls>0,20000);const frame=page.frameLocator('#app');await frame.getByRole('button',{name:'Deny',exact:true}).click();await frame.locator('#state').filter({hasText:'Denied'}).waitFor();assert.equal(decisions,1);await until(()=>modes.includes('inline'),5000);assert.equal(modes.filter(m=>m==='pip').length,1);assert.equal(modes.filter(m=>m==='inline').length,1);
+ }finally{await browser?.close();await new Promise(r=>server.close(r));}
 });

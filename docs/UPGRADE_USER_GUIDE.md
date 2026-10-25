@@ -1,38 +1,17 @@
-# Upgrading and using YGPT Local
+# YGPT Local current user guide
 
-[中文升级说明](UPGRADE_USER_GUIDE.zh-CN.md) · [Setup](SETUP_GUIDE.md) · [Release notes](RELEASE_1.0.4.md)
+Read [Setup](SETUP_GUIDE.md) for installation and [Chat permissions](CHAT_ACCESS.md) for detailed access rules.
 
-## Update in place
+Use only the current tools/list catalog. Typed reads, ordinary changes and commands without explicit high-risk signals run automatically. File writes retain protected pre-write snapshots. Bulk or sensitive changes require review in Standard mode.
 
-Run the Update EXE from the latest release. It finds the existing installation, lets you choose the intended one if several exist, waits for owned work and replaces the program payload. The update button stays visible while optional appearance settings scroll. Settings, encrypted keys, connection identity, snapshots, private data and the ChatGPT plugin are preserved.
+The first desktop binding or input displays one explicit ten-minute Full Access card for this chat. After confirmation, desktop operations across this chat's windows, files and commands need no repeated approval during that period. Revoke with y_chat_access action=revoke. Other chats retain their permissions and resources.
 
-All product data lives in `<chosen application folder>\data`. Staging and rollback members live in `.updates`. Legacy external data is moved inside the chosen application folder; two private state trees are never merged. Unknown user files remain untouched.
+To enable development Full Access directly in ChatGPT, ask for Full Access in this conversation. y_chat_access action=request_full returns the confirmation card itself; Windows settings are not required. The optional duration defaults to 120 minutes. A status check alone does not request activation.
 
-If a browser extension from rc.17 or earlier remains loaded, click Reload once in each profile's extension manager. Keep the pairing token. Extension 1.0.49 includes version negotiation for subsequent resource reloads.
+Show the current approval, then use bounded y_wait_approval to keep the task pending and retrieve its existing result after the person decides. Never resubmit an approved or unknown operation. If a client cannot mount the card, the same web conversation or Windows manual approval center is a fallback.
 
-## Understand permission prompts
+Desktop observations primarily use Windows UIA controls. Browser invoke uses a verified pointer click; keys supports window keyboard chords. Specific native errors describe execution conditions, not missing permission. Screenshots return inline and their local generated PNGs are removed before return. Images already delivered to the chat host follow its retention rules.
 
-Ordinary file reads and routine work follow local policy. Higher-risk operations ask for approval for the exact action. Review the target and details before choosing **Allow once** or **Deny**. An eligible **Always allow in this chat** grant covers only the displayed scope for up to two hours. It does not grant another conversation access.
+Browser work uses a disposable isolated browser unless the person selects a paired daily-browser profile. Preserve the returned contextToken on later calls. Never guess between profiles or touch another chat's tabs.
 
-Desktop window binding, clicks, typing and focus changes require approval by default. Desktop ChatGPT Agent windows are ordinary targets under the same rules. Credential-adjacent or system changes, broad searches and bulk deletion require their applicable local approval. Malformed requests are rejected.
-
-## Work in several conversations
-
-Each conversation keeps its own context token and owns its tabs, window bindings, jobs and processes. Keep that token with the task. Concurrent writes to the same file use preimage hashes; a `STALE_PREIMAGE` response means read the current file before trying a new change. One conversation cannot take another's resources by guessing an ID.
-
-## Browser choices
-
-- **Isolated browser:** a default open returns a snapshot, closes the browser and removes its temporary profile before returning. For several interactions, explicitly use `keepAlive=true`, keep the original context token and close the tabs when done. Closing the last tab closes its browser; a 30-second idle lease cleans up abandoned work.
-- **Daily Chrome or Edge:** load and pair the extension in the intended profile. Each profile has a separate relay; each chat selects its own profile. When several are connected, select the intended one. YGPT works within its own tab group. Personal tabs and the user's browser remain open after detach.
-
-The last setup page includes optional extension and pairing shortcuts. A profile without the extension must first be installed and paired by its owner.
-
-## Recover without repeating work
-
-If a mutation's result is unknown, retrieve the existing request with `y_call_status` / `y_call_result` instead of submitting it again. Check an existing job with `y_job_status`. Use `y_backup_list` and `y_backup_restore` for protected file snapshots. Restore conflicts preserve newer content.
-
-Single ordinary file deletion uses a protected snapshot and the Recycle Bin. Bulk, directory and system deletion require approval. Snapshot limits are reported; do not assume every terminal command is fully reversible. See the [security note](UPGRADE_SECURITY_NOTE.md).
-
-## Check connection status
-
-**Local tools**, **Private tunnel** and **First ChatGPT task** describe different checks. A connected private tunnel can wait for a first remote request before starting the local engine. Expand connection details for actual errors. A saved key or successful local fixture is not proof of a real ChatGPT answer or physical human approval.
+Unknown effects require inspection. Keep snapshots and credentials; use the signed installation cleanup records for installer leftovers instead of sweeping folders.

@@ -2,6 +2,7 @@ import {DatabaseSync} from 'node:sqlite';
 import {randomUUID,createHash,randomBytes,timingSafeEqual} from 'node:crypto';
 import {vault} from './secure-state.mjs';
 import path from 'node:path';
+import {withoutImageBytes} from './screenshot-cleanup.mjs';
 export const digest=value=>createHash('sha256').update(value).digest('hex');
 export const stable=value=>JSON.stringify(value,(_k,v)=>v&&typeof v==='object'&&!Array.isArray(v)?Object.fromEntries(Object.entries(v).sort(([a],[b])=>a.localeCompare(b))):v);
 export const scrub=value=>String(value??'').replace(/-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?-----END [A-Z ]*PRIVATE KEY-----/g,'[PRIVATE KEY REDACTED]').replace(/Bearer\s+[\w.\/+\-=]+/gi,'Bearer [REDACTED]').replace(/((?:authorization|password|token|secret|api[_-]?key|cookie)["']?\s*[:=]\s*)(?:"[^"\r\n]*"|'[^'\r\n]*'|[^\s,;&}]+)/gi,'$1[REDACTED]').replace(/(?:sk-[\w-]{10,}|gh[pousr]_[\w]{12,})/g,'[REDACTED]');
@@ -115,7 +116,7 @@ export class DurableLedger {
   autoClaim(id){return this.tx(()=>{const r=this.row(id);if(!r||r.state!=='awaiting_user'||r.expires<=Date.now())return false;return this.db.prepare("UPDATE operations SET state='running',updated=? WHERE owner=? AND id=? AND state='awaiting_user'").run(Date.now(),this.owner,id).changes===1;});}
   finish(id,state,response=null,reason=null,ref=null){
     if(!['succeeded','failed','unknown'].includes(state))throw Error('Invalid terminal state');
-    const raw=response?JSON.stringify(response):null;
+    const raw=response?JSON.stringify(withoutImageBytes(response)):null;
     const bounded=raw&&Buffer.byteLength(raw)<=131072?this.vault.seal(raw):null;
     const update=this.db.prepare("UPDATE operations SET state=?,updated=?,result=?,reason=?,result_ref=? WHERE owner=? AND id=? AND state='running'")
       .run(state,Date.now(),bounded,scrub(reason??(raw&&!bounded?'Result exceeded 128 KiB retention limit':'')),ref,this.owner,id);
@@ -126,7 +127,7 @@ export class DurableLedger {
   // Provenance is recorded as a short context label (never the token or its
   // full hash) and the transport kind; host type (Chat vs Agent) is unverified.
   callStart(name,operationId=null,{context=null,transport=null}={}){const id=randomUUID(),now=Date.now();this.db.prepare('INSERT INTO calls(id,owner,name,operation_id,state,created,updated,context_label,transport) VALUES(?,?,?,?,?,?,?,?,?)').run(id,this.owner,name,operationId,'running',now,now,context?contextLabel(context):null,transport);return id;}
-  callFinish(id,state,response=null,{code=null}={}){const raw=response?JSON.stringify(response):null;const errorCode=code??response?.structuredContent?.code??response?.structuredContent?.error?.code??null;this.db.prepare('UPDATE calls SET state=?,updated=?,result_digest=?,result=?,error_code=? WHERE owner=? AND id=?').run(state,Date.now(),raw?digest(raw):null,raw&&Buffer.byteLength(raw)<=131072?this.vault.seal(raw):null,typeof errorCode==='string'?errorCode.slice(0,64):null,this.owner,id);}
+  callFinish(id,state,response=null,{code=null}={}){const raw=response?JSON.stringify(withoutImageBytes(response)):null;const errorCode=code??response?.structuredContent?.code??response?.structuredContent?.error?.code??null;this.db.prepare('UPDATE calls SET state=?,updated=?,result_digest=?,result=?,error_code=? WHERE owner=? AND id=?').run(state,Date.now(),raw?digest(raw):null,raw&&Buffer.byteLength(raw)<=131072?this.vault.seal(raw):null,typeof errorCode==='string'?errorCode.slice(0,64):null,this.owner,id);}
   calls(limit=20){return this.db.prepare('SELECT id,name,operation_id,state,created,updated,result_digest,context_label,transport FROM calls WHERE owner=? ORDER BY created DESC LIMIT ?').all(this.owner,Math.min(100,Math.max(1,Number(limit)||20)));}
   usageRows(since,limit=20000){return this.db.prepare('SELECT name,state,created,updated,context_label,transport,error_code FROM calls WHERE owner=? AND created>=? ORDER BY created LIMIT ?').all(this.owner,since,limit);}
   call(id,withResult=false){const r=this.db.prepare('SELECT * FROM calls WHERE owner=? AND id=?').get(this.owner,id);if(!r)return null;return {id:r.id,name:r.name,state:r.state,operation_id:r.operation_id,result_digest:r.result_digest,created:r.created,updated:r.updated,...(withResult?{result:r.result?JSON.parse(this.vault.open(r.result)):null}:{})};}
@@ -175,9 +176,11 @@ export class DurableLedger {
     if(!Number.isInteger(durationMinutes)||durationMinutes<1||durationMinutes>720)throw fail('ACCESS_DURATION_INVALID','Full Access duration must be 1 to 720 minutes');
     return this.tx(()=>{
       const operation=this.row(operationId),context=this.db.prepare('SELECT expires FROM contexts WHERE owner=? AND token_hash=?').get(this.owner,contextHash);
-      if(!operation||operation.tool!=='y_chat_access'||operation.state!=='running'||operation.expires<=Date.now()||!context||context.expires<=Date.now())throw fail('ACCESS_NOT_APPROVED','A claimed, live Full Access approval is required');
+      if(!operation||operation.state!=='running'||operation.expires<=Date.now()||!context||context.expires<=Date.now())throw fail('ACCESS_NOT_APPROVED','A claimed, live Full Access approval is required');
       const preview=JSON.parse(this.vault.open(operation.preview)),args=JSON.parse(this.vault.open(operation.args));
-      if(preview.contextHash!==contextHash||preview.kind!=='chat-full-access'||args.action!=='request_full'||(args.durationMinutes??120)!==durationMinutes)throw fail('ACCESS_NOT_APPROVED','Approval belongs to another chat or duration');
+      const dedicated=operation.tool==='y_chat_access'&&preview.kind==='chat-full-access'&&args.action==='request_full'&&(args.durationMinutes??120)===durationMinutes;
+      const desktop=['y_desktop_bind','y_desktop_action'].includes(operation.tool)&&preview.kind==='desktop-full-access'&&durationMinutes===10;
+      if(preview.contextHash!==contextHash||!dedicated&&!desktop)throw fail('ACCESS_NOT_APPROVED','Approval belongs to another chat or duration');
       const expires=Math.min(context.expires,Date.now()+durationMinutes*60000);
       this.db.prepare('INSERT INTO chat_access(owner,context_hash,expires,operation_id) VALUES(?,?,?,?) ON CONFLICT(owner,context_hash) DO UPDATE SET expires=excluded.expires,operation_id=excluded.operation_id').run(this.owner,contextHash,expires,operationId);
       this.event(operationId,'chat_full_access_enabled','owner-approved-chat-mode');return {expires};

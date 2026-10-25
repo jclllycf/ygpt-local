@@ -3,17 +3,16 @@
 // the owner blacklist model lists every window as it is) and reading a
 // window this chat was approved to bind. App-control authorization lives
 // here, inside the desktop operations: the bind approval names the exact
-// application and window, and every input action asks again.
+// application and window. The broker asks once for temporary, chat-scoped
+// Full Access before control; individual inputs do not request further clicks.
 // An owner enrollment list (path + SHA-256) is NOT consent for an operation.
-import crypto from 'node:crypto';
-const digest=v=>crypto.createHash('sha256').update(JSON.stringify(v)).digest('hex');
 export const UIA_ACTION_GRANT_MS=10*60000;
 const allow=reason=>({decision:'allow',reason}),approve=reason=>({decision:'approve',kind:'desktop',reason});
 export function uiaDecision(tool){
  if(tool==='y_desktop_windows')return allow('Read-only window inventory; every window listed with its real title and identity');
- if(tool==='y_desktop_bind')return approve('Binding a window for UI Automation requires a human Allow once for that exact window');
+ if(tool==='y_desktop_bind')return approve('Desktop control requires temporary Full Access for this chat, enabled by one human decision');
  if(['y_desktop_inspect','y_desktop_value','y_desktop_screenshot'].includes(tool))return allow('Reads the exact window a human approved for this chat; identity re-verified before each read');
- if(tool==='y_desktop_action')return approve('Focus, click, invoke, type and setValue each require a human decision');
+ if(tool==='y_desktop_action')return approve('Enable temporary Full Access once for this chat before desktop input');
  return null;
 }
 // The window identity a human approves. Execution is refused when any part changed.
@@ -23,7 +22,7 @@ export function windowIdentity(win){
 }
 const clip=(v,n=160)=>{const s=String(v??'');return s.length>n?s.slice(0,n-1)+'…':s;};
 const control=a=>[a.automationId&&('automationId '+clip(a.automationId,80)),a.name&&('name "'+clip(a.name,80)+'"'),a.runtimeId&&('runtimeId '+clip(a.runtimeId,40))].filter(Boolean).join(', ')||'the window itself';
-const verbs={focus:'bring the window to the foreground',click:'click',invoke:'invoke (press)',type:'type text into',setValue:'set the value of'};
+const verbs={focus:'bring the window to the foreground',click:'click',invoke:'invoke (press)',type:'type text into',setValue:'set the value of',keys:'send a keyboard chord to'};
 // What the approval card shows: application, window, action, control, input summary, risk and scope.
 export function uiaPresentation(tool,args={},win=null){
  const app=win?`${win.process??'unknown app'} (PID ${win.pid})`:'Window '+clip(args.hwnd??args.targetId,40);
@@ -44,7 +43,5 @@ export function uiaPresentation(tool,args={},win=null){
 // Optional narrow conversation grant: same chat, same bound window identity,
 // same action type, for ten minutes. Binding itself is always Allow once.
 export function uiaChatScope(tool,args={},win=null){
- if(tool!=='y_desktop_action'||!win)return {eligible:false,key:null,explanation:'Desktop binding requires Allow once for the exact window.'};
- return {eligible:true,ttlMs:UIA_ACTION_GRANT_MS,key:digest(['y_desktop_action',String(args.targetId),args.action,windowIdentity(win)]),
-  explanation:`Allow this chat to repeat "${args.action}" on this same window (any control, any text) for 10 minutes. Other actions, windows or chats still ask.`};
+ return {eligible:false,key:null,explanation:'One confirmation enables Full Access for this chat for 10 minutes, covering all desktop actions, windows, files and commands. Revoke with y_chat_access action=revoke.'};
 }

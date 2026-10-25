@@ -1,4 +1,12 @@
-# Current validation: 1.0.9
+# Current validation: 1.0.10
+
+The full local regression passed 147 of 152 tests with five environment skips and no failures. It includes real native Windows input, one desktop approval covering two disposable windows, keyboard chords, precise native errors, inline screenshots with immediate PNG deletion, ordinary commands, grant revocation and foreign-context refusal. The final UI follow-up separately checks PiP requests and return to inline, read-only bridge timeout recovery without decision replay, fresh card instances and direct in-chat Full Access activation.
+
+A separate actual Chrome/Windows probe used a disposable browser profile: browser invoke opened a new tab through the verified pointer path and a keyboard chord succeeded. Its first foreground refusal was reproduced, then fixed by bounded input-thread attachment that is always detached; no Windows security setting changed. The browser closed afterward. No signed-in profile or user ChatGPT task was operated by this probe.
+
+The host fixtures verify card behavior and continuation, not new trusted human-click acceptance in ChatGPT or physical Android. The host controls outer layout, PiP support and component mounting. Versioned resources and separate widget sessions prevent intentional reuse of earlier cards; no code injects into ChatGPT's outer DOM. Current exact package, installed, CI and cleanup results are attached to the release.
+
+## Previous 1.0.9 validation
 
 Release 1.0.9 fixes command approvals based solely on a protected path reference or an unrecognized script shape. The actual reported request was evaluated without execution: the old policy required approval and the new policy allowed it. Broker fixtures execute the same directory-statistics shape with local variables, loops and arithmetic, while an explicit protected write remains suspended.
 

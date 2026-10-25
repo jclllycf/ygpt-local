@@ -3,8 +3,13 @@
 (()=>{
  const $=id=>document.getElementById(id),terminal=new Set(['succeeded','failed','unknown','denied','expired','not_found']);
  const labels={awaiting_user:'Awaiting approval',approved:'Approved',running:'Running',succeeded:'Completed',failed:'Failed',unknown:'Check result',denied:'Denied',expired:'Expired',not_found:'No request'};
- let card=null,call=null,standard=false,healthy=false,busy=false,notifying=false,timer=null,failures=0,closed=false;
+ let card=null,call=null,standard=false,healthy=false,busy=false,notifying=false,timer=null,failures=0,closed=false,compatibilityTools=false;
  const states=new Map(),deliveries=new Map(),inflight=new Set(),requests=new Map();let sequence=0;
+ let floatingRequest=null;const floatAttempts=new Set();
+ async function followApproval(){const api=window.openai;if(!card?.uiToken||typeof api?.requestDisplayMode!=='function')return;const id=card.requestId;
+  if(card.state==='awaiting_user'&&!floatAttempts.has(id)){floatAttempts.add(id);try{await api.requestDisplayMode({mode:'pip'});if(card?.requestId===id&&card.state==='awaiting_user')floatingRequest=id;else await api.requestDisplayMode({mode:'inline'});}catch{}}
+  else if(terminal.has(card.state)&&floatingRequest===id){floatingRequest=null;try{await api.requestDisplayMode({mode:'inline'});}catch{}}
+ }
  function unwrap(value){for(let n=0;n<8;n++){
   if(typeof value==='string'){value=JSON.parse(value);continue;}
   if(value?.isError||value?.error)throw Error(value.error?.message??value.content?.[0]?.text??'Host rejected the request');
@@ -31,7 +36,7 @@
   for(const [id,key] of Object.entries({title:'title',target:'target',fulltarget:'target',impact:'impact',purpose:'purpose',denied:'denied',technical:'technical',privilege:'administrator'}))$(id).textContent=p[key]??'';
   $('target').title=p.target??'';$('risk').textContent=[p.risk,p.reversible].filter(Boolean).join(' · ');
   $('scope').textContent=card.chatScope?.explanation??'Allow once is required for this action.';
-  $('state').textContent=labels[card.state]??card.state;
+  $('state').textContent=card.stateLabel??labels[card.state]??card.state;
   $('once').textContent=p.approveLabel??'Allow once';
   const enabled=healthy&&!busy&&!!call&&card.enabled&&card.state==='awaiting_user'&&!expired&&!!card.uiToken;
   for(const id of ['once','chat','deny'])$(id).disabled=!enabled||id==='chat'&&!card.chatScope?.eligible;
@@ -46,7 +51,9 @@
   else if(!healthy)note('Connecting to approval controls… If buttons do not appear, open this same conversation on the web or use the Windows approval center.');
   else if(enabled)note(p.approveLabel?'Choose '+p.approveLabel+' or Deny. This applies only to the chat and duration shown above.':card.chatScope?.eligible?'Review the exact action, then choose. A decision on another device appears here automatically.':'Choose Allow once or Deny. The same decision is shared with your other devices.');
   else if(card.state==='succeeded')note('Completed. The original result is available.');
+  else if(card.state==='failed'||card.state==='unknown')note((card.executionError?.code?card.executionError.code+': ':'')+(card.executionError?.message||'The desktop action did not return a confirmed success.')+(card.executionError?.outcomeUnknown?' Inspect the window before retrying; no action was resubmitted.':' Your authorization was saved. Inspect the target before choosing the next action.'));
   else if(card.state==='denied')note('Denied. Nothing was executed.');
+  void followApproval();
  }
  function accept(value){
   const next=metadata(value);if(!next||typeof next.requestId!=='string'||!next.presentation)return;
@@ -81,8 +88,8 @@
    const prompt='YGPT approval saved for request '+id+'. Continue the original task by retrieving its existing status/result with the resultToken retained in this conversation. Never repeat the operation; a denial remains a denial.';
    if(standard){
     try{const result=await request('ui/message',{role:'user',content:[{type:'text',text:prompt}]});if(result?.isError)throw Error('Host declined the follow-up');}
-    catch(error){if(error.code!==-32601||typeof window.openai?.sendFollowUpMessage!=='function')throw error;await window.openai.sendFollowUpMessage({prompt});}
-   }else if(typeof window.openai?.sendFollowUpMessage==='function')await window.openai.sendFollowUpMessage({prompt});
+    catch(error){if(error.code!==-32601||typeof window.openai?.sendFollowUpMessage!=='function')throw error;await window.openai.sendFollowUpMessage({prompt,scrollToBottom:true});}
+   }else if(typeof window.openai?.sendFollowUpMessage==='function')await window.openai.sendFollowUpMessage({prompt,scrollToBottom:true});
    else throw Error('No message bridge');
    await call('y_bar_status',{requestId:id,uiToken:current.uiToken,notifyAction:'sent',deliveryToken:token});delivery(id,'sent');
    if(card?.requestId===id)note('Decision saved. Chat notified; the original result will be checked.');
@@ -99,7 +106,7 @@
   try{
    const value=unwrap(await call('y_bar_status',{requestId:id,uiToken:current.uiToken}));healthy=true;failures=0;
    if(card?.requestId!==id)return;
-   const before=card.state;card={...card,state:stableState(id,value.state),expiresAt:value.expiresAt??card.expiresAt};if(value.notificationSent)delivery(id,'sent');render();
+   const before=card.state;card={...card,state:stableState(id,value.state),expiresAt:value.expiresAt??card.expiresAt,executionError:value.executionError??card.executionError};if(value.notificationSent)delivery(id,'sent');render();
    if(before==='awaiting_user'&&['approved','running','succeeded','failed','unknown','denied'].includes(card.state))await notify();
   }catch{healthy=false;failures=Math.min(4,failures+1);render();note('Approval connection interrupted. No action was resubmitted. Controls retry automatically.');}
   finally{inflight.delete(id);}
@@ -123,8 +130,8 @@
   if(card){render();schedule(0);}
  }
  window.addEventListener('openai:set_globals',globals);globals();
- if(window.parent!==window)request('ui/initialize',{appInfo:{name:'YGPT approval',version:'1.0.9'},appCapabilities:{},protocolVersion:'2026-01-26'}).then(result=>{
-  standard=true;healthy=true;call=async(name,args)=>{try{return await request('tools/call',{name,arguments:args});}catch(error){if(error.code===-32601&&typeof window.openai?.callTool==='function')return window.openai.callTool(name,args);throw error;}};
+ if(window.parent!==window)request('ui/initialize',{appInfo:{name:'YGPT approval',version:'1.0.10'},appCapabilities:{},protocolVersion:'2026-01-26'}).then(result=>{
+  standard=true;healthy=true;call=async(name,args)=>{const compat=window.openai?.callTool;if(compatibilityTools&&typeof compat==='function')return compat(name,args);try{return await request('tools/call',{name,arguments:args});}catch(error){if(typeof compat==='function'&&(error.code===-32601||name==='y_bar_status'&&!args.notifyAction)){const result=await compat(name,args);compatibilityTools=true;return result;}throw error;}};
   window.parent.postMessage({jsonrpc:'2.0',method:'ui/notifications/initialized'},'*');
   const resize=()=>{const rect=document.querySelector('main').getBoundingClientRect();window.parent.postMessage({jsonrpc:'2.0',method:'ui/notifications/size-changed',params:{width:Math.ceil(rect.width),height:Math.ceil(rect.height)}},'*');};
   if(typeof ResizeObserver==='function')new ResizeObserver(()=>requestAnimationFrame(resize)).observe(document.querySelector('main'));resize();globals();schedule(0);

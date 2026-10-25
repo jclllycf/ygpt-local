@@ -2,7 +2,7 @@
 
 Standard mode permits typed reads on all valid local paths, including protected locations, under your Windows account permissions. Ordinary file edits keep protected pre-write snapshots. Small cleanup can run automatically through `y_file_trash`: up to 64 entries and 16 MiB, or one ordinary file up to 32 MiB. Cleanup retains a verified snapshot and uses the Windows Recycle Bin.
 
-Sensitive file changes, major deletions, system/privileged changes and desktop input still require review. Window inventory, binding, inspection and focus are automatic. Commands and scripts default to allow unless an explicit high-risk signal is identified. Unknown scripts, local variables, loops, dynamic/encoded code, multiline arguments and references to protected folders are not approval reasons by themselves. An unrecognized script is allowed without claiming that its effects have been proven read-only or safe.
+Sensitive file changes, major deletions and system/privileged changes require review in Standard mode. Window inventory and inspection of a chat-owned bound window are automatic. The first desktop binding or input asks once for ten-minute Full Access to this chat; within that period all desktop windows, files and commands need no further YGPT approval. Commands and scripts otherwise default to allow unless an explicit high-risk signal is identified. Unknown scripts, variables, loops, dynamic/encoded code, multiline arguments and protected-folder references alone do not require approval.
 
 Bundled Node, npm, npx and Python executable paths are trusted only when their exact shipped path, size and SHA-256 match the installed manifest. Their arguments are still checked. An unrelated executable in the same folder does not inherit trust.
 
@@ -11,7 +11,7 @@ On Windows, shipped npm/npx `.cmd` launchers are translated to the equivalent ma
 ## Enable Full Access for one development chat
 
 1. Ask YGPT in that chat: **Request Full Access for this chat for 120 minutes.** The tool call is `y_chat_access` with `action: "request_full"` and optional `durationMinutes` (1–720; default 120).
-2. Review the dedicated **Enable Full Access for this chat** card. Choose **Enable Full Access** or **Deny**. The model cannot activate the mode by passing a flag or treating a text reply as a card decision.
+2. That tool request directly returns the **Enable Full Access for this chat** card in this conversation. Choose **Enable Full Access** or **Deny**; Windows settings are not required. Checking status alone does not request activation. The model cannot activate the mode by passing a flag or treating a text reply as a card decision.
 3. Keep the returned `contextToken` private in this conversation and include it on later YGPT calls. Check the mode and expiration with `y_chat_access` and `action: "status"`, or `y_policy`.
 4. End it with `y_chat_access` and `action: "revoke"`. `y_close_context` also revokes it and releases this chat's browser and desktop bindings.
 
@@ -22,3 +22,11 @@ The mode does not elevate Windows privileges. Schema, valid local paths, preimag
 A chat context is a server-issued capability, not an authenticated OpenAI conversation identity. Do not copy its token into another conversation, public logs or GitHub. A restarted broker may retain the grant until its original expiration while that context remains live. If a host does not report conversation closure, the fixed expiration and explicit revoke action provide the end boundary.
 
 If a mobile client does not display the card, open the same conversation in ChatGPT on the web, or use the computer's manual Windows approval center. Missing UI never activates Full Access. No new public approval service is required.
+
+## Desktop tasks and screenshots
+
+The first desktop-control card explicitly grants Full Access for 10 minutes and executes that one requested desktop step after confirmation. Later bindings, clicks, keyboard chords and commands within this chat reuse the grant. Other pending operations are not replayed. Expiry or revoke restores review before another input. `y_desktop_action action=keys` accepts a chord such as `CTRL+L`, `CTRL+T` or `ENTER`; selectors, native errors and unknown outcomes must still be checked.
+
+Desktop automation primarily reads Windows UIA control trees. Screenshots are separate image observations. Generated PNGs are sent inline and removed locally before return; local result history retains metadata, not image bytes. Startup reclaims old generated screenshots. Unrelated images, credentials and snapshots stay intact. Images already delivered to ChatGPT follow the host's retention rules.
+
+Display the current approval card before calling bounded `y_wait_approval`. Keep the original task pending; a confirmed decision returns its existing result automatically. Each render uses a fresh widget instance to avoid reusing an earlier card. The host controls outer placement and whether the component mounts during a running response; it cannot be forced into the host's native composer menu.

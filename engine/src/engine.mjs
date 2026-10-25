@@ -120,7 +120,7 @@ export async function createEngine(config,{authorize,backupManager,ledger:outerL
   add('y_desktop_bind',{hwnd:str},a=>desktop.bind(a.hwnd));
   add('y_desktop_inspect',{targetId:sid},a=>desktop.act(a.targetId,'tree'));
   add('y_desktop_value',{targetId:sid,...selector},a=>desktop.act(a.targetId,'value',a));
-  add('y_desktop_action',{targetId:sid,action:z.enum(['focus','setValue','invoke','click','type']),...selector,value:z.string().max(10000).optional()},a=>desktop.act(a.targetId,a.action,a),{mutating:true,openWorld:true});
+  add('y_desktop_action',{targetId:sid,action:z.enum(['focus','setValue','invoke','click','type','keys']),...selector,value:z.string().max(10000).optional()},a=>desktop.act(a.targetId,a.action,a),{mutating:true,openWorld:true,description:'Control a chat-owned window after one temporary Full Access approval. Read current selectors with y_desktop_inspect. keys uses value such as CTRL+L, CTRL+T or ENTER without a selector. Browser invoke uses a verified pointer click without attempting UIA invoke first. Native failures report precise codes; do not re-execute an outcomeUnknown action.'});
   add('y_desktop_screenshot',{targetId:sid},a=>desktop.capture(a.targetId));
   add('y_system_inspect',{kind:z.enum(['health','processes','services','events','autostarts','disks','physical-disks']).default('health')},a=>system.inspect(a.kind));
 
@@ -132,7 +132,7 @@ export async function createEngine(config,{authorize,backupManager,ledger:outerL
         if(decision?.allowed!==true)throw new EngineError(decision?.code??/^(TARGET_FOREIGN|SESSION_FOREIGN)\b/.exec(decision?.reason??'')?.[1]??'RC9_BLOCKED',decision?.reason??'Outer policy did not authorize this exact operation');
         operation=ledger.begin(name,a,requestKey);if(operation.reused)return operation.result;
         const result=await t.handler(a),processError=name==='y_process_run'&&result.state!=='succeeded',response={product:'YGPT Local',callId:operation.id,ok:!processError,result,...(processError?{error:{code:'PROCESS_EXIT_FAILED',message:'Process ended with state '+result.state+' and exit code '+result.exitCode}}:{})};ledger.finish(operation.id,response);return response;
-      }catch(e){const outcomeUnknown=['UIA_TIMEOUT','JOB_CONTROL_TIMEOUT'].includes(e.code)||e.name==='TimeoutError';const response={product:'YGPT Local',callId:operation?.id??null,ok:false,error:{code:e.code??(outcomeUnknown?'RESULT_UNKNOWN':'EXECUTION_FAILED'),message:String(e.message).slice(0,1000),...(outcomeUnknown?{outcomeUnknown:true}:{})}};if(operation&&!operation.reused)ledger.finish(operation.id,response);return response;}
+      }catch(e){const outcomeUnknown=e.outcomeUnknown===true||['UIA_TIMEOUT','JOB_CONTROL_TIMEOUT'].includes(e.code)||e.name==='TimeoutError';const response={product:'YGPT Local',callId:operation?.id??null,ok:false,error:{code:e.code??(outcomeUnknown?'RESULT_UNKNOWN':'EXECUTION_FAILED'),message:String(e.message).slice(0,1000),...(e.hresult?{hresult:e.hresult}:{}),...(e.action?{action:e.action}:{}),...(e.effectStarted===false?{effectStarted:false}:{}),...(outcomeUnknown?{outcomeUnknown:true}:{})}};if(operation&&!operation.reused)ledger.finish(operation.id,response);return response;}
     },
     async close(){await Promise.allSettled([terminal.close(),browser.close()]);if(!outerLedger)ledger.close();await release();}
   };

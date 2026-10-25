@@ -10,7 +10,6 @@ import path from 'node:path';
 import {spawnSync} from 'node:child_process';
 import {createHash} from 'node:crypto';
 import {createEngine} from '../engine/src/engine.mjs';
-import {retiredTool} from '../runtime/retired-tools.mjs';
 import {DurableLedger} from '../runtime/durable.mjs';
 
 const tmp=()=>fs.mkdtempSync(path.join(os.tmpdir(),'ygpt-newtools-'));
@@ -79,17 +78,6 @@ test('y_project_inspect: bounded structure, manifests and read-only Git state',a
     assert.deepEqual(r.result.manifests['package.json'].scripts,['build','test']);
     if(r.result.git){assert.equal(r.result.git.dirtyLines,0);assert.equal(r.result.git.recentCommits.length,1);}
   }finally{await engine.close();}
-});
-
-test('retired names answer with their canonical replacement and execute nothing',()=>{
-  assert.equal(retiredTool('y_local_read_file').replacement,'y_file_read');
-  assert.equal(retiredTool('y_local_read_multiple_files').replacement,'y_file_read_many');
-  assert.equal(retiredTool('y_local_get_usage_stats').replacement,'y_usage_report');
-  assert.equal(retiredTool('y_task_submit').replacement,'y_job_submit');
-  assert.equal(retiredTool('y_review_approval').replacement,'y_show_approval');
-  assert.equal(retiredTool('yuki_file_read').replacement,'y_file_read');
-  assert.equal(retiredTool('y_file_read'),null);
-  assert.equal(retiredTool('something_else'),null);
 });
 
 test('usage rows and ownership views back y_usage_report / y_resource_owner',()=>{

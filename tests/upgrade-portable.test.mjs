@@ -189,7 +189,7 @@ test('Engine denial codes reach the caller: a policy code in the reason is not c
   finally{await engine.close();}
 });
 
-test('UIA consent: inventory and reads of an approved window are automatic; bind and every action need a human',async()=>{
+test('UIA inventory and reads are automatic; control requests one temporary Full Access approval',async()=>{
   const {uiaDecision,uiaPresentation,uiaChatScope,UIA_ACTION_GRANT_MS}=await import('../engine/src/uia-consent.mjs');
   assert.equal(uiaDecision('y_desktop_windows').decision,'allow');
   for(const t of ['y_desktop_inspect','y_desktop_value','y_desktop_screenshot'])assert.equal(uiaDecision(t).decision,'allow');
@@ -198,10 +198,9 @@ test('UIA consent: inventory and reads of an approved window are automatic; bind
   const card=uiaPresentation('y_desktop_action',{targetId:'t1',action:'type',automationId:'Edit',value:'hello world'},win);
   for(const part of ['notepad','4100','notes.txt','hello world'])assert.ok(JSON.stringify(card).includes(part),part);
   assert.match(card.technical,/SHA-256: a{64}/);
-  assert.equal(uiaChatScope('y_desktop_bind',{hwnd:'100'},win).eligible,false,'binding is Allow once only');
+  assert.equal(uiaChatScope('y_desktop_bind',{hwnd:'100'},win).eligible,false,'binding uses the explicit temporary Full Access card');
   const typing=uiaChatScope('y_desktop_action',{targetId:'t1',action:'type'},win),clicking=uiaChatScope('y_desktop_action',{targetId:'t1',action:'click'},win);
-  assert.equal(typing.eligible,true);assert.equal(typing.ttlMs,UIA_ACTION_GRANT_MS);assert.notEqual(typing.key,clicking.key);
-  assert.notEqual(typing.key,uiaChatScope('y_desktop_action',{targetId:'t1',action:'type'},{...win,executableSha256:'b'.repeat(64)}).key,'a different executable is a different grant');
+  assert.equal(typing.eligible,false);assert.equal(clicking.eligible,false);assert.match(typing.explanation,/Full Access.*10 minutes/);
   assert.equal(uiaChatScope('y_desktop_action',{targetId:'gone',action:'type'},null).eligible,false);
 });
 

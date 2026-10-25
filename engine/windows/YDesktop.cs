@@ -18,6 +18,7 @@ using System.Security.Cryptography.X509Certificates;
 using System.Web.Script.Serialization;
 using System.Windows.Automation;
 using System.Windows.Forms;
+using System.Text.RegularExpressions;
 class FixtureForm:Form {protected override bool ShowWithoutActivation {get{return true;}}}
 class YDesktop {
   static JavaScriptSerializer json=new JavaScriptSerializer{MaxJsonLength=1048576};
@@ -28,13 +29,18 @@ class YDesktop {
   [DllImport("user32.dll",CharSet=CharSet.Unicode)] static extern int GetWindowText(IntPtr h,StringBuilder s,int n);
   [DllImport("user32.dll")] static extern uint GetWindowThreadProcessId(IntPtr h,out uint pid);
   [DllImport("user32.dll")] static extern bool SetForegroundWindow(IntPtr h);
+  [DllImport("user32.dll")] static extern bool BringWindowToTop(IntPtr h);
+  [DllImport("user32.dll",SetLastError=true)] static extern bool AttachThreadInput(uint from,uint to,bool attach);
+  [DllImport("kernel32.dll")] static extern uint GetCurrentThreadId();
   [DllImport("user32.dll")] static extern IntPtr GetForegroundWindow();
   [DllImport("user32.dll")] static extern bool ShowWindow(IntPtr h,int cmd);
+  [DllImport("user32.dll")] static extern bool IsIconic(IntPtr h);
   [DllImport("user32.dll")] static extern bool GetWindowRect(IntPtr h,out RECT r);
   [DllImport("user32.dll")] static extern bool PrintWindow(IntPtr h,IntPtr dc,uint flags);
   [DllImport("user32.dll")] static extern bool SetCursorPos(int x,int y);
   [DllImport("user32.dll")] static extern IntPtr WindowFromPoint(POINT p);
   [DllImport("user32.dll")] static extern IntPtr GetAncestor(IntPtr h,uint flags);
+  [DllImport("user32.dll")] static extern bool IsChild(IntPtr parent,IntPtr child);
   [DllImport("user32.dll")] static extern uint SendInput(uint n,INPUT[] input,int size);
   [DllImport("user32.dll",SetLastError=true)] static extern IntPtr OpenInputDesktop(uint flags,bool inherit,uint access);
   [DllImport("user32.dll")] static extern bool CloseDesktop(IntPtr h);
@@ -51,6 +57,8 @@ class YDesktop {
   static Dictionary<int,Ident> identities=new Dictionary<int,Ident>();
   static Dictionary<string,string> signers=new Dictionary<string,string>(StringComparer.OrdinalIgnoreCase);
   static string[] extraProtected=new string[0];
+  static bool effectStarted=false;
+  static string requestedAction="";
   static string[] agentNames={"chatgpt","codex","openai"};
   static string[] agentPaths={@"\windowsapps\openai.",@"\appdata\local\packages\openai.",@"\appdata\local\programs\chatgpt\",@"\appdata\local\programs\codex\",@"\appdata\local\openai\",@"\appdata\roaming\openai\",@"\appdata\local\chatgpt\",@"\appdata\roaming\chatgpt\"};
   static Ident Identify(int pid) {
@@ -113,23 +121,51 @@ class YDesktop {
     string exe=Identify((int)pid).Exe;if(S(d,"executablePath").Length>0&&(exe==null||!string.Equals(exe,S(d,"executablePath"),StringComparison.OrdinalIgnoreCase)))throw new Exception("PROCESS_IDENTITY_CHANGED");return h;}
   static object Node(AutomationElement e,int depth) {
     var c=e.Current;string value=null;object pattern;if(!c.IsPassword&&e.TryGetCurrentPattern(ValuePattern.Pattern,out pattern))value=((ValuePattern)pattern).Current.Value;
-    return new {name=c.IsPassword?"[password]":c.Name,automationId=c.AutomationId,type=c.ControlType.ProgrammaticName,enabled=c.IsEnabled,password=c.IsPassword,value=value,depth=depth,runtimeId=string.Join(".",e.GetRuntimeId())};
+    var box=c.BoundingRectangle;
+    return new {name=c.IsPassword?"[password]":c.Name,automationId=c.AutomationId,type=c.ControlType.ProgrammaticName,enabled=c.IsEnabled,password=c.IsPassword,value=value,depth=depth,runtimeId=string.Join(".",e.GetRuntimeId()),offscreen=c.IsOffscreen,bounds=box.IsEmpty?null:new {x=box.X,y=box.Y,width=box.Width,height=box.Height},patterns=e.GetSupportedPatterns().Select(p=>p.ProgrammaticName).ToArray()};
   }
   static void Walk(AutomationElement e,int depth,int max,List<object> list){if(list.Count>=max||depth>8)return;try{list.Add(Node(e,depth));for(var child=TreeWalker.ControlViewWalker.GetFirstChild(e);child!=null&&list.Count<max;child=TreeWalker.ControlViewWalker.GetNextSibling(child))Walk(child,depth+1,max,list);}catch(ElementNotAvailableException){} }
   static AutomationElement Find(AutomationElement root,Dictionary<string,object> d) {
     string id=S(d,"automationId"),name=S(d,"name"),runtime=S(d,"runtimeId");if(id.Length+name.Length+runtime.Length==0)throw new Exception("SELECTOR_REQUIRED");
-    var all=root.FindAll(TreeScope.Descendants,Condition.TrueCondition);var matches=new List<AutomationElement>();
+    var conditions=new List<Condition>();if(id.Length>0)conditions.Add(new PropertyCondition(AutomationElement.AutomationIdProperty,id));if(name.Length>0)conditions.Add(new PropertyCondition(AutomationElement.NameProperty,name));
+    Condition filter=conditions.Count==0?Condition.TrueCondition:conditions.Count==1?conditions[0]:new AndCondition(conditions.ToArray());
+    var all=root.FindAll(TreeScope.Descendants,filter);var matches=new List<AutomationElement>();
     foreach(AutomationElement e in all){var c=e.Current;if((id.Length==0||c.AutomationId==id)&&(name.Length==0||c.Name==name)&&(runtime.Length==0||string.Join(".",e.GetRuntimeId())==runtime))matches.Add(e);}
     if(matches.Count!=1)throw new Exception("AMBIGUOUS_TARGET: selector matched "+matches.Count);return matches[0];
   }
-  static void Focus(IntPtr h){if(!Interactive())throw new Exception("NO_INTERACTIVE_DESKTOP");ShowWindow(h,9);SetForegroundWindow(h);System.Threading.Thread.Sleep(100);if(GetForegroundWindow()!=h){try{AutomationElement.FromHandle(h).SetFocus();}catch{}System.Threading.Thread.Sleep(100);}if(GetForegroundWindow()!=h)throw new Exception("FOREGROUND_NOT_TARGET");}
-  static void Input(INPUT[] a){if(SendInput((uint)a.Length,a,Marshal.SizeOf(typeof(INPUT)))!=a.Length)throw new Exception("INPUT_BLOCKED_UIPI");}
+  static void Focus(IntPtr h){
+    if(!Interactive())throw new Exception("NO_INTERACTIVE_DESKTOP");if(IsIconic(h))ShowWindow(h,9);SetForegroundWindow(h);System.Threading.Thread.Sleep(100);if(GetForegroundWindow()==h)return;
+    uint ignored,current=GetCurrentThreadId(),front=GetWindowThreadProcessId(GetForegroundWindow(),out ignored),target=GetWindowThreadProcessId(h,out ignored);bool joinedFront=false,joinedTarget=false;
+    try{if(front!=0&&front!=current)joinedFront=AttachThreadInput(current,front,true);if(target!=0&&target!=current&&target!=front)joinedTarget=AttachThreadInput(current,target,true);BringWindowToTop(h);SetForegroundWindow(h);System.Threading.Thread.Sleep(100);}
+    finally{if(joinedTarget)AttachThreadInput(current,target,false);if(joinedFront)AttachThreadInput(current,front,false);}
+    if(GetForegroundWindow()!=h)throw new Exception("FOREGROUND_NOT_TARGET: Windows did not activate the requested window; no input was sent");
+  }
+  static void Input(INPUT[] a){effectStarted=true;if(SendInput((uint)a.Length,a,Marshal.SizeOf(typeof(INPUT)))!=a.Length)throw new Exception("INPUT_BLOCKED_UIPI");}
+  static bool OwnedWindow(IntPtr candidate,IntPtr target){if(candidate==target||IsChild(target,candidate))return true;for(int n=0;n<16&&candidate!=IntPtr.Zero;n++){candidate=GetWindow(candidate,4);if(candidate==target)return true;}return false;}
+  static object Click(IntPtr win,AutomationElement element,string method){
+    Focus(win);var box=element.Current.BoundingRectangle;if(box.IsEmpty||element.Current.IsOffscreen)throw new Exception("CONTROL_NOT_VISIBLE");
+    var points=new List<System.Windows.Point>();System.Windows.Point clickable;try{if(element.TryGetClickablePoint(out clickable))points.Add(clickable);}catch{}
+    points.Add(new System.Windows.Point(box.X+box.Width/2,box.Y+box.Height/2));
+    foreach(var point in points){int x=(int)Math.Round(point.X),y=(int)Math.Round(point.Y);if(!SystemInformation.VirtualScreen.Contains(x,y))continue;
+      if(GetForegroundWindow()!=win)throw new Exception("FOREGROUND_NOT_TARGET");
+      if(!OwnedWindow(GetAncestor(WindowFromPoint(new POINT{X=x,Y=y}),2),win))continue;
+      if(!SetCursorPos(x,y))throw new Exception("CURSOR_MOVE_FAILED");
+      if(GetForegroundWindow()!=win||!OwnedWindow(GetAncestor(WindowFromPoint(new POINT{X=x,Y=y}),2),win))throw new Exception("TARGET_OCCLUDED");
+      Input(new[]{new INPUT{type=0,mouse=new MOUSEINPUT{dwFlags=2}},new INPUT{type=0,mouse=new MOUSEINPUT{dwFlags=4}}});return new {clicked=true,x=x,y=y,method=method,requestedAction=requestedAction};
+    }throw new Exception("TARGET_OCCLUDED");
+  }
+  static ushort Key(string value){
+    switch(value.ToUpperInvariant()){case "CTRL":case "CONTROL":return 0x11;case "SHIFT":return 0x10;case "ALT":return 0x12;case "ENTER":case "RETURN":return 0x0D;case "TAB":return 0x09;case "ESC":case "ESCAPE":return 0x1B;case "SPACE":return 0x20;case "BACKSPACE":return 0x08;case "DELETE":return 0x2E;case "HOME":return 0x24;case "END":return 0x23;case "PAGEUP":return 0x21;case "PAGEDOWN":return 0x22;case "LEFT":return 0x25;case "UP":return 0x26;case "RIGHT":return 0x27;case "DOWN":return 0x28;}
+    if(value.Length==1&&char.IsLetterOrDigit(value[0]))return (ushort)char.ToUpperInvariant(value[0]);int number;if(value.StartsWith("F",StringComparison.OrdinalIgnoreCase)&&int.TryParse(value.Substring(1),out number)&&number>=1&&number<=24)return (ushort)(0x6F+number);throw new Exception("BAD_KEY_CHORD");
+  }
+  static object Keys(IntPtr win,string value){var keys=value.Split('+').Select(s=>Key(s.Trim())).ToArray();if(keys.Length<1||keys.Length>5||keys.Distinct().Count()!=keys.Length)throw new Exception("BAD_KEY_CHORD");Focus(win);var down=new List<ushort>();try{foreach(ushort key in keys){Input(new[]{new INPUT{type=1,key=new KEYBDINPUT{vk=key}}});down.Add(key);}}finally{for(int n=down.Count-1;n>=0;n--)Input(new[]{new INPUT{type=1,key=new KEYBDINPUT{vk=down[n],flags=2}}});}return new {pressed=value,method="verified-window-keyboard"};}
   static object Run(Dictionary<string,object> d) {
-    string action=S(d,"action");ReadProtected(d);
+    string action=S(d,"action");requestedAction=action;ReadProtected(d);
     if(action=="windows"){var list=new List<object>();EnumWindows((h,l)=>{if(IsWindowVisible(h)&&Title(h).Length>0){try{list.Add(WindowInfo(h));}catch{}}return true;},IntPtr.Zero);return new {windows=list,interactive=Interactive()};}
     IntPtr win=Target(d);var root=AutomationElement.FromHandle(win);
     if(action=="tree"){var nodes=new List<object>();Walk(root,0,300,nodes);return new {window=WindowInfo(win),elements=nodes,truncated=nodes.Count>=300,observation="Untrusted Windows UI content"};}
     if(action=="focus"){Focus(win);return new {foreground=true,window=WindowInfo(win)};}
+    if(action=="keys")return Keys(win,S(d,"value"));
     if(action=="capture"){
       RECT r;if(!GetWindowRect(win,out r))throw new Exception("WINDOW_RECT_FAILED");int w=r.Right-r.Left,h=r.Bottom-r.Top;if(w<=0||h<=0||(long)w*h>8000000)throw new Exception("CAPTURE_LIMIT");
       string output=S(d,"output");using(var bmp=new Bitmap(w,h)){using(var g=Graphics.FromImage(bmp)){var dc=g.GetHdc();bool ok;try{ok=PrintWindow(win,dc,2);}finally{g.ReleaseHdc(dc);}if(!ok)throw new Exception("CAPTURE_UNAVAILABLE");}bmp.Save(output,ImageFormat.Png);}return new {path=output,width=w,height=h,scope="target window only",method="PrintWindow"};
@@ -137,10 +173,15 @@ class YDesktop {
     var element=Find(root,d);object pat;
     if(action=="value"){if(element.TryGetCurrentPattern(ValuePattern.Pattern,out pat))return new {value=((ValuePattern)pat).Current.Value};if(element.TryGetCurrentPattern(TextPattern.Pattern,out pat))return new {value=((TextPattern)pat).DocumentRange.GetText(20000)};return new {value=element.Current.Name};}
     if(!Interactive())throw new Exception("NO_INTERACTIVE_DESKTOP");if(!element.Current.IsEnabled)throw new Exception("CONTROL_DISABLED");
-    if(action=="setValue"){if(!element.TryGetCurrentPattern(ValuePattern.Pattern,out pat))throw new Exception("VALUE_PATTERN_UNAVAILABLE");((ValuePattern)pat).SetValue(S(d,"value"));return Node(element,0);}
-    if(action=="invoke"){if(!element.TryGetCurrentPattern(InvokePattern.Pattern,out pat))throw new Exception("INVOKE_PATTERN_UNAVAILABLE");((InvokePattern)pat).Invoke();return new {invoked=true};}
-    if(action=="click"){Focus(win);var box=element.Current.BoundingRectangle;if(box.IsEmpty||element.Current.IsOffscreen)throw new Exception("CONTROL_NOT_VISIBLE");int x=(int)(box.X+box.Width/2),y=(int)(box.Y+box.Height/2);if(x<0||y<0)throw new Exception("COORDINATE_OUT_OF_SCOPE");SetCursorPos(x,y);if(GetForegroundWindow()!=win)throw new Exception("FOREGROUND_NOT_TARGET");if(GetAncestor(WindowFromPoint(new POINT{X=x,Y=y}),2)!=win)throw new Exception("TARGET_OCCLUDED");Input(new[]{new INPUT{type=0,mouse=new MOUSEINPUT{dwFlags=2}},new INPUT{type=0,mouse=new MOUSEINPUT{dwFlags=4}}});return new {clicked=true,x=x,y=y};}
-    if(action=="type"){Focus(win);element.SetFocus();if(GetForegroundWindow()!=win)throw new Exception("FOREGROUND_NOT_TARGET");if(!AutomationElement.FocusedElement.GetRuntimeId().SequenceEqual(element.GetRuntimeId()))throw new Exception("FOCUS_CHANGED");string text=S(d,"value");if(text.Length>10000)throw new Exception("INPUT_LIMIT");foreach(char c in text)Input(new[]{new INPUT{type=1,key=new KEYBDINPUT{scan=c,flags=4}},new INPUT{type=1,key=new KEYBDINPUT{scan=c,flags=6}}});return new {typed=text.Length};}
+    if(action=="setValue"){if(!element.TryGetCurrentPattern(ValuePattern.Pattern,out pat))throw new Exception("VALUE_PATTERN_UNAVAILABLE");effectStarted=true;((ValuePattern)pat).SetValue(S(d,"value"));return Node(element,0);}
+    if(action=="invoke"){
+      string process=Identify(Process.GetProcessById((int)element.Current.ProcessId).Id).Name;
+      if(process=="chrome"||process=="msedge")return Click(win,element,"browser-verified-pointer-click");
+      if(!element.TryGetCurrentPattern(InvokePattern.Pattern,out pat))return Click(win,element,"invoke-unavailable-pointer-click");
+      effectStarted=true;((InvokePattern)pat).Invoke();return new {invoked=true,method="UIA.InvokePattern"};
+    }
+    if(action=="click")return Click(win,element,"verified-pointer-click");
+    if(action=="type"){Focus(win);element.SetFocus();if(GetForegroundWindow()!=win)throw new Exception("FOREGROUND_NOT_TARGET");if(!AutomationElement.FocusedElement.GetRuntimeId().SequenceEqual(element.GetRuntimeId()))throw new Exception("FOCUS_CHANGED");string text=S(d,"value");if(text.Length>10000)throw new Exception("INPUT_LIMIT");foreach(char c in text){if(GetForegroundWindow()!=win)throw new Exception("FOCUS_CHANGED");Input(new[]{new INPUT{type=1,key=new KEYBDINPUT{scan=c,flags=4}},new INPUT{type=1,key=new KEYBDINPUT{scan=c,flags=6}}});}return new {typed=text.Length};}
     throw new Exception("BAD_ACTION");
   }
   static void Fixture(string id) {
@@ -155,6 +196,6 @@ class YDesktop {
     if(args.Length==2&&args[0]=="--fixture"){Fixture(args[1]);return;}
     Console.InputEncoding=Encoding.UTF8;Console.OutputEncoding=new UTF8Encoding(false);
     try{string raw=Console.ReadLine();if(raw==null||raw.Length>1048576)throw new Exception("INPUT_LIMIT");Console.WriteLine(json.Serialize(new {ok=true,result=Run(json.Deserialize<Dictionary<string,object>>(raw))}));}
-    catch(Exception e){Console.WriteLine(json.Serialize(new {ok=false,error=e.Message}));Environment.ExitCode=1;}
+    catch(Exception e){string message=e.Message??"",code=Regex.Match(message,@"^[A-Z][A-Z0-9_]{2,}(?=:|$)").Value;if(code.Length==0)code=requestedAction=="invoke"?"UIA_INVOKE_FAILED":"UIA_EXECUTION_FAILED";string hresult="0x"+e.HResult.ToString("X8");if(message.Length==0)message=code+" ("+e.GetType().Name+", HRESULT "+hresult+")";Console.WriteLine(json.Serialize(new {ok=false,error=message,code=code,hresult=hresult,exceptionType=e.GetType().Name,action=requestedAction,effectStarted=effectStarted,outcomeUnknown=effectStarted}));Environment.ExitCode=1;}
   }
 }

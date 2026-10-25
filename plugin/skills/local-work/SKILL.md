@@ -7,7 +7,13 @@ For an explicit request involving a local Windows path or an authorized local pr
 
 Before editing, read the current file and use its expected SHA-256 when available. Retain the returned snapshot ID, then read back the actual change. Restore conflicts preserve newer content: report `CONFLICT`, no files restored, and review the diff rather than retrying.
 
-On `REVIEW_REQUIRED`, immediately show `y_review_approval` using the original request and context token, then wait with `y_wait_approval` and the original result token. Do not run the original action again. Never call private decision tools from the model or copy capabilities into another chat.
+Use only the current `tools/list` catalog. There are no historical aliases or alternative tool prefixes.
+
+On `APPROVAL_REQUIRED`, show `y_show_approval` at the current conversation step using the original requestId, resultToken and contextToken. Then keep the task pending with bounded `y_wait_approval` calls. A decision returns the existing result automatically; do not end the task as blocked or run the original action again. Never call private decision tools from the model or copy capabilities into another chat.
+
+The first desktop binding or input asks once for temporary Full Access to this chat for 10 minutes. After the owner confirms, desktop actions across this chat's windows, files and commands need no additional approval within that period. Preserve its contextToken. Expiry or y_chat_access action=revoke restores review before another input. A failed UIA action is not evidence that permission was denied: inspect its specific native error and the actual window. Browser invoke uses a verified pointer click. Use y_desktop_action action=keys with value such as CTRL+L, CTRL+T or ENTER for browser navigation.
+
+Desktop interaction primarily uses the Windows control tree. Screenshots are separate observations, returned inline to the model. Their generated PNGs are deleted before the response returns; screenshot image bytes are excluded from the local result ledger. Do not promise removal of images already retained by the chat host.
 
 Retain output tokens for search, process and durable task continuations. An interrupted or unknown mutation must be reconciled before retrying. Batch results are not atomic. Do not promise that all arbitrary script effects can be rolled back.
 

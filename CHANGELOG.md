@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.0.10
+
+- One explicit ten-minute desktop Full Access grant per chat, direct in-chat development activation, fresh approval instances and bounded continuation.
+- Verified browser pointer actions, reliable foreground activation, keyboard chords and precise native error/outcome reporting.
+- Inline screenshot delivery with immediate local PNG deletion and no image bytes in local result history.
+- Remove old tool resolver and duplicate approval tool; exclude production test fixtures and obsolete shipped migration instructions.
+
 ## 1.0.9 — default-allow scripts and directory statistics
 
 - Fix the reported read-only directory inventory being gated merely for referencing the installation or credential-adjacent folders after its variables, loop and arithmetic fell outside the narrow read-only parser.

@@ -30,8 +30,6 @@ function authorizeNativeStandard(intent){
     return allow('YGPT browser (isolated by default, or the owner existing browser after y_browser_attach); destination blacklist applies');
   }
   // Inventory, binding and focus are ordinary operations; desktop input is reviewed.
-  if(n==='y_desktop_bind'&&config.readOnlyAutoAllow)return allow('Read-only window binding; input actions have their own policy');
-  if(n==='y_desktop_action'&&a.action==='focus'&&config.blacklistDefaultAllow)return allow('Focus this chat-owned window; no click or text input');
   if(n.startsWith('y_desktop_'))return uiaDecision(n)??hold('Unclassified desktop capability: '+n);
   if(['y_system_inspect','y_process_list'].includes(n))return allow('Fixed read-only diagnostics or this chat\'s process inventory');
   if(n==='y_project_inspect'){const t=route(a.path??'');if(config.readOnlyAutoAllow)return allow('Owner policy: read-only project inspection, including protected locations');if(t.permission==='private'||t.permission==='vault'||t.sensitive)return hold('Project inspection target is protected or credential-adjacent: a verified owner decision is required');return allow('Read-only project structure, manifest and Git inspection');}
