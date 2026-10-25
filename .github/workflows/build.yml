@@ -19,6 +19,8 @@ concurrency:
 jobs:
   windows:
     runs-on: windows-latest
+    # A hung integration process must not keep a stale release build alive for hours.
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
