@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.0.14
+
+- Require the original chat context when displaying an approval. Missing, mismatched or expired contexts return actionable errors and a recovery state instead of disabled buttons labelled Awaiting approval.
+- Preserve the saved request, prevent decision-capability issuance on context errors, and support a fresh card after the original context is restored. Includes the 100-minute desktop Full Access default.
+
 ## 1.0.13
 
 - Desktop-triggered Full Access now defaults to 100 minutes, with matching card text, server validation and guidance. Existing grants keep their original expiry; revocation and chat isolation remain unchanged.

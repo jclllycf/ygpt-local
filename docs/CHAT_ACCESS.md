@@ -31,6 +31,8 @@ If a mobile client does not display the card, open the same conversation in Chat
 
 ## Desktop tasks and screenshots
 
+If a card shows **Refresh approval** or a tool returns `APPROVAL_CONTEXT_*`, its original context is missing, different or expired. Do not click or wait on that unavailable card. Ask the assistant to recover the original `requestId`, `resultToken` and `contextToken` from the same conversation and refresh only the card. If the context was lost, resolve the saved request yourself in the Windows approval center. Do not repeat the desktop action or borrow another chat's context.
+
 The first desktop-control card explicitly grants Full Access for 100 minutes and executes that one requested desktop step after confirmation. Later bindings, clicks, keyboard chords and commands within this chat reuse the grant. Other pending operations are not replayed. Expiry or revoke restores review before another input. `y_desktop_action action=keys` accepts a chord such as `CTRL+L`, `CTRL+T` or `ENTER`; selectors, native errors and unknown outcomes must still be checked.
 
 Desktop automation primarily reads Windows UIA control trees. Screenshots are separate image observations. Generated PNGs are sent inline and removed locally before return; local result history retains metadata, not image bytes. Startup reclaims old generated screenshots. Unrelated images, credentials and snapshots stay intact. Images already delivered to ChatGPT follow the host's retention rules.

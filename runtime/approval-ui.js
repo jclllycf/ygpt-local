@@ -2,7 +2,7 @@
 // host-to-component metadata; no decision is inferred from conversation text.
 (()=>{
  const $=id=>document.getElementById(id),terminal=new Set(['succeeded','failed','unknown','denied','expired','not_found']);
- const labels={awaiting_user:'Awaiting approval',approved:'Approved',running:'Running',succeeded:'Completed',failed:'Failed',unknown:'Check result',denied:'Denied',expired:'Expired',not_found:'No request'};
+ const labels={awaiting_user:'Awaiting approval',context_required:'Refresh approval',request_unavailable:'Approval unavailable',approved:'Approved',running:'Running',succeeded:'Completed',failed:'Failed',unknown:'Check result',denied:'Denied',expired:'Expired',not_found:'No request'};
  let card=null,call=null,standard=false,healthy=false,busy=false,notifying=false,timer=null,failures=0,closed=false,compatibilityTools=false;
  const states=new Map(),deliveries=new Map(),inflight=new Set(),requests=new Map();let sequence=0;
  let floatingRequest=null;const floatAttempts=new Set();
@@ -130,7 +130,7 @@
   if(card){render();schedule(0);}
  }
  window.addEventListener('openai:set_globals',globals);globals();
- if(window.parent!==window)request('ui/initialize',{appInfo:{name:'YGPT approval',version:'1.0.13'},appCapabilities:{},protocolVersion:'2026-01-26'}).then(result=>{
+ if(window.parent!==window)request('ui/initialize',{appInfo:{name:'YGPT approval',version:'1.0.14'},appCapabilities:{},protocolVersion:'2026-01-26'}).then(result=>{
   standard=true;healthy=true;call=async(name,args)=>{const compat=window.openai?.callTool;if(compatibilityTools&&typeof compat==='function')return compat(name,args);try{return await request('tools/call',{name,arguments:args});}catch(error){if(typeof compat==='function'&&(error.code===-32601||name==='y_bar_status'&&!args.notifyAction)){const result=await compat(name,args);compatibilityTools=true;return result;}throw error;}};
   window.parent.postMessage({jsonrpc:'2.0',method:'ui/notifications/initialized'},'*');
   const resize=()=>{const rect=document.querySelector('main').getBoundingClientRect();window.parent.postMessage({jsonrpc:'2.0',method:'ui/notifications/size-changed',params:{width:Math.ceil(rect.width),height:Math.ceil(rect.height)}},'*');};

@@ -425,7 +425,12 @@ async function callTool({id,msg,host,nativeCall,name,args,contextToken,rawArgs,i
   const descriptor=tools().find(t=>t.name===name);
   // Retired names are not aliases: nothing runs, and the answer names the replacement.
   if(!descriptor)return response(id,{state:'rejected',executed:false,code:'NO_TOOL',message:'Unknown YGPT Local tool. Refresh tools/list and use only the current catalog.'},true);
-  if(!ajv.validate(descriptor.inputSchema,rawArgs))throw Error('Invalid tool arguments: '+(ajv.errors?.[0]?.message??name));
+  if(!ajv.validate(descriptor.inputSchema,rawArgs)){
+    // Old cached catalogs can omit contextToken. Return an actionable recovery
+    // result, never an awaiting-user card with disabled decision buttons.
+    if(name==='y_show_approval'&&config.chatAppConsent&&ajv.errors?.some(e=>e.keyword==='required'&&e.params?.missingProperty==='contextToken')&&typeof rawArgs.requestId==='string'&&typeof rawArgs.resultToken==='string')return emit({jsonrpc:'2.0',id,result:chatApprovalResult(ledger,rawArgs)});
+    throw Error('Invalid tool arguments: '+(ajv.errors?.[0]?.message??name));
+  }
   const foreign=ownershipViolation(ledger,name,intent,callScope.getStore().context?.hash??null);
   if(foreign)return response(id,foreign,true);
   if(name==='y_chat_access'&&(args.action??'status')!=='request_full'){

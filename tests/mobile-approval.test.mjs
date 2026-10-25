@@ -61,6 +61,30 @@ test('Manual Windows owner review binds the exact request and executes once; not
 });
 
 function bar(){return {requestId:'CROSS_DEVICE_FIXTURE',uiToken:'private-widget-fixture',presentation:{title:'Review fixture action',target:'No production operation',impact:'Fixture only'},chatScope:{eligible:true},state:'awaiting_user',expiresAt:new Date(Date.now()+60000).toISOString(),enabled:true};}
+
+test('Missing, foreign and expired approval contexts return recovery errors without decision capabilities',async()=>{
+ const f=fixture(),c=await f.client().start();try{
+  const tools=(await c.rpc('tools/list')).tools;assert.ok(tools.find(t=>t.name==='y_show_approval').inputSchema.required.includes('contextToken'));
+  const request=await c.call('y_chat_access',{action:'request_full'}),a=unpack(request),b=unpack(await c.call('y_chat_access',{action:'request_full'}));
+  const args={requestId:a.requestId,resultToken:a.resultToken};
+  for(const [contextToken,code] of [[undefined,'APPROVAL_CONTEXT_REQUIRED'],[b.contextToken,'APPROVAL_CONTEXT_MISMATCH'],['invalid-context-fixture','APPROVAL_CONTEXT_EXPIRED']]){
+   const result=await c.call('y_show_approval',{...args,...(contextToken?{contextToken}:{})}),value=unpack(result);assert.equal(result.isError,true);assert.equal(value.code,code);assert.equal(value.state,'context_required');assert.equal(value.continueWaiting,false);assert.equal(value.requiresUserInteraction,false);assert.equal(value.approvalEnabled,false);assert.equal(result._meta.yBar.uiToken,'');assert.equal(result._meta.yBar.enabled,false);assert.match(value.message,/Do not ask the user to click/);
+  }
+  const wrongReceipt=await c.call('y_show_approval',{...args,resultToken:'invalid-receipt-fixture',contextToken:b.contextToken});assert.equal(unpack(wrongReceipt).code,'APPROVAL_RECEIPT_REQUIRED');assert.equal(wrongReceipt._meta.yBar.requestId,'NONE');assert.ok(!JSON.stringify(wrongReceipt._meta.yBar.presentation).includes('120 minutes'));
+  assert.equal(unpack(await c.call('y_call_status',{id:a.requestId})).state,'awaiting_user');
+  const restored=await c.call('y_show_approval',{...args,contextToken:a.contextToken});assert.equal(restored.isError,undefined);assert.equal(restored.structuredContent.approvalEnabled,true);assert.ok(restored._meta.yBar.uiToken);assert.equal(restored.structuredContent.requestId,a.requestId);
+  for(const [id,token] of [[a.requestId,restored._meta.yBar.uiToken],[b.requestId,(await c.call('y_show_approval',{requestId:b.requestId,resultToken:b.resultToken,contextToken:b.contextToken}))._meta.yBar.uiToken]])await c.call('y_bar_decide',{requestId:id,uiToken:token,decision:'deny'});
+ }finally{await c.close();}
+});
+
+test('Phone and desktop recovery cards hide unavailable actions and accept a fresh card for the same request',async()=>{
+ let browser;try{browser=await launchFixtureBrowser({channel:'msedge',headless:true});for(const viewport of [{width:390,height:844},{width:1100,height:760}]){
+  const page=await browser.newPage({viewport}),unavailable={...bar(),state:'context_required',uiToken:'',enabled:false,note:'Ask ChatGPT to refresh this approval with the original chat context.'};let reads=0;await page.exposeFunction('recoveredStatus',()=>{reads++;return {structuredContent:{state:'awaiting_user'}};});
+  await page.addInitScript(value=>{window.openai={toolResponseMetadata:{yBar:value},callTool:()=>window.recoveredStatus()};},unavailable);await page.route('https://ygpt-recovery.invalid/',r=>r.fulfill({body:barHtmlForTest(),contentType:'text/html'}));await page.goto('https://ygpt-recovery.invalid/');
+  await page.locator('#state').filter({hasText:'Refresh approval'}).waitFor();assert.equal(await page.locator('#actions').isVisible(),false);assert.match(await page.locator('#note').textContent(),/original chat context/);assert.equal(reads,0);
+  await page.evaluate(value=>{window.openai.toolResponseMetadata={yBar:value};window.dispatchEvent(new Event('openai:set_globals'));},bar());await until(()=>reads>0);assert.equal(await page.getByRole('button',{name:'Allow once',exact:true}).isEnabled(),true);assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));await page.close();
+ }}finally{await browser?.close();}
+});
 test('Phone-sized and desktop cards receive delayed metadata, synchronize an external decision and notify once',async()=>{
  const html=barHtmlForTest(),server=http.createServer((_q,r)=>{r.setHeader('Content-Type','text/html;charset=utf-8');r.end(html);});
  await new Promise(r=>server.listen(0,'127.0.0.1',r));let browser,state='awaiting_user',reserved=false,sent=false,messages=0,decisions=0;

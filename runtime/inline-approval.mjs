@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {config,RUNTIME,INSTALL} from './config.mjs';
 // New resource URI forces hosts to fetch the revised CSP and bridge bundle.
-export const BAR_URI='ui://ygpt/approval/strip-v9-access-options.html';
+export const BAR_URI='ui://ygpt/approval/strip-v10-context-recovery.html';
 export const FULL_ACCESS_URI='ui://ygpt/access/full-v1.html';
 // The prior ChatGPT tool catalog can retain this URI across conversations.
 // Serve the NEW strip at this legacy address rather than the retired large card.
@@ -12,7 +12,7 @@ export const LEGACY_BAR_URI='ui://ygpt/approval/card-v1.html';
 export const INSPECTION_URI=config.chatAppConsent?BAR_URI:'ui://ygpt/approval/inspection-v1.html';
 // Resource addresses are protocol identifiers, not display branding. Old chats
 // retain these exact addresses and must still receive the current component.
-const knownResources=[BAR_URI,FULL_ACCESS_URI,'ui://ygpt/approval/strip-v8-desktop-flow.html',LEGACY_BAR_URI,INSPECTION_URI,'ui://ygpt/approval/strip-v5.html','ui://ygpt/approval/compact-v1-rc2.html','ui://ygpt/approval/strip-v4-rc18.html','ui://ygpt/approval/strip-v3.html',...['compact-v11-3','interactive-v11-2c','interactive-v11-2b','interactive-v11-2','interactive-v11-1','interactive-v11','inspection-v1'].map(n=>'ui://ygpt/approval/'+n+'.html')];
+const knownResources=[BAR_URI,FULL_ACCESS_URI,'ui://ygpt/approval/strip-v9-access-options.html','ui://ygpt/approval/strip-v8-desktop-flow.html',LEGACY_BAR_URI,INSPECTION_URI,'ui://ygpt/approval/strip-v5.html','ui://ygpt/approval/compact-v1-rc2.html','ui://ygpt/approval/strip-v4-rc18.html','ui://ygpt/approval/strip-v3.html',...['compact-v11-3','interactive-v11-2c','interactive-v11-2b','interactive-v11-2','interactive-v11-1','interactive-v11','inspection-v1'].map(n=>'ui://ygpt/approval/'+n+'.html')];
 export const approvalGuidance='Show this fresh approval card at the current conversation step, then use y_wait_approval with the original requestId, resultToken and contextToken for a bounded wait. Keep the task pending while the person decides; do not report it finished or repeat the original action. A saved decision resumes the existing result automatically. If this client cannot mount the card during a running response, open the same conversation on the web or use the Windows approval center. Only an explicit card or local-center decision grants permission.';
 export function approvalResourceUris(){
  const modern=config.rc10Candidate?knownResources:!config.rc9Candidate&&uiEnabled()?(barEnabled()?[BAR_URI,LEGACY_BAR_URI]:[BAR_URI]):[];
@@ -20,10 +20,17 @@ export function approvalResourceUris(){
 }
 export function chatApprovalResult(ledger,args={}){
  let operation=args.requestId?ledger.get(args.requestId):null;
- let context;
- if(args.contextToken)context=ledger.context(args.contextToken);
+ let context,expiredContext=false;
+ if(args.contextToken)try{context=ledger.context(args.contextToken);}catch{expiredContext=true;}
  if(!operation&&context&&!args.requestId)operation=ledger.pending().find(o=>o.state==='awaiting_user'&&o.contextHash===context.hash);
  const matched=!!operation&&!!context&&operation.contextHash===context.hash;
+ if(operation&&!matched){
+  const receipt=ledger.canRead(operation.id,args.resultToken),code=!receipt?'APPROVAL_RECEIPT_REQUIRED':expiredContext?'APPROVAL_CONTEXT_EXPIRED':context?'APPROVAL_CONTEXT_MISMATCH':'APPROVAL_CONTEXT_REQUIRED';
+  const message=receipt?'This approval cannot accept a decision because its original chat context is missing, different or expired. Refresh y_show_approval with the original requestId, resultToken and contextToken from this conversation. Do not ask the user to click this unavailable card, keep polling it, invent a new context, or repeat the desktop action. If the original context cannot be recovered, the owner can resolve the saved request in the Windows approval center.':'The original request resultToken is required before this approval can be displayed. No decision was enabled.';
+  const value={requestId:receipt?operation.id:'NONE',state:receipt?'context_required':'request_unavailable',code,executed:false,approvalEnabled:false,requiresOriginalChatContext:true,requiresUserInteraction:false,continueWaiting:false,renderer:'mcp-app',recovery:{tool:'y_show_approval',requiredOriginalArguments:['requestId','resultToken','contextToken'],fallback:'Windows approval center; owner decision only',repeatOriginalAction:false},message};
+  if(receipt)ledger.event(operation.id,'approval_context_required',expiredContext?'expired-context':context?'wrong-context':'missing-context');
+  return {isError:true,content:[{type:'text',text:JSON.stringify(value)}],structuredContent:value,_meta:{'openai/widgetSessionId':'ygpt-approval-recovery-'+randomUUID(),yBar:{...value,uiToken:'',presentation:{title:'Refresh this approval',target:'Original chat context required',impact:'This card is unavailable. The original operation remains saved; no action was executed.',purpose:message,technical:code},chatScope:{eligible:false},enabled:false,note:'Ask ChatGPT to refresh this approval with the original chat context. If it is lost, use the Windows approval center. No action was executed.'}}};
+ }
  const enabled=barEnabled()&&matched&&operation.state==='awaiting_user'&&Date.parse(operation.expiresAt)>Date.now();
  const value={requestId:operation?.id??'NONE',state:operation?.state??'not_found',approvalEnabled:enabled,requiresOriginalChatContext:!!operation&&!matched,requiresUserInteraction:enabled,continueWaiting:enabled,renderer:'mcp-app',message:approvalGuidance};
  const presentation=operation?.presentation??{title:'No request to review',target:'No pending operation selected',impact:'No command or file change will run.',purpose:'Pass a pending requestId and its original contextToken.',denied:'Nothing changes.',risk:'None',reversible:'No operation',administrator:'No elevation',technical:''};
@@ -32,7 +39,7 @@ export function chatApprovalResult(ledger,args={}){
 }
 const text=value=>({content:[{type:'text',text:JSON.stringify(value)}],structuredContent:value});
 export const barTools=[
- {name:'y_show_approval',title:'Review local action',description:'Display a fresh approval card at the current conversation step, then keep the task pending with bounded y_wait_approval. Preserve original contextToken and resultToken privately. The card follows up automatically when no wait is active; retrieve the existing result and never repeat the action.',inputSchema:{type:'object',properties:{requestId:{type:'string'},resultToken:{type:'string'}},required:['requestId','resultToken'],additionalProperties:false},_meta:{ui:{resourceUri:BAR_URI},'openai/outputTemplate':BAR_URI},annotations:{readOnlyHint:true,destructiveHint:false,openWorldHint:false}},
+ {name:'y_show_approval',title:'Review local action',description:'Display a fresh approval card using the ORIGINAL requestId, resultToken and contextToken returned together in this chat. Do not substitute a newer browser context. If approvalEnabled is false or APPROVAL_CONTEXT_* is returned, recover the original context or guide the owner to the Windows approval center; do not tell them to click disabled buttons or keep waiting. With an enabled card, use bounded y_wait_approval and retrieve the existing result without repeating the action.',inputSchema:{type:'object',properties:{requestId:{type:'string'},resultToken:{type:'string'},contextToken:{type:'string'}},required:['requestId','resultToken',...(config.chatAppConsent?['contextToken']:[])],additionalProperties:false},_meta:{ui:{resourceUri:BAR_URI},'openai/outputTemplate':BAR_URI},annotations:{readOnlyHint:true,destructiveHint:false,openWorldHint:false}},
  ...['decide','status'].map(action=>({name:'y_bar_'+action,description:'UI-only '+action+'; requires a widget-only one-request capability.',inputSchema:{type:'object',properties:{requestId:{type:'string'},uiToken:{type:'string'},...(action==='decide'?{decision:{type:'string',enum:['once','chat','deny']}}:{notifyAction:{type:'string',enum:['claim','retry','sent','uncertain']},deliveryToken:{type:'string',maxLength:128}})},required:['requestId','uiToken',...(action==='decide'?['decision']:[])],additionalProperties:false},_meta:{ui:{visibility:['app']},'openai/visibility':'private','openai/widgetAccessible':true},annotations:{readOnlyHint:action==='status',destructiveHint:action==='decide',openWorldHint:false}}))
 ];
 // Safe production renderer probe: never issues an operation capability.
