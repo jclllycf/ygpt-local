@@ -1,0 +1,34 @@
+{
+  "version": "1.0.19",
+  "candidate": true,
+  "presentation": {
+    "availableDisplayModes": ["inline"],
+    "preferredDisplayMode": "inline",
+    "standardNegotiationAfterCompatibility": true,
+    "boundedPresentationRecovery": true,
+    "legacyResourceAliasesRetained": true
+  },
+  "localValidation": {
+    "nativeBuild": "passed",
+    "approvalDesktopCspTests": {"total": 21, "passed": 21, "failed": 0},
+    "displayHelperExtensionTests": {"total": 44, "passed": 37, "failed": 0, "skipped": 7},
+    "publicSourceAudit": "passed"
+  },
+  "hostObservations": {
+    "existingWebConversationInspected": true,
+    "viewerRestoredAfterRefresh": true,
+    "viewerRestoredWithoutMountedComponent": true,
+    "compatibilityDisplayMethodCanRequireSynchronousUserEvent": true,
+    "newHelperEnabled": false,
+    "newHelperRealHostAcceptance": "pending-owner-browser-activation",
+    "productionApprovalDecisionSubmittedByTest": false,
+    "nativeMobileAcceptance": "not-tested"
+  },
+  "access": {
+    "chatgptSitePermission": "optional-owner-enabled",
+    "readsChatBodies": false,
+    "sendsMessagesOrApprovesOperations": false,
+    "browserToolRelayOwnershipChanged": false
+  },
+  "windowsCi": "pending"
+}
