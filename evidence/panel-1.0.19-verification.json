@@ -2,7 +2,9 @@
   "version": "1.0.19",
   "candidate": true,
   "presentation": {
-    "availableDisplayModes": ["inline"],
+    "availableDisplayModes": [
+      "inline"
+    ],
     "preferredDisplayMode": "inline",
     "standardNegotiationAfterCompatibility": true,
     "boundedPresentationRecovery": true,
@@ -10,19 +12,35 @@
   },
   "localValidation": {
     "nativeBuild": "passed",
-    "approvalDesktopCspTests": {"total": 21, "passed": 21, "failed": 0},
-    "displayHelperExtensionTests": {"total": 44, "passed": 37, "failed": 0, "skipped": 7},
-    "publicSourceAudit": "passed"
+    "approvalDesktopCspTests": {
+      "total": 21,
+      "passed": 21,
+      "failed": 0
+    },
+    "displayHelperExtensionTests": {
+      "total": 44,
+      "passed": 37,
+      "failed": 0,
+      "skipped": 7
+    },
+    "publicSourceAudit": "passed",
+    "setupVersionAndIcons": {
+      "passed": 4,
+      "failed": 0
+    }
   },
   "hostObservations": {
     "existingWebConversationInspected": true,
     "viewerRestoredAfterRefresh": true,
     "viewerRestoredWithoutMountedComponent": true,
     "compatibilityDisplayMethodCanRequireSynchronousUserEvent": true,
-    "newHelperEnabled": false,
+    "newHelperEnabled": "not-confirmed",
     "newHelperRealHostAcceptance": "pending-owner-browser-activation",
     "productionApprovalDecisionSubmittedByTest": false,
-    "nativeMobileAcceptance": "not-tested"
+    "nativeMobileAcceptance": "not-tested",
+    "ownerAuthorizedHelper": true,
+    "connectedBrowserProfiles": 2,
+    "reportedExtensionVersion": "1.0.19.1"
   },
   "access": {
     "chatgptSitePermission": "optional-owner-enabled",
@@ -30,5 +48,49 @@
     "sendsMessagesOrApprovesOperations": false,
     "browserToolRelayOwnershipChanged": false
   },
-  "windowsCi": "pending"
+  "windowsCi": {
+    "commit": "b1a2b3769df64737ffa17707c10aa66bacf7b0d5",
+    "url": "https://github.com/jclllycf/ygpt-local/actions/runs/40322374064",
+    "conclusion": "success",
+    "tests": {
+      "total": 203,
+      "passed": 189,
+      "failed": 0,
+      "skipped": 14
+    }
+  },
+  "installed": {
+    "version": "1.0.19",
+    "manifestFiles": 6616,
+    "manifestMismatches": 0,
+    "packageManifestMatches": true,
+    "protectedCredentialsConnectionPairingUnchanged": true,
+    "stateAuditPassed": true,
+    "health": {
+      "version": "1.0.19",
+      "phase": "connected",
+      "localReady": true,
+      "tunnelConnected": true,
+      "restarts": 0,
+      "lastError": ""
+    }
+  },
+  "packages": [
+    {
+      "file": "YGPTLocal-Setup-1.0.19-win-x64.exe",
+      "bytes": 98861056,
+      "sha256": "0c88b3588915c231dbf0f072605d17097a9b6bf0d1b1f7129e631ab3cb068f2a"
+    },
+    {
+      "file": "YGPTLocal-Update-1.0.19-win-x64.exe",
+      "bytes": 98861056,
+      "sha256": "0ed73670fba465998e16993f3a0becf2bde083a0cadeabe07433c8da8a52b4f2"
+    },
+    {
+      "file": "ygpt-local-portable-1.0.19-win-x64.zip",
+      "bytes": 97863676,
+      "sha256": "00d785ac6c8d368fb9e686fa7f8b9da92d2ad83b2acfacd8cdcabd0add2b4993"
+    }
+  ],
+  "at": "2026-10-26T12:34:39.981Z"
 }
