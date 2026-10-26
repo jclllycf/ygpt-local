@@ -36,6 +36,10 @@ test('MCP stdio discovery, schema validation, resources and prompts use the inst
  assert.equal((await mcp.run({action:'call',serverId:id,name:'failure'})).ok,false);
 });
 
+test('MCP source tool allowlists and denylists remain enforced after discovery',async t=>{
+ const f=await fixture(t);await write(f,{mcpServers:{fixture:{...mcpSpec,enabled_tools:['echo','failure'],disabled_tools:['failure']}}});const id=(await f.catalog.list()).entries[0].id,mcp=new LocalMcp({catalog:f.catalog,currentOwner:f.owner});f.cleanup.push(()=>mcp.close());const tools=await mcp.run({serverId:id});assert.deepEqual(tools.tools.map(t=>t.name),['echo']);await assert.rejects(mcp.run({action:'call',serverId:id,name:'failure'}),{code:'MCP_TOOL_UNKNOWN'});
+});
+
 test('Each chat gets a separate MCP process; close and idle release only its owned scratch',async t=>{
  const f=await fixture(t);await write(f,{mcpServers:{fixture:mcpSpec}});const id=(await f.catalog.list()).entries[0].id,mcp=new LocalMcp({catalog:f.catalog,currentOwner:f.owner,idleMs:10000});f.cleanup.push(()=>mcp.close());
  const call=()=>mcp.run({action:'call',serverId:id,name:'echo',arguments:{value:'same'}});

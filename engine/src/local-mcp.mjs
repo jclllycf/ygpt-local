@@ -46,7 +46,7 @@ export class LocalMcp {
     if(entry&&entry.fingerprint!==spec.fingerprint){if(entry.active)throw new EngineError('MCP_CONFIG_CHANGED','Configuration changed during an active call; wait for it to finish');await this.dispose(key,entry);entry=null;}
     if(!entry){
       if(this.sessions.size>=16||[...this.sessions.values()].filter(e=>e.owner===owner).length>=4)throw new EngineError('CONCURRENCY_LIMIT','Local MCP client capacity reached; close an unused server first. Nothing was started.');
-      entry={owner,id,fingerprint:spec.fingerprint,active:0,tools:null,tail:Promise.resolve(),state:'connecting'};this.sessions.set(key,entry);
+      entry={owner,id,fingerprint:spec.fingerprint,enabledTools:spec.enabledTools,disabledTools:spec.disabledTools??[],active:0,tools:null,tail:Promise.resolve(),state:'connecting'};this.sessions.set(key,entry);
       entry.ready=(async()=>{
         entry.scratch=await toolScratch(this.catalog,owner);const env=await this.catalog.environment(spec,entry.scratch.dir);
         let transport;
@@ -83,7 +83,7 @@ export class LocalMcp {
     }
     throw new EngineError('MCP_CATALOG_LIMIT','Too many catalog pages');
   }
-  async tools(e){if(!e.tools){const tools=await this.pages(e,'listTools','tools'),map=new Map();for(const t of tools){if(typeof t.name!=='string'||map.has(t.name)||Buffer.byteLength(JSON.stringify(t))>1048576)throw new EngineError('MCP_CATALOG_INVALID','Duplicate, oversized or invalid tool descriptor');map.set(t.name,t);}e.tools=map;}return e.tools;}
+  async tools(e){if(!e.tools){const tools=await this.pages(e,'listTools','tools'),map=new Map(),seen=new Set();for(const t of tools){if(typeof t.name!=='string'||seen.has(t.name)||Buffer.byteLength(JSON.stringify(t))>1048576)throw new EngineError('MCP_CATALOG_INVALID','Duplicate, oversized or invalid tool descriptor');seen.add(t.name);if((e.enabledTools===undefined||e.enabledTools.includes(t.name))&&!e.disabledTools.includes(t.name))map.set(t.name,t);}e.tools=map;}return e.tools;}
   async review(a){
     const spec=await this.spec(a.serverId);const e=this.sessions.get(this.owner()+':'+a.serverId),t=e?.tools?.get(a.name);
     if(a.action==='call'&&!t)throw new EngineError('MCP_SCHEMA_REQUIRED','First request action=tools for this exact server in this chat; inspect its tool schema before invoking it');

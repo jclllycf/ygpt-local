@@ -27,7 +27,8 @@ Programs outside these locations need an additional configuration source.
 The catalog contains paths, names, descriptions and configured model/profile
 metadata. It excludes source argv, environment values, HTTP headers and credentials.
 Two servers named `rea` in different source files have different IDs. Discovery
-does not prove that either server is running. Disabled entries remain disabled.
+does not prove that either server is running. Disabled entries remain disabled;
+configured `enabled_tools` and `disabled_tools` filters also remain effective.
 
 ## Using a local MCP service
 
