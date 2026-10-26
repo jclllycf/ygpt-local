@@ -1,0 +1,71 @@
+{
+  "version": "1.0.17",
+  "implementationCommit": "9509c49fdabe6bb2cb7915f4be7f92235601c26b",
+  "ci": {
+    "url": "https://github.com/jclllycf/ygpt-local/actions/runs/40291492048",
+    "commit": "9509c49fdabe6bb2cb7915f4be7f92235601c26b",
+    "conclusion": "success",
+    "tests": {
+      "total": 181,
+      "passed": 167,
+      "failed": 0,
+      "skipped": 14
+    }
+  },
+  "localRegression": {
+    "passed": 165,
+    "skipped": 14,
+    "failed": 0,
+    "scope": "Read-only/isolated suite; actual foreground-input fixture excluded to avoid interfering with owner desktop"
+  },
+  "changedSurfaceRegression": {
+    "passed": 50,
+    "skipped": 1,
+    "failed": 0
+  },
+  "officialDeveloperExtensionLifecycle": {
+    "passed": 8,
+    "failed": 0,
+    "personalProfilesTouched": false
+  },
+  "package": {
+    "version": "1.0.17",
+    "manifestFiles": 6565,
+    "manifestMismatches": 0,
+    "forbiddenMembers": 0,
+    "currentRuntimeServiceExtensionMatch": true,
+    "currentNativeBinariesMatch": true,
+    "retiredResolverAndShippedInstructionsAbsent": true,
+    "currentSkillIncluded": true,
+    "artifacts": [
+      {
+        "file": "YGPTLocal-Setup-1.0.17-win-x64.exe",
+        "bytes": 98651136,
+        "sha256": "3ae092cee68335adfc7b7bfe042d3922b4cf67b09b926a84845185676d53113d"
+      },
+      {
+        "file": "YGPTLocal-Update-1.0.17-win-x64.exe",
+        "bytes": 98651136,
+        "sha256": "6ac5f0d3d4f232d6a9dab6faa79ae6e0be1359c25ebd3cd52b950fb77f983a53"
+      },
+      {
+        "file": "ygpt-local-portable-1.0.17-win-x64.zip",
+        "bytes": 97653975,
+        "sha256": "79886ca78eb980595bd419e1adf55ad384f95c68c6698bbeaeb9a4d044e95ac8"
+      }
+    ]
+  },
+  "pendingApprovalHours": 6,
+  "desktopFullAccessDefaultMinutes": 100,
+  "developmentFullAccessDefaultMinutes": 120,
+  "expiredRequestsRevived": false,
+  "actualChatGPTExpandedPanelRetested": false,
+  "newMobileAcceptanceRun": false,
+  "dailyChromeDebuggingNeedsOwnerConfirmation": true,
+  "localCutover": {
+    "state": "pending",
+    "reason": "Maintenance refused because owned process activity is still active; nothing was terminated",
+    "installedVersion": "1.0.16"
+  },
+  "at": "2026-10-26T08:31:04.334Z"
+}
