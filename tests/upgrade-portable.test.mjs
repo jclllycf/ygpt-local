@@ -159,11 +159,11 @@ test('A bridge never inherits another bridge\'s state pointer; the explicit conf
 
 test('Durable job children do not inherit YGPT_* pointers, except the bundled download worker',{skip:!(()=>{try{return spawnSyncOk('python3');}catch{return false;}})()&&'python3 not available'},async()=>{
   const {spawnSync}=await import('node:child_process');
-  const source=fs.readFileSync(new URL('../runtime/y_jobs.py',import.meta.url),'utf8');
-  for(const copy of ['../runtime/y_jobs.py','../engine/src/workers/y_jobs.py'])assert.match(fs.readFileSync(new URL(copy,import.meta.url),'utf8'),/env=child_env\(argv\)/);
   const program=`import ast,os,sys\nfrom pathlib import Path\nsrc=open(sys.argv[1],encoding='utf-8').read()\nfn=[n for n in ast.parse(src).body if isinstance(n,ast.FunctionDef) and n.name=='child_env'][0]\nns={'os':os,'Path':Path,'__file__':sys.argv[1]}\nexec(compile(ast.Module([fn],[]),'child_env','exec'),ns)\nos.environ['YGPT_STATE_DIR']='s';os.environ['YGPT_CONFIG']='c';os.environ['KEEP_ME']='1'\nplain=ns['child_env'](['node','build.js'])\nworker=ns['child_env'](['node',str(Path(sys.argv[1]).resolve().parent/'download-worker.mjs')])\nprint(sorted(k for k in plain if k.startswith('YGPT_')),'KEEP_ME' in plain,worker.get('YGPT_STATE_DIR'))`;
-  const r=spawnSync('python3',['-I','-c',program,fileURLToPath(new URL('../runtime/y_jobs.py',import.meta.url))],{encoding:'utf8'});
-  assert.equal(r.stdout.trim(),"[] True s",r.stderr);assert.ok(source.length>0);
+  for(const copy of ['../runtime/y_jobs.py','../engine/src/workers/y_jobs.py']){
+    const r=spawnSync('python3',['-I','-c',program,fileURLToPath(new URL(copy,import.meta.url))],{encoding:'utf8'});
+    assert.equal(r.status,0,r.stderr);assert.equal(r.stdout.trim(),"[] True s",r.stderr);
+  }
 });
 
 test('Credential and terminal windows are listed as they are and bind after broker approval (app-control consent lives in the approval)',{skip:process.platform==='win32'?'fake helper uses a POSIX shebang':false},async()=>{

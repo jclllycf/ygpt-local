@@ -95,6 +95,7 @@ test('Actual Windows durable jobs close stdin, persist session ID, cancel and ke
  await jobs.call({action:'submit',id,argv:[process.execPath,'-e',script,session],cwd:f.dir,timeoutSeconds:10,environment:env,stdin:'private-prompt-marker'});
  let status;for(let i=0;i<100;i++){status=await jobs.status(id);if(!['queued','running'].includes(status.state))break;await new Promise(r=>setTimeout(r,100));}assert.equal(status.state,'succeeded');assert.equal(status.agent_session,session);assert.ok((await jobs.logs(id)).text.includes('stdin=private-prompt-marker'));
  const raw=await fs.readFile(path.join(f.state,'jobs','jobs-rc.sqlite3'));assert.ok(!raw.includes(Buffer.from('private-prompt-marker')));
+ const plainId=randomUUID();await jobs.call({action:'submit',id:plainId,argv:[process.execPath,'-e',"console.log('POINTERS='+JSON.stringify(Object.keys(process.env).filter(k=>k.startsWith('YGPT_'))))"],cwd:f.dir,timeoutSeconds:10});for(let i=0;i<100;i++){status=await jobs.status(plainId);if(!['queued','running'].includes(status.state))break;await new Promise(r=>setTimeout(r,100));}assert.equal(status.state,'succeeded');assert.ok((await jobs.logs(plainId)).text.includes('POINTERS=[]'));
  const cancelId=randomUUID();await jobs.call({action:'submit',id:cancelId,argv:[process.execPath,'-e','setTimeout(()=>{},60000)'],cwd:f.dir,timeoutSeconds:30,environment:env});await jobs.cancel(cancelId);for(let i=0;i<100;i++){status=await jobs.status(cancelId);if(status.state==='cancelled')break;await new Promise(r=>setTimeout(r,100));}assert.equal(status.state,'cancelled');
 });
 
