@@ -1,0 +1,87 @@
+{
+  "version": "1.0.18",
+  "implementationCommit": "e4a91f8f83701917dafba93f6a323ba507ae0371",
+  "ci": {
+    "url": "https://github.com/jclllycf/ygpt-local/actions/runs/40312812121",
+    "commit": "e4a91f8f83701917dafba93f6a323ba507ae0371",
+    "conclusion": "success",
+    "tests": {
+      "total": 194,
+      "passed": 180,
+      "failed": 0,
+      "skipped": 14
+    }
+  },
+  "localModuleTests": {
+    "passed": 13,
+    "failed": 0
+  },
+  "package": {
+    "manifestFiles": 6611,
+    "manifestMismatches": 0,
+    "forbiddenMembers": 0,
+    "artifacts": [
+      {
+        "file": "YGPTLocal-Setup-1.0.18-win-x64.exe",
+        "bytes": 98816512,
+        "sha256": "6591f6377776fb07cdd8d170a6dff2d03909957b2a6565ab76f5c0b4e4563693"
+      },
+      {
+        "file": "YGPTLocal-Update-1.0.18-win-x64.exe",
+        "bytes": 98816512,
+        "sha256": "853ca10e1d0f202b80b1ac260c38693c956ebff93e1ad20bc4daed1e7f5497da"
+      },
+      {
+        "file": "ygpt-local-portable-1.0.18-win-x64.zip",
+        "bytes": 97819284,
+        "sha256": "0f8e0cda74d1a57dd1d07a6191905bfed1e4c2a0b7df6b69751b85b83b7ace87"
+      }
+    ]
+  },
+  "installed": {
+    "version": "1.0.18",
+    "localReady": true,
+    "tunnelConnected": true,
+    "manifestMismatches": 0,
+    "privateIdentityPreserved": true,
+    "stateAuditPassed": true,
+    "productionTools": 76,
+    "publicTools": 74
+  },
+  "packagedBrokerFixture": {
+    "mcpCallVerified": true,
+    "cliJobVerified": true,
+    "retiredToolsAbsent": true,
+    "isolatedData": true
+  },
+  "realLocalMcp": {
+    "server": "REA",
+    "tools": 229,
+    "prompts": 6,
+    "binarySessionReadSucceeded": true,
+    "installedClientVerified": true
+  },
+  "agentProfiles": {
+    "codexProfilesDiscovered": 2,
+    "sourceConfigurationsUnchanged": true,
+    "actualModelRunStarted": false
+  },
+  "permissionIsolation": {
+    "perChatConnections": true,
+    "sourceToolFiltersRetained": true,
+    "agentDefaultsPreserved": true,
+    "fullAccessNotForwarded": true,
+    "unknownCallsNotReplayed": true
+  },
+  "npmAudit": {
+    "registry": "https://registry.npmjs.org",
+    "reportedVulnerabilities": 0,
+    "scope": "Installed dependency graph reported by npm audit; not an exhaustive code audit"
+  },
+  "acceptance": {
+    "newChatGPTTaskRetested": false,
+    "newMobileTaskRetested": false,
+    "hostShellControlledByChatGPT": true
+  },
+  "at": "2026-10-26T11:20:31.450Z"
+}
