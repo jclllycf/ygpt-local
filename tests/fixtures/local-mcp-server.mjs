@@ -1,0 +1,12 @@
+import {McpServer} from '@modelcontextprotocol/sdk/server/mcp.js';
+import {StdioServerTransport} from '@modelcontextprotocol/sdk/server/stdio.js';
+import {z} from 'zod';
+import {randomUUID} from 'node:crypto';
+import {spawn} from 'node:child_process';
+const instance=randomUUID(),server=new McpServer({name:'Local router fixture',version:'1'});
+const child=process.env.ROUTER_SPAWN_CHILD==='1'?spawn(process.execPath,['-e','setInterval(()=>{},10000)'],{stdio:'ignore',windowsHide:true}):null;
+server.registerTool('echo',{description:'Echo one bounded fixture value',inputSchema:{value:z.string().max(100)}},async({value})=>({content:[{type:'text',text:JSON.stringify({value,instance,childPid:child?.pid??null,home:process.env.CODEX_HOME??null,fixture:process.env.ROUTER_FIXTURE??null,ygptSecret:!!process.env.YGPT_LOCAL_CONTROL_KEY})}]}));
+server.registerTool('failure',{description:'Return an explicit fixture error',inputSchema:{}},async()=>({isError:true,content:[{type:'text',text:'Fixture tool failed'}]}));
+server.registerResource('sample','fixture://sample',{mimeType:'text/plain'},async uri=>({contents:[{uri:uri.href,text:'fixture resource'}]}));
+server.registerPrompt('sample',{description:'Fixture prompt',argsSchema:{topic:z.string()}},async({topic})=>({messages:[{role:'user',content:{type:'text',text:'Fixture '+topic}}]}));
+await server.connect(new StdioServerTransport());

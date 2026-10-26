@@ -473,6 +473,14 @@
       ]
     },
     {
+      "name": "jsonc-parser",
+      "version": "3.3.1",
+      "license": "MIT",
+      "noticeFiles": [
+        "node_modules/jsonc-parser/LICENSE.md"
+      ]
+    },
+    {
       "name": "math-intrinsics",
       "version": "1.1.0",
       "license": "MIT",
@@ -774,6 +782,14 @@
       "license": "ISC",
       "noticeFiles": [
         "node_modules/signal-exit/LICENSE.txt"
+      ]
+    },
+    {
+      "name": "smol-toml",
+      "version": "1.9.1",
+      "license": "BSD-3-Clause",
+      "noticeFiles": [
+        "node_modules/smol-toml/LICENSE"
       ]
     },
     {

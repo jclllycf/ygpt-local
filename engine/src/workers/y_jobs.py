@@ -26,6 +26,10 @@ def db():
     cx.row_factory=sqlite3.Row
     cx.executescript('''PRAGMA journal_mode=WAL;PRAGMA synchronous=FULL;PRAGMA secure_delete=ON;
       CREATE TABLE IF NOT EXISTS jobs(id TEXT PRIMARY KEY,owner TEXT NOT NULL,command TEXT NOT NULL,cwd TEXT NOT NULL,state TEXT NOT NULL,created_at TEXT,started_at TEXT,ended_at TEXT,worker_pid INTEGER,worker_identity TEXT,child_pid INTEGER,exit_code INTEGER,cancel_requested INTEGER DEFAULT 0,reason TEXT,timeout_seconds INTEGER,log_bytes INTEGER DEFAULT 0);''')
+    if 'agent_session' not in [r[1] for r in cx.execute('PRAGMA table_info(jobs)')]:
+        try:cx.execute('ALTER TABLE jobs ADD COLUMN agent_session TEXT')
+        except sqlite3.OperationalError:
+            if 'agent_session' not in [r[1] for r in cx.execute('PRAGMA table_info(jobs)')]:raise
     return cx
 
 kernel=ctypes.WinDLL('kernel32',use_last_error=True)
@@ -98,11 +102,19 @@ def submit(cx,request):
     # Require an actual executable path; no CWD/PATH substitution, .cmd or shell guessing.
     exe=Path(argv[0])
     if not exe.is_absolute() or not exe.is_file() or exe.suffix.lower() not in ('.exe','.com'):raise ValueError('argv[0] must be an absolute Windows executable; call scripts through the explicit interpreter')
+    # Trusted local tool dispatcher supplies an isolated environment and closes
+    # prompt stdin. Keep both inside the existing CurrentUser DPAPI envelope.
+    environment=request.get('environment')
+    stdin=request.get('stdin')
+    if environment is not None and (not isinstance(environment,dict) or len(environment)>256 or any(not isinstance(k,str) or not isinstance(v,str) or '\x00' in k+v or k.upper().startswith('YGPT_') for k,v in environment.items())):raise ValueError('Invalid isolated job environment')
+    if stdin is not None and (not isinstance(stdin,str) or len(stdin.encode('utf-8'))>262144):raise ValueError('Job stdin is too large')
+    payload=argv if environment is None and stdin is None else {'argv':argv,'environment':environment,'stdin':stdin}
+    encoded=json.dumps(payload)
     job_id=str(uuid.UUID(request['id']))
     cx.execute('BEGIN IMMEDIATE')
     prev=cx.execute('SELECT * FROM jobs WHERE id=?',(job_id,)).fetchone()
     if prev:
-        if prev['owner']!=OWNER or unseal(prev['command'])!=json.dumps(argv) or prev['cwd']!=str(cwd):raise ValueError('Job idempotency collision')
+        if prev['owner']!=OWNER or unseal(prev['command'])!=encoded or prev['cwd']!=str(cwd):raise ValueError('Job idempotency collision')
         cx.rollback();return {'job_id':job_id,'state':prev['state'],'reused':True}
     for r in cx.execute("SELECT id FROM jobs WHERE owner=? AND state IN ('queued','running')",(OWNER,)).fetchall():inspect(cx,r['id'])
     # inspect may commit; acquire again for atomic concurrency counting/reservation.
@@ -112,7 +124,7 @@ def submit(cx,request):
     if sum(p.stat().st_size for p in ROOT.glob('*.dpapi-log'))>=MAX_STORAGE:raise ValueError('32 MiB retained job log quota reached; review/purge completed jobs')
     timeout=int(request.get('timeoutSeconds',21600))
     if not 1<=timeout<=86400:raise ValueError('Job timeout out of bounds')
-    cx.execute('INSERT INTO jobs(id,owner,command,cwd,state,created_at,timeout_seconds) VALUES(?,?,?,?,?,?,?)',(job_id,OWNER,seal(json.dumps(argv)),str(cwd),'queued',now(),timeout));cx.commit()
+    cx.execute('INSERT INTO jobs(id,owner,command,cwd,state,created_at,timeout_seconds) VALUES(?,?,?,?,?,?,?)',(job_id,OWNER,seal(encoded),str(cwd),'queued',now(),timeout));cx.commit()
     kw={'stdin':subprocess.DEVNULL,'stdout':subprocess.DEVNULL,'stderr':subprocess.DEVNULL,'close_fds':True,'creationflags':subprocess.DETACHED_PROCESS|subprocess.CREATE_NEW_PROCESS_GROUP}
     try:
         p=subprocess.Popen([sys.executable,str(Path(__file__).resolve()),'__worker',job_id],**kw)
@@ -137,24 +149,44 @@ def worker(id):
     child=None;job=None;code=None;reason=None;written=0;errors=[]
     try:
         job=JobObject()
-        argv=json.loads(unseal(row['command']))
-        child=subprocess.Popen(argv,cwd=row['cwd'],env=child_env(argv),stdin=subprocess.DEVNULL,stdout=subprocess.PIPE,stderr=subprocess.STDOUT,shell=False,close_fds=True,creationflags=subprocess.CREATE_NO_WINDOW)
+        payload=json.loads(unseal(row['command']))
+        argv=payload if isinstance(payload,list) else payload['argv']
+        environment=child_env(argv) if isinstance(payload,list) or payload.get('environment') is None else payload['environment']
+        stdin=None if isinstance(payload,list) else payload.get('stdin')
+        child=subprocess.Popen(argv,cwd=row['cwd'],env=environment,stdin=subprocess.DEVNULL if stdin is None else subprocess.PIPE,stdout=subprocess.PIPE,stderr=subprocess.STDOUT,shell=False,close_fds=True,creationflags=subprocess.CREATE_NO_WINDOW)
         job.assign(child)
         cx.execute('UPDATE jobs SET child_pid=? WHERE id=?',(child.pid,id));cx.commit()
         log=ROOT/(id+'.dpapi-log')
         def drain():
             nonlocal written
+            pending=b''
             try:
                 with log.open('ab',buffering=0) as stream:
                     while True:
                         data=os.read(child.stdout.fileno(),8192)
                         if not data:break
+                        pending+=data
+                        while b'\n' in pending:
+                            line,pending=pending.split(b'\n',1)
+                            try:
+                                event=json.loads(line)
+                                if isinstance(event,dict) and event.get('type')=='thread.started':
+                                    session=str(uuid.UUID(event['thread_id']))
+                                    with sqlite3.connect(str(ROOT/'jobs-rc.sqlite3'),timeout=10) as session_db:session_db.execute('UPDATE jobs SET agent_session=? WHERE id=?',(session,id))
+                            except (ValueError,TypeError,KeyError):pass
+                        if len(pending)>262144:pending=b''
                         remaining=MAX_LOG-written
                         if remaining>0:
                             selected=data[:remaining];written+=len(selected)
                             stream.write(seal(selected.decode('utf-8',errors='replace')).encode('ascii')+b'\n')
             except Exception as e:errors.append(type(e).__name__)
         thread=threading.Thread(target=drain,daemon=True);thread.start();started=time.monotonic()
+        # A separate writer prevents a child that never reads stdin from
+        # blocking cancellation/deadlines. EOF is essential for codex exec -.
+        def feed():
+            try:child.stdin.write(stdin.encode('utf-8'));child.stdin.close()
+            except (BrokenPipeError,OSError,ValueError):pass
+        if stdin is not None:threading.Thread(target=feed,daemon=True).start()
         while child.poll() is None:
             if cx.execute('SELECT cancel_requested FROM jobs WHERE id=?',(id,)).fetchone()[0]:reason='user-cancelled';job.terminate();break
             if time.monotonic()-started>row['timeout_seconds']:reason='deadline-exceeded';job.terminate();break

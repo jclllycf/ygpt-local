@@ -67,6 +67,14 @@ export async function createNativeExtension({backups,ledger,protectState}){
     // Only the broker enters this scope after atomically claiming an exact
     // reviewed operation. No tool argument or request metadata can create it.
     const reviewed=approvedInvocation.getStore();
+    if(['y_capabilities','y_capability_sources','y_mcp','y_cli','y_agent'].includes(intent.tool)){
+      if(reviewed&&reviewed.tool===request.tool||currentAccessMode()==='full')return allow('Exact reviewed local dispatch or owner-enabled Full Access; downstream permissions remain intact');
+      const a=intent.args??{};
+      if(intent.tool==='y_capabilities'||intent.tool==='y_capability_sources'||intent.tool==='y_mcp'&&['status','close'].includes(a.action)||['y_cli','y_agent'].includes(intent.tool)&&a.action!=='run')return allow('Read local capability metadata, manage YGPT sources or control this chat owned task');
+      const review=await engine.local.review(intent.tool,a);
+      if(review.destructive||highRiskCommand(review.riskText))return hold('Identified destructive or sensitive local tool/Agent launch: review once or enable Full Access for this chat');
+      return config.blacklistDefaultAllow?allow('Owner default-allow local dispatch with no identified high-risk signal; source permissions and chat isolation retained'):hold('Local service or Agent launch requires owner review in this permission mode');
+    }
     const tokenNames=['y_job_logs','y_job_cancel','y_process_poll','y_process_input','y_process_cancel'];
     if(tokenNames.includes(intent.tool)){
       const a=request.args,kind=intent.tool.startsWith('y_job_')?'job':'session',id=kind==='job'?a.id:a.sessionId;
@@ -90,7 +98,7 @@ export async function createNativeExtension({backups,ledger,protectState}){
   };
   engine=await createRc9EngineExtension({config:{mode:'rc9-integrated',root,stateDir:config.stateDir,legacyTools:false,python:config.python,pythonArgs:config.pythonArgs,ingressId:config.ingressId,
     allowedExecutables:[process.execPath,config.python,config.executables.git,path.join(process.env.SystemRoot,'System32/WindowsPowerShell/v1.0/powershell.exe'),path.join(process.env.SystemRoot,'System32/cmd.exe')].filter(Boolean),
-    browser:config.browser,authorizeExecutable,prepareExecutable:spec=>trustedRuntimeLaunch(spec,INSTALL),currentOwner,currentCall,agentProtectedRoots:config.agentProtectedRoots,
+    browser:config.browser,authorizeExecutable,prepareExecutable:spec=>trustedRuntimeLaunch(spec,INSTALL),currentOwner,currentCall,agentProtectedRoots:config.agentProtectedRoots,localTools:config.localTools,
     // Read-only physical disk/partition inventory (was y_disk_inspect).
     physicalDisks:async()=>(await diskInspect()).map(d=>({...d,fingerprint:deviceFingerprint(d)}))},authorizeOperation,backupManager:backups,operationLedger:ledger,protectState});
   const invokeWithPolicy=engine.invoke.bind(engine);
@@ -125,6 +133,7 @@ export async function createNativeExtension({backups,ledger,protectState}){
   return {engine,authorizeOperation,
     invokeApproved:(name,args)=>approvedInvocation.run({tool:name},()=>engine.invoke(name,args)),
     async binding(name,args){
+      if(['y_capabilities','y_capability_sources','y_mcp','y_cli','y_agent'].includes(name))return (await engine.local.review(name,args)).binding;
       if(name==='y_desktop_bind'||name==='y_desktop_action')return {window:windowIdentity(await desktopWindow(name,args))};
       if(name.startsWith('y_browser_')&&args.tabId)return {tabId:args.tabId,url:engine.browser.page(args.tabId).url()};
       if(processTools.has(name)){

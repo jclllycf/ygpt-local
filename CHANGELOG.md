@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.0.18
+
+- Added automatic local capability discovery, a per-chat MCP client and unified CLI/Agent dispatch.
+- Preserved original Agent configurations, account homes, model/provider defaults and downstream permissions; no implicit Full Access transfer.
+- Added persistent task/session indexing, closed prompt stdin, encrypted job payloads/logs, cancellation, fair-share limits and scratch cleanup outside private credential state.
+- Added source management without rewriting other Agents, schema-validated MCP calls, resource/prompt discovery and no-replay handling for uncertain outcomes.
+
 ## 1.0.17
 
 - Negotiate inline-only approval presentation before metadata and across refreshes.

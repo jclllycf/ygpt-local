@@ -14,6 +14,8 @@ const pick=(kind,id)=>({kind,id:id===undefined||id===null?'':String(id)});
 // durable jobs are enforced by the broker ledger.
 export function resourceIntent(name,a={}){
  if(name==='y_chat_access')return a.action==='request_full'||a.label?{creates:'chat-access'}:{lists:'any'};
+ if(['y_capabilities','y_capability_sources','y_mcp'].includes(name))return {creates:'local-tooling'};
+ if(['y_cli','y_agent'].includes(name))return a.action==='run'||a.action===undefined?{creates:'job'}:a.taskId?{uses:pick('job',a.taskId)}:{lists:'job'};
  // Selecting a daily profile is already owned state, before any tab opens.
  // Mint the chat context here so the next open uses that same selection.
  if(name==='y_browser_open'||name==='y_browser_attach')return {creates:'browser'};

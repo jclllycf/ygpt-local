@@ -7,7 +7,7 @@ const configFile=process.env.YGPT_CONFIG??path.join(INSTALL,'ygpt.config.json');
 const raw=fs.existsSync(configFile)?JSON.parse(fs.readFileSync(configFile,'utf8').replace(/^\uFEFF/,'')):{};
 const abs=v=>path.resolve(path.dirname(configFile),v);
 export const config={
-  version: '1.0.17',
+  version: '1.0.18',
   readOnlyAutoAllow:raw.rc11Patch3===true||raw.readOnlyAutoAllow===true,
   blacklistDefaultAllow:raw.blacklistDefaultAllow===true,
   chatAppConsent:raw.rc11Candidate===true&&raw.chatAppConsent===true,
@@ -27,6 +27,7 @@ export const config={
   projectRoots:(raw.projectRoots??['..']).map(abs),
   protectedRoots:[...(raw.protectedRoots??[]),...(raw.toolCacheDir?[raw.toolCacheDir]:[])].map(abs),
   toolCacheDir:raw.toolCacheDir?abs(raw.toolCacheDir):null,
+  localTools:raw.localTools??{},
   python:process.env.YGPT_PYTHON??raw.python??'py',
   pythonArgs:raw.pythonArgs??['-3.14'],
   port:Number(process.env.YGPT_APPROVAL_PORT??raw.port??17844),
