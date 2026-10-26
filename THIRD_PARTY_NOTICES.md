@@ -22,3 +22,5 @@ See [the installed dependency inventory](docs/dependency-licenses.json). Npm pac
 Secure MCP Tunnel uses the bundled, unmodified official OpenAI tunnel-client. Its original LICENSE, NOTICE, binary license inventory and SPDX are under `runtimes/licenses` in the distribution. No OpenAI API keys or tunnel identities are bundled. Release digests are pinned in `scripts/runtime-lock.json`; no Sigstore verification is claimed.
 
 cloudflared: <https://github.com/cloudflare/cloudflared/blob/master/LICENSE>. Node.js: <https://github.com/nodejs/node/blob/v24.22.0/LICENSE>. Python: <https://docs.python.org/3/license.html>.
+
+Chrome DevTools MCP 1.12.0 is bundled unmodified under Apache-2.0. Its LICENSE, build/src/third_party/THIRD_PARTY_NOTICES and bundled-packages.json remain in node_modules/chrome-devtools-mcp. The adapter exposes only its five extension tools; it disables usage statistics and CrUX calls. This separate debugging connection requires Chrome consent.

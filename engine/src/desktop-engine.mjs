@@ -39,7 +39,13 @@ export class YDesktopEngine {
     if(win.executableSha256&&now&&now!==win.executableSha256){this.targets.delete(id);throw new EngineError('PROCESS_IDENTITY_CHANGED','The bound window executable changed; bind the window again');}
     if(!win.executableSha256&&now)win.executableSha256=now;
     return win;}
-  async act(id,action,{automationId,name,runtimeId,value,maxDepth,maxNodes}={}){const win=await this.verified(id),got=await this.request({hwnd:win.hwnd,pid:win.pid,birth:win.birth,executablePath:win.executablePath,action,automationId,name,runtimeId,value,maxDepth,maxNodes});return {targetId:id,result:got};}
+  async act(id,action,{automationId,name,runtimeId,value,maxDepth,maxNodes}={}){
+    const run=async()=>{const win=await this.verified(id),got=await this.request({hwnd:win.hwnd,pid:win.pid,birth:win.birth,executablePath:win.executablePath,action,automationId,name,runtimeId,value,maxDepth,maxNodes});return {targetId:id,result:got};};
+    if(['tree','value','diagnose'].includes(action))return run();
+    if((this.inputQueued??0)>=16)throw Object.assign(new EngineError('DESKTOP_BUSY','Desktop input queue is full; no input was sent. Wait for the existing desktop work, without requesting approval again.'),{effectStarted:false});
+    this.inputQueued=(this.inputQueued??0)+1;const result=(this.inputTail??Promise.resolve()).catch(()=>{}).then(run);this.inputTail=result;
+    try{return await result;}finally{this.inputQueued--;}
+  }
   async capture(id){const win=await this.verified(id),dir=path.join(this.stateDir,'artifacts');await fs.mkdir(dir,{recursive:true});const output=path.join(dir,`desktop-${crypto.randomUUID()}.png`);try{const result=await this.request({hwnd:win.hwnd,pid:win.pid,birth:win.birth,executablePath:win.executablePath,action:'capture',output});return {...result,sha256:sha256(await fs.readFile(output)),mimeType:'image/png'};}catch(error){await fs.unlink(output).catch(()=>{});throw error;}}
   owned(owner=this.owner()){return [...this.targets].filter(([,t])=>t.owner===owner).map(([targetId,t])=>({targetId,pid:t.win.pid,process:t.win.process,title:t.win.title,boundAt:t.boundAt}));}
   foreignCount(owner=this.owner()){return [...this.targets.values()].filter(t=>t.owner!==owner).length;}

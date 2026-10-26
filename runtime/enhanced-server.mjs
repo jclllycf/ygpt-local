@@ -34,6 +34,8 @@ import {callScope,resourceIntent,ownershipViolation,createdId,currentAccessMode}
 import {chatAccessTool,chatAccessGate,chatAccessPresentation,chatAccessStatus,chatAccessStatusMetadata,desktopAccessPresentation,DESKTOP_FULL_ACCESS_MINUTES} from './chat-access.mjs';
 import {consumeScreenshot,cleanupOldScreenshots} from './screenshot-cleanup.mjs';
 import {AdministratorAccess} from './admin-access.mjs';
+import {ApprovalNotifications} from './approval-notifications.mjs';
+const approvalNotifications=new ApprovalNotifications({enabled:config.deployment==='production'&&config.approvalNotifications!==false,isPending:id=>ledger.get(id)?.state==='awaiting_user'});
 const administratorAccess=new AdministratorAccess({install:INSTALL,getGrant:hash=>ledger.fullAccess(hash)});
 const accessStatus=hash=>{const administrator=administratorAccess.status(hash);return {...chatAccessStatus(ledger,hash),administrator,windowsElevation:administrator.active,requiresWindowsUac:administrator.state==='waiting-for-windows-uac'};};
 const wireContext=new AsyncLocalStorage();
@@ -379,6 +381,8 @@ const instructions=['For authorized local Windows file, directory, edit, search,
  'If the user asks to enable Full Access or says 当前对话给我full access, immediately call y_chat_access action=request_full in this conversation. That call directly returns the in-chat confirmation card. Do not merely check status and tell the user to find Windows settings; Windows UI is not needed to activate this grant. Wait for their card click and verify mode=full with the original contextToken.',
  'All approval cards, including Full Access and Administrator requests, default inline with details collapsed. Never automatically open a side panel, PiP or fullscreen. The host chooses exact placement; do not promise cards can be inserted between arbitrary paragraphs. If the user also asks for Administrator access, call y_chat_access action=request_full with administrator=true. Explain that the chat card is followed by Windows UAC on the PC. Never click UAC for the person. Check administrator.active, not only mode=full; UAC cancellation leaves ordinary Full Access active. Use y_admin_run only for commands needing elevation. Expiry, revoke, context close or broker disconnect closes the temporary executor; it is not a permanent elevated main service. An Administrator grant does not make normal typed file or desktop tools elevated.',
  'Chat context: the first call that creates a tab, UIA binding, process or job returns ygptContext.contextToken. Include that contextToken on EVERY later YGPT call in THIS chat; it is private to this chat and never belongs in another chat or a summary. Other chats\' tabs, windows, processes and jobs answer SESSION_FOREIGN. Permission model: owner blacklist — everything is allowed by default; identified destructive actions, privilege/system changes, sensitive writes or credential uploads return APPROVAL_REQUIRED for a human decision. A path reference or unknown script alone is not a risk signal. There are no hard-denied targets: ChatGPT Desktop Agent windows, processes and folders are ordinary targets under the same rules.',
+ 'At the start of a multi-step task, use y_chat_access action=status with a short label and retain its contextToken. The label identifies pending approvals in local Windows notifications; it is never conversation identity. Pending approval cards last six hours; this does not change the approved Full Access duration. Continue waiting for the existing operation, without asking for approval again after a native input failure.',
+ 'Use y_browser_debug for page console, network, evaluate and tab-scoped CDP. A y_browser_wait timeout is a safe read-only condition result; check again with its original tab/context. Use y_browser_extensions for extension lifecycle rather than desktop clicks. target=developer owns a separate private browser. target=existing requires the owner to enable and personally confirm Chrome debugging; it is independent of YGPT relay pairing and is not proof of a particular signed-in profile. Do not perform a mutation until the intended browser is confirmed. Do not alter Chrome Use or copy profiles. Native focus/keyboard/mouse input is serialized across chats; ordinary browser, file and process work remains concurrent.',
  'Browser tools have two modes: the isolated browser (default, a fresh private browser) and the owner\'s daily Chrome/Edge taken over through the paired YGPT browser extension (y_browser_attach, then open with target existing). In the daily browser, work only inside the YGPT tab group and never disturb the owner\'s own tabs. When several browsers/profiles are paired, attach returns candidates — ask the owner which account to use. When the choice matters, ask the owner which browser to use; if they do not answer, use the isolated browser. The isolated browser launches Chrome by default. An isolated open is a one-shot read: its browser is closed and temporary profile removed before the result returns. Only for an explicit multi-step task set keepAlive=true, preserve the returned contextToken, and close every tab in a finally path. Idle leases expire after 30 seconds. Daily-browser profiles are selected per chat and different profiles can run concurrently.',
  approvalGuidance+' Only the user decides; never invoke y_bar_* from the model, infer approval from text, or replay the original action.',
  'Desktop reliability: inspect current selectors, bounds, toggleState and supported patterns before acting. y_desktop_inspect reads deep controls, including Chrome/Edge internal pages; check truncated/truncationReasons and inspect a subtree by runtimeId or raise maxDepth/maxNodes before concluding a control is unavailable. For extension reload, verify Developer mode is On and select the intended card Reload runtimeId, not the browser toolbar Reload. Browser invoke uses a verified pointer click without attempting UIA invoke first. Use y_desktop_action action=keys with value CTRL+L, CTRL+T or ENTER for window keyboard navigation; type/setValue require an explicit control selector. Native codes such as SELECTOR_REQUIRED, TARGET_OCCLUDED or FOREGROUND_NOT_TARGET describe execution conditions, not missing approval. Never report a safety block without an actual tool error; a successful key result is not a block. INPUT_NOT_INSERTED is not proof of UIPI: read inputDiagnostics requested/inserted counts, win32Error and integrity levels. INPUT_INTEGRITY_MISMATCH identifies a higher-integrity target; Full Access does not elevate desktop tools. INPUT_PARTIAL and outcomeUnknown require inspecting the window and keyboard state without replaying the batch. Do not re-request approval for these native failures. NO_TARGET after a restart requires binding a fresh current window. Screenshots return inline and generated local PNGs are removed immediately; image bytes are not retained in the local result ledger.',
@@ -437,7 +441,7 @@ async function callTool({id,msg,host,nativeCall,name,args,contextToken,rawArgs,i
     const contextHash=callScope.getStore()?.context?.hash;
     const revoked=args.action==='revoke'&&contextHash?ledger.revokeFullAccess(contextHash):false;
     if(args.action==='revoke')administratorAccess.stop(contextHash);
-    const status={...accessStatus(contextHash),...(args.action==='revoke'?{revoked}: {})};
+    const status={chatLabel:ledger.chatLabel(contextHash,args.label),...accessStatus(contextHash),...(args.action==='revoke'?{revoked}: {})};
     return emit({jsonrpc:'2.0',id,result:{structuredContent:status,content:[{type:'text',text:JSON.stringify(status)}],_meta:chatAccessStatusMetadata(status)}});
   }
   if(name==='y_admin_run'){
@@ -445,12 +449,14 @@ async function callTool({id,msg,host,nativeCall,name,args,contextToken,rawArgs,i
     try{const value=await administratorAccess.run(hash,args),r={structuredContent:{...value,ygpt:{callId,resultToken:token}},content:[{type:'text',text:JSON.stringify(value)}],isError:value.ok===false};ledger.callFinish(callId,value.outcomeUnknown?'unknown':value.ok===false||value.state==='failed'?'failed':'succeeded',r);return emit({jsonrpc:'2.0',id,result:r});}
     catch(e){const value={ok:false,code:e.code??'ADMIN_UNAVAILABLE',message:e.message,effectStarted:e.effectStarted===true,outcomeUnknown:e.outcomeUnknown===true};ledger.callFinish(callId,value.outcomeUnknown?'unknown':'failed');return response(id,value,true);}
   }
+  if(name==='y_chat_access'&&args.label)ledger.chatLabel(callScope.getStore()?.context?.hash,args.label);
   const resumed=await resumeNativeConsent(msg,name,args,host,ledger,execute);
   if(resumed)return emit({jsonrpc:'2.0',id,result:resumed});
   if(barEnabled()&&barTools.some(t=>t.name===name))return emit({jsonrpc:'2.0',id,result:handleBar(name,{...args,contextToken},ledger,execute,requestId=>({active:approvalWaiters.has(requestId),delivered:deliveredApprovals.has(requestId)}))});
   if(name==='y_close_context'){
     const hash=callScope.getStore().context?.hash;ledger.closeContext(contextToken);
     administratorAccess.stop(hash);
+    if(hash&&nativeExtension)await nativeExtension.engine.extensions.closeContext(hash);
     const released=hash&&nativeExtension?{browserContextClosed:(await nativeExtension.engine.browser.closeContext(hash)).closed,desktopBindingsReleased:nativeExtension.engine.desktop.release(hash)}:{};
     return response(id,{closed:true,...released});
   }
@@ -507,6 +513,7 @@ async function callTool({id,msg,host,nativeCall,name,args,contextToken,rawArgs,i
       if(desktopAccess)access={...access,kind:'desktop-full-access'};
       const presentation=desktopAccess?desktopAccessPresentation():name==='y_chat_access'?chatAccessPresentation(args):(nativeCall&&await nativeExtension.presentation(name,args))||describeEnglish(name,args);
       const hold=ledger.create(name,args,{...access,presentation,chatScope:grantScope,contextHash:context.hash,executionBinding:binding?digest(stable(binding)):null},{idempotencyKey:msg.params?._meta?.['ygpt/idempotency-key']??null});
+      if(!hold.reused)approvalNotifications.enqueue({...hold.operation,chatLabel:ledger.chatLabel(context.hash)});
       if(nativeConsentSupported(host)&&hold.operation.state==='awaiting_user')return emit({jsonrpc:'2.0',id,result:nativeConsentRequest(ledger,hold.operation,name,args,host,{resultToken:hold.receipt,contextToken:context.token})});
       if(context.token)callScope.getStore().delivered=true;
       const value={state:'suspended',code:'APPROVAL_REQUIRED',needsApproval:hold.operation.state==='awaiting_user',requestId:hold.operation.id,...(hold.receipt?{resultToken:hold.receipt}:{}),...(context.token?{contextToken:context.token}:{}),chatScopeAvailable:grantScope.eligible,expiresAt:hold.operation.expiresAt,message:approvalGuidance};
@@ -534,7 +541,7 @@ async function callTool({id,msg,host,nativeCall,name,args,contextToken,rawArgs,i
       return emit({jsonrpc:'2.0',id,result:{structuredContent:{needsApproval:op.state==='awaiting_user',requestId:op.id,state:op.state,...(gate.receipt?{resultToken:gate.receipt}:{}),...(context.token?{contextToken:context.token}:{}),chatScopeAvailable:scope.eligible},content:[{type:'text',text:(barEnabled()?'Show y_show_approval with requestId and original resultToken for the compact IN-CHAT strip.':'Local Windows consent required.')+' No execution before approval. Keep contextToken PRIVATE in this chat and include it on later calls to use only human-approved narrow scopes. It is a server-issued capability, not an authenticated OpenAI session ID. Query call_status and call_result with resultToken after the human decides. Never replay unknown effects.'}]}});
     }
   }
-  const idem=msg.params?._meta?.['ygpt/idempotency-key']??(nativeCall?args.requestKey:undefined);
+  const idem=name==='y_browser_wait'?undefined:msg.params?._meta?.['ygpt/idempotency-key']??(nativeCall?args.requestKey:undefined);
   if(idem&&(nativeCall||name==='y_download_file')){
     const gate=ledger.create(name,args,{...access,presentation:describeOperation(name,args),contextHash:callScope.getStore().context?.hash??null},{idempotencyKey:idem});
     if(gate.reused)return response(id,{id:gate.operation.id,state:gate.operation.state,resultRef:gate.operation.resultRef,replayed:false});
@@ -552,7 +559,7 @@ const ownerControl=startOwnerControl({pipe:process.env.YGPT_CONTROL_PIPE,key:pro
  try{for(const n of ['y_process_list','y_job_list']){const v=await nativeExtension.engine.invoke(n,{});if(v?.isError||v?.ok===false)throw Error('Inventory failed');scan(v);if(Number(v?.result?.otherChatsActive??0)>0)busy=true;}}catch{return {safeToStop:false,reason:'Owned activity inventory unavailable'};}
  if(!busy)ownerDraining=true;return {safeToStop:!busy,reason:busy?'Owned activity is still active':null};
 }});
-async function shutdown(){if(closing)return;closing=true;ownerControl?.close();administratorAccess.stopAll();await nativeExtension?.engine.close();closePanel();portalServer?.close();releaseLease();setTimeout(()=>process.exit(0),150).unref();}
+async function shutdown(){if(closing)return;closing=true;approvalNotifications.close();ownerControl?.close();administratorAccess.stopAll();await nativeExtension?.engine.close();closePanel();portalServer?.close();releaseLease();setTimeout(()=>process.exit(0),150).unref();}
 process.once('exit',()=>{try{releaseLease();}catch{}});
 process.on('SIGINT',shutdown);process.on('SIGTERM',shutdown);
 if(!noLocalReview)portalServer=await launchPortal(execute);

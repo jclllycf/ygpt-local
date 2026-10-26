@@ -33,6 +33,7 @@ class YDesktop {
   [DllImport("user32.dll",SetLastError=true)] static extern bool AttachThreadInput(uint from,uint to,bool attach);
   [DllImport("kernel32.dll")] static extern uint GetCurrentThreadId();
   [DllImport("user32.dll")] static extern IntPtr GetForegroundWindow();
+  [DllImport("user32.dll")] static extern short GetAsyncKeyState(int key);
   [DllImport("user32.dll")] static extern bool ShowWindow(IntPtr h,int cmd);
   [DllImport("user32.dll")] static extern bool IsIconic(IntPtr h);
   [DllImport("user32.dll")] static extern bool GetWindowRect(IntPtr h,out RECT r);
@@ -208,7 +209,9 @@ class YDesktop {
   static object Run(Dictionary<string,object> d) {
     string action=S(d,"action");requestedAction=action;ReadProtected(d);
     if(action=="windows"){var list=new List<object>();EnumWindows((h,l)=>{if(IsWindowVisible(h)&&Title(h).Length>0){try{list.Add(WindowInfo(h));}catch{}}return true;},IntPtr.Zero);return new {windows=list,interactive=Interactive()};}
-    IntPtr win=Target(d);var root=AutomationElement.FromHandle(win);
+    IntPtr win=Target(d);
+    if(action=="diagnose"){uint pid;GetWindowThreadProcessId(win,out pid);var held=new List<string>();foreach(var k in new[]{new {Key=0x10,Name="SHIFT"},new {Key=0x11,Name="CTRL"},new {Key=0x12,Name="ALT"},new {Key=0x5B,Name="WIN"}})if((GetAsyncKeyState(k.Key)&0x8000)!=0)held.Add(k.Name);return new {interactive=Interactive(),targetIsForeground=GetForegroundWindow()==win,inputAccess=InputAccess((int)pid),heldModifiers=held.ToArray(),inputInjected=false,focusChanged=false,note="Read-only diagnostics. Full Access does not override Windows input protections; a full-screen app, secure desktop or held modifier can affect input. No blocking source is inferred from these facts alone."};}
+    var root=AutomationElement.FromHandle(win);
     if(action=="tree"){
       bool scoped=S(d,"runtimeId").Length+S(d,"automationId").Length+S(d,"name").Length>0;
       var snapshot=new TreeSnapshot{MaxDepth=Limit(d,"maxDepth",32,1,64),MaxNodes=Limit(d,"maxNodes",600,1,1200)};
@@ -247,7 +250,9 @@ class YDesktop {
     SetProcessDpiAwarenessContext(new IntPtr(-4));
     if(args.Length==2&&args[0]=="--fixture"){Fixture(args[1]);return;}
     Console.InputEncoding=Encoding.UTF8;Console.OutputEncoding=new UTF8Encoding(false);
-    try{string raw=Console.ReadLine();if(raw==null||raw.Length>1048576)throw new Exception("INPUT_LIMIT");Console.WriteLine(json.Serialize(new {ok=true,result=Run(json.Deserialize<Dictionary<string,object>>(raw))}));}
+    try{string raw=Console.ReadLine();if(raw==null||raw.Length>1048576)throw new Exception("INPUT_LIMIT");var request=json.Deserialize<Dictionary<string,object>>(raw);string action=S(request,"action");object result;
+      if(new[]{"focus","setValue","invoke","click","type","keys"}.Contains(action)){using(var mutex=new System.Threading.Mutex(false,"Local\\YGPTDesktopInput-"+System.Security.Principal.WindowsIdentity.GetCurrent().User.Value)){bool locked=false;try{try{locked=mutex.WaitOne(5000);}catch(System.Threading.AbandonedMutexException){locked=true;}if(!locked)throw new Exception("DESKTOP_BUSY: another desktop operation is active; no input was sent");result=Run(request);}finally{if(locked)mutex.ReleaseMutex();}}}else result=Run(request);
+      Console.WriteLine(json.Serialize(new {ok=true,result=result}));}
     catch(Exception e){string message=e.Message??"",code=Regex.Match(message,@"^[A-Z][A-Z0-9_]{2,}(?=:|$)").Value;if(code.Length==0)code=requestedAction=="invoke"?"UIA_INVOKE_FAILED":"UIA_EXECUTION_FAILED";string hresult="0x"+e.HResult.ToString("X8");if(message.Length==0)message=code+" ("+e.GetType().Name+", HRESULT "+hresult+")";Console.WriteLine(json.Serialize(new {ok=false,error=message,code=code,hresult=hresult,exceptionType=e.GetType().Name,action=requestedAction,inputDiagnostics=inputDiagnostics,effectStarted=effectStarted,outcomeUnknown=effectStarted}));Environment.ExitCode=1;}
   }
 }

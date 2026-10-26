@@ -1,5 +1,7 @@
 import {BoundedDownloads} from './bounded-download.mjs';
 import {chromium} from 'playwright';
+import {waitForBrowser,BrowserDiagnostics} from './browser-diagnostics.mjs';
+const diagnostics=new BrowserDiagnostics();
 import path from 'node:path';
 import fs from 'node:fs/promises';
 import crypto from 'node:crypto';
@@ -48,7 +50,7 @@ export class YBrowserEngine {
     return entry.ready;
   }
   async launch(){await this.contextFor(this.owner());return {isolated:true,channel:this.channel,headless:this.headless,personalProfileUsed:false,externalDebugPort:false,perChatContext:true};}
-  track(page,owner){for(const [id,t] of this.tabs)if(t.page===page)return id;const id=crypto.randomUUID();this.tabs.set(id,{page,owner});page.on('close',()=>{this.tabs.delete(id);});return id;}
+  track(page,owner){diagnostics.track(page);for(const [id,t] of this.tabs)if(t.page===page)return id;const id=crypto.randomUUID();this.tabs.set(id,{page,owner});page.on('close',()=>{this.tabs.delete(id);});return id;}
   page(id){
     const t=this.tabs.get(id),owner=this.owner();
     if(!t){if(this.closedTabs.get(id)===owner)throw new EngineError('BROWSER_CONTEXT_CLOSED','This chat\'s browser context was closed (idle or released); open the page again');throw new EngineError('NO_TAB','Unknown tab owned by this YGPT browser');}
@@ -64,7 +66,7 @@ export class YBrowserEngine {
   locator(p,{role,name,testId,selector}={}){if(testId)return p.getByTestId(testId);if(role)return p.getByRole(role,{name,exact:true});if(typeof selector!=='string'||selector.length>500)throw new EngineError('BAD_LOCATOR','Use role/name, testId, or a bounded CSS selector');return p.locator(selector);}
   async act(id,action,target={},value){const p=this.page(id),loc=this.locator(p,target);if(await loc.count()!==1)throw new EngineError('AMBIGUOUS_TARGET','Locator must match exactly one element');
     if(action==='click')await loc.click();else if(action==='fill')await loc.fill(String(value));else if(action==='press')await loc.press(String(value));else if(action==='select')await loc.selectOption(String(value));else if(action==='check')await loc.setChecked(value===true);else throw new EngineError('BAD_ACTION','Unsupported browser action');return this.snapshot(id);}
-  async wait(id,target,{text,state='visible',timeoutMs=10000}={}){const loc=this.locator(this.page(id),target);if(text!==undefined)await loc.filter({hasText:text}).waitFor({state:'visible',timeout:timeoutMs});else await loc.waitFor({state,timeout:timeoutMs});return this.snapshot(id);}
+  async wait(id,target,options={}){return waitForBrowser(this,id,target,options);}
   async screenshot(id){const p=this.page(id),dir=path.join(this.stateDir,'artifacts');await fs.mkdir(dir,{recursive:true});const output=path.join(dir,`browser-${crypto.randomUUID()}.png`);const data=await p.screenshot({path:output,fullPage:false});return {path:output,mimeType:'image/png',sha256:sha256(data),bytes:data.length,scope:'YGPT-owned isolated tab of this chat'};}
   async download(id,target){
     const p=this.page(id),loc=this.locator(p,target);if(await loc.count()!==1)throw new EngineError('AMBIGUOUS_TARGET','Download locator must match once');
@@ -175,7 +177,7 @@ export class YExtensionBrowser {
     }).catch(()=>{});
   }
   status(){const mine=[...this.tabs].filter(([,t])=>t.owner===this.owner());return {attached:!!this.browser,identity:this.identity,unavailableGroupTabs:this.relay.unavailableTabs.size,group:this.browser?{name:this.groupName,tabs:mine.length}:null,pairingUrl:this.pairingUrl(),tabs:mine.map(([tabId,t])=>({tabId,url:t.page.url()}))};}
-  track(page,owner=this.owner(),claim=false){
+  track(page,owner=this.owner(),claim=false){diagnostics.track(page);
     for(const [id,t] of this.tabs)if(t.page===page){if(claim)t.owner=owner;return id;}
     const id=crypto.randomUUID();this.tabs.set(id,{page,owner});
     page.on('close',()=>{this.tabs.delete(id);});
@@ -223,7 +225,7 @@ export class YExtensionBrowser {
   async navigate(id,url){const p=this.page(id);await p.goto(this.validateUrl(url),{waitUntil:'domcontentloaded',timeout:15000});return this.snapshot(id);}
   async act(id,action,target={},value){const p=this.page(id),loc=this.locator(p,target);if(await loc.count()!==1)throw new EngineError('AMBIGUOUS_TARGET','Locator must match exactly one element');
     if(action==='click')await loc.click();else if(action==='fill')await loc.fill(String(value));else if(action==='press')await loc.press(String(value));else if(action==='select')await loc.selectOption(String(value));else if(action==='check')await loc.setChecked(value===true);else throw new EngineError('BAD_ACTION','Unsupported browser action');return this.snapshot(id);}
-  async wait(id,target,{text,state='visible',timeoutMs=10000}={}){const loc=this.locator(this.page(id),target);if(text!==undefined)await loc.filter({hasText:text}).waitFor({state:'visible',timeout:timeoutMs});else await loc.waitFor({state,timeout:timeoutMs});return this.snapshot(id);}
+  async wait(id,target,options={}){return waitForBrowser(this,id,target,options);}
   async screenshot(id){const p=this.page(id),dir=path.join(this.stateDir,'artifacts');await fs.mkdir(dir,{recursive:true});const output=path.join(dir,`browser-existing-${crypto.randomUUID()}.png`);const data=await p.screenshot({path:output,fullPage:false});return {path:output,mimeType:'image/png',sha256:sha256(data),bytes:data.length,scope:'YGPT group tab in the owner daily browser'};}
   async download(id,target){
     const p=this.page(id),loc=this.locator(p,target);if(await loc.count()!==1)throw new EngineError('AMBIGUOUS_TARGET','Download locator must match once');
@@ -300,7 +302,7 @@ export class YBrowserFacade {
   page(id){if(this.existing.has(id))return this.existing.page(id);return this.isolated.page(id);}
   engineFor(id){return this.existing.has(id)?this.existing:this.isolated;}
   async open(url,{target,keepAlive=false}={}){if(target==='existing')return this.existing.open(url);const owner=this.isolated.owner();try{const result=await this.isolated.open(url);return {...result,ephemeral:!keepAlive,...(!keepAlive?{closedAfterCall:true}:{leaseExpiresAfterIdleMs:this.isolated.idleMs})};}finally{if(!keepAlive)await this.isolated.closeContext(owner);}}
-  async attach(a={}){return this.existing.attach(a);}
+  async attach(a={}){if(a.action==='profiles'){await this.existing.ensureRelay();return {...this.existing.status(),profiles:this.existing.relay.instancesList().map(c=>({instance:c.id,browser:c.browser,profileLabel:c.profileLabel,profileEmail:c.profileEmail,connected:true}))};}return this.existing.attach(a);}
   async detach(){return this.existing.detach();}
   attachStatus(){return this.existing.status();}
   async list(){const a=await this.isolated.list(),b=await this.existing.list();return {tabs:[...a.tabs.map(t=>({...t,mode:'isolated'})),...b.tabs],otherChatTabs:a.otherChatTabs,browserRunning:a.browserRunning,existingAttached:b.attached};}
@@ -308,6 +310,7 @@ export class YBrowserFacade {
   async snapshot(id){return this.engineFor(id).snapshot(id);}
   async act(id,action,target,value){return this.engineFor(id).act(id,action,target,value);}
   async wait(id,target,opts){return this.engineFor(id).wait(id,target,opts);}
+  async debug(id,args){return diagnostics.run(this.page(id),args);}
   async screenshot(id){return this.engineFor(id).screenshot(id);}
   async download(id,target){return this.engineFor(id).download(id,target);}
   async closeTab(id){return this.engineFor(id).closeTab(id);}

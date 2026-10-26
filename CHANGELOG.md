@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.0.17
+
+- Negotiate inline-only approval presentation before metadata and across refreshes.
+- Keep new pending approvals valid for six hours, separate from Full Access duration.
+- Unify browser debugging and official extension lifecycle management; retain Chrome connection consent.
+- Treat read-only waits as repeatable observations, queue shared desktop input, and notify pending approvals with task labels.
+- Reduce unrelated-path permission false positives and expand snapshot-backed small cleanup.
+
+
 ## 1.0.16
 
 - Default every approval, including Full Access and Administrator requests, to inline with details collapsed. Clear inherited expanded mode once per card, ignore old PiP hints, and preserve manual details choices during status updates.

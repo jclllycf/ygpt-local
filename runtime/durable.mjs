@@ -12,6 +12,8 @@ export const scrub=value=>String(value??'').replace(/-----BEGIN [A-Z ]*PRIVATE K
 // host's clientInfo, session claims or model-supplied IDs are never identity.
 // Idle contexts lapse after 12 hours; any context lapses 7 days after issue.
 export const CONTEXT_IDLE_MS=12*3600000,CONTEXT_MAX_MS=7*86400000,CHAT_GRANT_MS=2*3600000;
+// Time to decide a pending request, separate from any approved access duration.
+export const APPROVAL_TTL_MS=6*3600000;
 // Engine resources that live only in the bridge process; their owner rows are
 // discarded at startup because the resources themselves cannot survive it.
 const VOLATILE_KINDS=['browser','desktop','session','search'];
@@ -38,7 +40,7 @@ export class DurableLedger {
     // process session. Possessing an ID or output token alone is not ownership.
     this.db.exec('CREATE TABLE IF NOT EXISTS resources(owner TEXT NOT NULL,kind TEXT NOT NULL,id TEXT NOT NULL,context_hash TEXT NOT NULL,created INTEGER NOT NULL,label TEXT,PRIMARY KEY(owner,kind,id));');
     const columns=table=>new Set(this.db.prepare('PRAGMA table_info('+table+')').all().map(c=>c.name));
-    for(const [table,column,type] of [['calls','context_label','TEXT'],['calls','transport','TEXT'],['calls','error_code','TEXT'],['contexts','created','INTEGER']])
+      for(const [table,column,type] of [['calls','context_label','TEXT'],['calls','transport','TEXT'],['calls','error_code','TEXT'],['contexts','created','INTEGER'],['contexts','label','TEXT']])
       if(!columns(table).has(column))this.db.exec('ALTER TABLE '+table+' ADD COLUMN '+column+' '+type);
     this.db.prepare('DELETE FROM resources WHERE owner=? AND kind IN ('+VOLATILE_KINDS.map(()=>'?').join(',')+')').run(this.owner,...VOLATILE_KINDS);
     const interrupted=this.db.prepare("SELECT id FROM operations WHERE owner=? AND state IN ('running','approved')").all(this.owner);
@@ -63,7 +65,7 @@ export class DurableLedger {
     this.db.prepare('DELETE FROM contexts WHERE owner=? AND expires<=?').run(this.owner,now);
     this.db.prepare('DELETE FROM resources WHERE owner=? AND created<?').run(this.owner,cutoff);
   }
-  create(tool,args,preview,{idempotencyKey=null,ttlMs=1800000}={}){
+  create(tool,args,preview,{idempotencyKey=null,ttlMs=APPROVAL_TTL_MS}={}){
     this.prune();const raw=stable(args);if(Buffer.byteLength(raw)>60000)throw Error('Operation exceeds 60 KB approval bound');
     if(idempotencyKey!==null&&(!/^[\w.:/-]{1,128}$/.test(idempotencyKey)))throw Error('Invalid idempotency key');
     const hash=digest(stable([tool,args,preview.contextHash??null]));
@@ -169,6 +171,9 @@ export class DurableLedger {
   transfer(kind,id,contextHash){if(typeof contextHash!=='string'||!contextHash)throw fail('SESSION_FOREIGN','recovery requires a chat context');this.db.prepare('INSERT OR REPLACE INTO resources(owner,kind,id,context_hash,created,label) VALUES(?,?,?,?,?,?)').run(this.owner,kind,String(id),contextHash,Date.now(),'recovered');}
   hasChatGrant(hash,key){return !!key&&!!this.db.prepare('SELECT 1 FROM chat_grants WHERE owner=? AND context_hash=? AND scope_key=? AND expires>?').get(this.owner,hash,key,Date.now());}
   contextActive(hash){return typeof hash==='string'&&!!this.db.prepare('SELECT 1 FROM contexts WHERE owner=? AND token_hash=? AND expires>?').get(this.owner,hash,Date.now());}
+  chatLabel(hash,label){if(typeof hash!=='string'||!this.contextActive(hash))return null;
+    if(typeof label==='string'){const clean=label.replace(/[\r\n\x00-\x1f]/g,' ').trim().slice(0,60);this.db.prepare('UPDATE contexts SET label=? WHERE owner=? AND token_hash=?').run(scrub(clean),this.owner,hash);}
+    return this.db.prepare('SELECT label FROM contexts WHERE owner=? AND token_hash=?').get(this.owner,hash)?.label||contextLabel(hash);}
   fullAccess(contextHash){
     if(!contextHash)return null;
     return this.db.prepare('SELECT a.expires,a.operation_id FROM chat_access a JOIN contexts c ON c.owner=a.owner AND c.token_hash=a.context_hash WHERE a.owner=? AND a.context_hash=? AND a.expires>? AND c.expires>?').get(this.owner,contextHash,Date.now(),Date.now())??null;

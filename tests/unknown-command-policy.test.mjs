@@ -22,6 +22,11 @@ test('Unknown, multiline, dynamic and encoded scripts are default allowed; scrip
  assert.equal(highRiskCommand(encoded('$x=1; Write-Output $x')),false);assert.equal(highRiskCommand(encoded('Clear-Disk -Number 99')),true);
 });
 
+test('Protected reads with unrelated report writes and exact ordinary file cleanup do not create blanket approvals',()=>{
+ for(const script of ["Get-Content 'C:\\YGPT\\data\\state\\fixture.txt'; Set-Content 'D:\\work\\report.md' done", "Remove-Item -LiteralPath 'D:\\work\\obsolete.log' -Force", "const p='C:/YGPT/data/state/file'; fs.readFileSync(p); fs.writeFileSync('D:/work/report.txt','summary')"])assert.equal(decision(script),'allow',script);
+ assert.equal(decision("$p='C:\\YGPT\\data\\state\\fixture.txt'; Set-Content $p changed"),'approve');
+});
+
 test('Explicit private writes, credential uploads, destructive and privilege-changing actions still require approval',()=>{
  const risky=[
   "Set-Content 'C:\\YGPT\\data\\state\\fixture.txt' changed",

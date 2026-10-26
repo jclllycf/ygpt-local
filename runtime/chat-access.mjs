@@ -6,7 +6,7 @@ export {DESKTOP_FULL_ACCESS_MINUTES};
 export const chatAccessTool={
  name:'y_chat_access',title:'Full Access in this chat',
  description:'Enable Full Access directly inside this ChatGPT conversation: call action=request_full and wait for the owner card click. Set administrator=true only when the user requests the extra Administrator option; after the card it needs Windows UAC on this PC and enables y_admin_run. Normal Full Access never requests UAC. action=status only checks; action=revoke ends the grant and its Administrator executor. Preserve contextToken; other chats stay separate.',
- inputSchema:{type:'object',properties:{action:{type:'string',enum:['status','request_full','revoke'],default:'status'},durationMinutes:{type:'integer',minimum:1,maximum:720,default:120},administrator:{type:'boolean',default:false,description:'Optional Windows Administrator command executor. Requires this chat card plus a separate Windows UAC confirmation; never enabled by ordinary Full Access.'}},additionalProperties:false},
+ inputSchema:{type:'object',properties:{label:{type:'string',maxLength:60,description:'Optional short task name for this chat approval reminders; display only, never identity.'},action:{type:'string',enum:['status','request_full','revoke'],default:'status'},durationMinutes:{type:'integer',minimum:1,maximum:720,default:120},administrator:{type:'boolean',default:false,description:'Optional Windows Administrator command executor. Requires this chat card plus a separate Windows UAC confirmation; never enabled by ordinary Full Access.'}},additionalProperties:false},
  annotations:{readOnlyHint:false,destructiveHint:false,openWorldHint:false},
  _meta:{ui:{resourceUri:FULL_ACCESS_URI},'openai/outputTemplate':FULL_ACCESS_URI}
 };

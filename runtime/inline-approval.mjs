@@ -3,8 +3,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {config,RUNTIME,INSTALL} from './config.mjs';
 // New resource URI forces hosts to fetch the revised CSP and bridge bundle.
-export const BAR_URI='ui://ygpt/approval/strip-v11-inline-wait.html';
-export const FULL_ACCESS_URI='ui://ygpt/access/full-v2-inline.html';
+export const BAR_URI='ui://ygpt/approval/strip-v12-no-panel.html';
+export const FULL_ACCESS_URI='ui://ygpt/access/full-v3-no-panel.html';
 // The prior ChatGPT tool catalog can retain this URI across conversations.
 // Serve the NEW strip at this legacy address rather than the retired large card.
 export const LEGACY_BAR_URI='ui://ygpt/approval/card-v1.html';
@@ -12,7 +12,7 @@ export const LEGACY_BAR_URI='ui://ygpt/approval/card-v1.html';
 export const INSPECTION_URI=config.chatAppConsent?BAR_URI:'ui://ygpt/approval/inspection-v1.html';
 // Resource addresses are protocol identifiers, not display branding. Old chats
 // retain these exact addresses and must still receive the current component.
-const knownResources=[BAR_URI,FULL_ACCESS_URI,'ui://ygpt/approval/strip-v10-context-recovery.html','ui://ygpt/access/full-v1.html','ui://ygpt/approval/strip-v9-access-options.html','ui://ygpt/approval/strip-v8-desktop-flow.html',LEGACY_BAR_URI,INSPECTION_URI,'ui://ygpt/approval/strip-v5.html','ui://ygpt/approval/compact-v1-rc2.html','ui://ygpt/approval/strip-v4-rc18.html','ui://ygpt/approval/strip-v3.html',...['compact-v11-3','interactive-v11-2c','interactive-v11-2b','interactive-v11-2','interactive-v11-1','interactive-v11','inspection-v1'].map(n=>'ui://ygpt/approval/'+n+'.html')];
+const knownResources=[BAR_URI,FULL_ACCESS_URI,'ui://ygpt/approval/strip-v11-inline-wait.html','ui://ygpt/access/full-v2-inline.html','ui://ygpt/approval/strip-v10-context-recovery.html','ui://ygpt/access/full-v1.html','ui://ygpt/approval/strip-v9-access-options.html','ui://ygpt/approval/strip-v8-desktop-flow.html',LEGACY_BAR_URI,INSPECTION_URI,'ui://ygpt/approval/strip-v5.html','ui://ygpt/approval/compact-v1-rc2.html','ui://ygpt/approval/strip-v4-rc18.html','ui://ygpt/approval/strip-v3.html',...['compact-v11-3','interactive-v11-2c','interactive-v11-2b','interactive-v11-2','interactive-v11-1','interactive-v11','inspection-v1'].map(n=>'ui://ygpt/approval/'+n+'.html')];
 export const approvalGuidance='Show one fresh inline approval card for this request at the current conversation step, with details collapsed. Do not open a side panel or reuse an earlier request card. Immediately call y_wait_approval with the original requestId, resultToken and contextToken. While continueWaiting or taskPending is true, call y_wait_approval again with those same arguments; a bounded wait timeout is not task completion. Do not send a final answer saying approved work is blocked, finished or needs a new user message merely because a decision is pending. After the decision, continue the original task from its existing result without repeating the action. If the host ended the response, the card sends one continuation notification when no wait is active. The host controls exact card placement and whether cards mount during generation; do not promise to override that. Only an explicit card or local-center decision grants permission.';
 export function approvalTaskState(state){
  const pending=['awaiting_user','approved','running'].includes(state);

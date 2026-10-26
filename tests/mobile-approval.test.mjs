@@ -132,6 +132,14 @@ test('Standard MCP Apps bridge accepts canonical metadata delivered after initia
  finally{await browser?.close();await new Promise(r=>server.close(r));}
 });
 
+test('Standard-only host negotiates inline before receiving any card, including after a page refresh',async()=>{
+ let browser;const seen=[];const outer='<!doctype html><iframe id="app" src="/frame"></iframe><script>window.addEventListener("message",e=>{if(e.source!==document.getElementById("app").contentWindow)return;const m=e.data;if(m.method==="ui/initialize"){fetch("/initialized?m="+encodeURIComponent(JSON.stringify(m.params)));e.source.postMessage({jsonrpc:"2.0",id:m.id,result:{hostContext:{displayMode:"pip",availableDisplayModes:["inline","pip"]}}},"*");}if(m.method==="ui/request-display-mode"){fetch("/mode?m="+m.params.mode);e.source.postMessage({jsonrpc:"2.0",id:m.id,result:{mode:"inline"}},"*");}});</script>';
+ const server=http.createServer((q,r)=>{if(q.url.startsWith('/initialized?')||q.url.startsWith('/mode?')){seen.push(q.url);r.end('ok');}else{r.setHeader('Content-Type','text/html');r.end(q.url==='/frame'?barHtmlForTest():outer);}});await new Promise(r=>server.listen(0,'127.0.0.1',r));
+ try{browser=await launchFixtureBrowser({channel:'msedge',headless:true});const page=await browser.newPage();await page.goto('http://127.0.0.1:'+server.address().port);await until(()=>seen.some(v=>v.startsWith('/mode?')));assert.deepEqual(JSON.parse(decodeURIComponent(seen.find(v=>v.startsWith('/initialized?')).split('?m=')[1])).appCapabilities.availableDisplayModes,['inline']);
+ await page.reload();await until(()=>seen.filter(v=>v.startsWith('/mode?')).length===2);assert.equal(seen.filter(v=>v.startsWith('/mode?')).every(v=>v.endsWith('inline')),true);
+ }finally{await browser?.close();await new Promise(r=>server.close(r));}
+});
+
 test('Unsupported standard methods use compatibility once; an uncertain decision is reconciled without replay',async()=>{
  const html=barHtmlForTest(),fixtureBar=bar();let browser;
  const outer='<!doctype html><iframe id="app" style="width:390px;height:700px;border:0" src="/frame"></iframe><script>window.addEventListener("message",event=>{if(event.source!==document.getElementById("app").contentWindow)return;const m=event.data;if(m.method==="ui/initialize")event.source.postMessage({jsonrpc:"2.0",id:m.id,result:{hostCapabilities:{}}},"*");else if(m.id)event.source.postMessage({jsonrpc:"2.0",id:m.id,error:{code:-32601,message:"Unsupported fixture method"}},"*");});</script>';

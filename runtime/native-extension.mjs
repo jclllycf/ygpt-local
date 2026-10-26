@@ -22,6 +22,7 @@ function authorizeNativeStandard(intent){
   const n=intent.tool,a=intent.args??{};
   if(!/^y_(?:file_|search_|project_|process_|job_|browser_|desktop_|system_)/.test(n))return authorize(n,a);
   if(n.startsWith('y_browser_')){
+    if(n==='y_browser_extensions'&&['install','uninstall'].includes(a.action))return hold('Install or uninstall browser-executable code: review the exact extension, target and path once, or use this chat Full Access');
     // Owner blacklist (rc.13): any http/https destination is allowed unless
     // the owner blocklisted it; the engine still enforces tab ownership and
     // download bounds. Interaction holds only in the owner's opt-in

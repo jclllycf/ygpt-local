@@ -13,12 +13,13 @@ const pick=(kind,id)=>({kind,id:id===undefined||id===null?'':String(id)});
 // kinds (browser, desktop, session) are enforced by the engines themselves;
 // durable jobs are enforced by the broker ledger.
 export function resourceIntent(name,a={}){
- if(name==='y_chat_access')return a.action==='request_full'?{creates:'chat-access'}:{lists:'any'};
+ if(name==='y_chat_access')return a.action==='request_full'||a.label?{creates:'chat-access'}:{lists:'any'};
  // Selecting a daily profile is already owned state, before any tab opens.
  // Mint the chat context here so the next open uses that same selection.
  if(name==='y_browser_open'||name==='y_browser_attach')return {creates:'browser'};
+ if(name==='y_browser_extensions')return {creates:'browser-tooling'};
  if(name==='y_browser_tabs'||name==='y_browser_detach')return {lists:'browser'};
- if(/^y_browser_(?:snapshot|navigate|action|wait|screenshot|download|close)$/.test(name))return {uses:pick('browser',a.tabId)};
+ if(/^y_browser_(?:snapshot|navigate|action|wait|debug|screenshot|download|close)$/.test(name))return {uses:pick('browser',a.tabId)};
  if(name==='y_desktop_bind')return {creates:'desktop'};
  if(/^y_desktop_(?:inspect|value|action|screenshot)$/.test(name))return {uses:pick('desktop',a.targetId)};
  if(name==='y_process_start'||name==='y_process_run')return {creates:'session'};

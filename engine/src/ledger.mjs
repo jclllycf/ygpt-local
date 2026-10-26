@@ -2,6 +2,7 @@ import {DatabaseSync} from 'node:sqlite';
 import crypto from 'node:crypto';
 import path from 'node:path';
 import {EngineError} from './file-engine.mjs';
+import {withoutImageBytes} from '../../runtime/screenshot-cleanup.mjs';
 const stable=value=>JSON.stringify(value,(_,v)=>v&&typeof v==='object'&&!Array.isArray(v)?Object.fromEntries(Object.entries(v).sort(([a],[b])=>a.localeCompare(b))):v);
 export class EngineLedger {
   constructor(stateDir) {
@@ -19,6 +20,6 @@ export class EngineLedger {
       return {id:old.id,reused:true,result:JSON.parse(old.result)};}
     const id=crypto.randomUUID();this.db.prepare("INSERT INTO calls(id,request_key,digest,tool,state,started) VALUES(?,?,?,?,'running',?)").run(id,key??null,digest,tool,Date.now());return {id,reused:false};
   }
-  finish(id,result){this.db.prepare('UPDATE calls SET state=?,ended=?,result=? WHERE id=?').run(result.error?.outcomeUnknown?'unknown':result.ok?'succeeded':'failed',Date.now(),JSON.stringify(result),id);}
+  finish(id,result){this.db.prepare('UPDATE calls SET state=?,ended=?,result=? WHERE id=?').run(result.error?.outcomeUnknown?'unknown':result.ok?'succeeded':'failed',Date.now(),JSON.stringify(withoutImageBytes(result)),id);}
   close(){this.db.close();}
 }

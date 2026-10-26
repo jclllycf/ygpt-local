@@ -15,5 +15,9 @@ export function cleanupOldScreenshots(stateDir,{now=Date.now(),minAgeMs=3600000}
 }
 export function withoutImageBytes(response){
  if(!response||typeof response!=='object')return response;
- const copy={...response};if(Array.isArray(copy.content))copy.content=copy.content.map(block=>block.type==='image'?{type:'text',text:'Temporary screenshot delivered inline. Image bytes are not retained in the local ledger.'}:block);return copy;
+ const copy={...response},transient=v=>v?.result?.transientObservation===true;
+ const compact=v=>({...v,result:{transientObservation:true,payloadRetained:false,message:'Browser observation delivered live. Sample the tab again for current data; do not replay mutations.'}});
+ if(transient(copy.structuredContent)){copy.structuredContent=compact(copy.structuredContent);copy.content=[{type:'text',text:JSON.stringify(copy.structuredContent)}];}
+ if(transient(copy))copy.result=compact(copy).result;
+ if(Array.isArray(copy.content))copy.content=copy.content.map(block=>block.type==='image'?{type:'text',text:'Temporary screenshot delivered inline. Image bytes are not retained in the local ledger.'}:block);return copy;
 }
