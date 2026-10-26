@@ -34,13 +34,30 @@
     "viewerRestoredAfterRefresh": true,
     "viewerRestoredWithoutMountedComponent": true,
     "compatibilityDisplayMethodCanRequireSynchronousUserEvent": true,
-    "newHelperEnabled": "not-confirmed",
-    "newHelperRealHostAcceptance": "pending-owner-browser-activation",
+    "newHelperEnabled": "owner-confirmed-and-observed-in-content-script-context",
+    "newHelperRealHostAcceptance": "partial-presentation-passed-host-content-load-errors-remain",
     "productionApprovalDecisionSubmittedByTest": false,
     "nativeMobileAcceptance": "not-tested",
     "ownerAuthorizedHelper": true,
     "connectedBrowserProfiles": 2,
-    "reportedExtensionVersion": "1.0.19.1"
+    "reportedExtensionVersion": "1.0.19.1",
+    "postActivationWebCheck": {
+      "browserProfile": "owner-selected-luoyu",
+      "originalConversationUsed": true,
+      "reloads": 3,
+      "restoredViewerObservedAfterReload": false,
+      "completedDesktopCardObservedInline": true,
+      "cardUsesCurrentBoundedPresentationBundle": true,
+      "detailsInitiallyCollapsed": true,
+      "appRetryUsedToRecoverCard": true,
+      "ordinaryResponseLoadErrorsAlsoObserved": true,
+      "hostLoadErrorCause": "not-established",
+      "newApprovalDecisionClickTested": false,
+      "otherBrowserProfileAcceptance": "not-tested",
+      "fullAccessAndAdministratorLiveAcceptance": "not-tested",
+      "privateConversationScreenshotPublished": false,
+      "at": "2026-10-26T13:07:08.898Z"
+    }
   },
   "access": {
     "chatgptSitePermission": "optional-owner-enabled",
@@ -92,5 +109,5 @@
       "sha256": "00d785ac6c8d368fb9e686fa7f8b9da92d2ad83b2acfacd8cdcabd0add2b4993"
     }
   ],
-  "at": "2026-10-26T12:34:39.981Z"
+  "at": "2026-10-26T13:07:08.898Z"
 }
