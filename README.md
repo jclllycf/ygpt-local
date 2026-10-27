@@ -8,7 +8,7 @@ Bring files, projects and approved Windows tools to the ChatGPT account you alre
 
 **1.0.18 is the current stable release, with English-only UI.** Download from [GitHub Releases](https://github.com/jclllycf/ygpt-local/releases/tag/v1.0.18). Source and downloads are public. See the [release notes](docs/RELEASE_1.0.18.md) for local MCP routing and CLI/Agent collaboration. See the [local tools guide](docs/LOCAL_TOOLS.md).
 
-**1.0.19 development candidate:** approval display negotiation and cache identities are being corrected. Host-restored side panels remain an explicit acceptance check; see [candidate notes](docs/RELEASE_1.0.19.md).
+**1.0.20 development candidate:** Setup can connect multiple ChatGPT accounts to one installation using separate Tunnels and encrypted keys. Updates, the engine and browser pairing are shared. See [account connections](docs/ACCOUNT_CONNECTIONS.md) and [candidate notes](docs/RELEASE_1.0.20.md). The included 1.0.19 display changes retain their explicit host-acceptance limitations.
 
 **Free-account field result:** on October 23, 2026, the project owner reported successful real use with a ChatGPT Free account. This is a concrete user-reported feasibility milestone; account availability, workspace permissions and Platform Tunnel access still need to be checked for each setup. It is not a promise of access for every Free account.
 

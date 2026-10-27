@@ -1,6 +1,6 @@
 {
   "name": "ygpt-local",
-  "version": "1.0.19",
+  "version": "1.0.20",
   "private": true,
   "type": "module",
   "description": "YGPT Local for Windows: local MCP tools, protected snapshots and guided installation",

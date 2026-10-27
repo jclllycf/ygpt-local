@@ -19,7 +19,7 @@ export class BrowserExtensions {
    if(target==='developer'){const dir=path.join(this.stateDir,'developer-browsers',createHash('sha256').update(owner).digest('hex').slice(0,24));await fs.mkdir(dir,{recursive:true});args.push('--headless','--userDataDir',dir);}else {args.push('--autoConnect');if(!this.connect&&process.platform==='win32')args.push('--userDataDir',path.join(await localAppData(),'Google','Chrome','User Data'));}
    if(this.connect){entry.client=await this.connect(args);return entry;}
    const env={};for(const k of ['PATH','SystemRoot','WINDIR','SystemDrive','COMSPEC','PATHEXT','USERPROFILE','HOME','LOCALAPPDATA','APPDATA','TEMP','TMP'])if(process.env[k])env[k]=process.env[k];
-   const client=new Client({name:'YGPT Local browser extensions',version:'1.0.19'},{capabilities:{}}),transport=new StdioClientTransport({command:process.execPath,args:[bin,...args],cwd:this.root,stderr:'pipe',env:{...env,CHROME_DEVTOOLS_MCP_NO_USAGE_STATISTICS:'1',CHROME_DEVTOOLS_MCP_NO_PERFORMANCE_CRUX:'1'}});
+   const client=new Client({name:'YGPT Local browser extensions',version:'1.0.20'},{capabilities:{}}),transport=new StdioClientTransport({command:process.execPath,args:[bin,...args],cwd:this.root,stderr:'pipe',env:{...env,CHROME_DEVTOOLS_MCP_NO_USAGE_STATISTICS:'1',CHROME_DEVTOOLS_MCP_NO_PERFORMANCE_CRUX:'1'}});
    entry.client=client;entry.transport=transport;transport.stderr?.on('data',()=>{});await client.connect(transport,{timeout:15000});return entry;
   })().catch(async e=>{if(this.sessions.get(key)===entry)this.sessions.delete(key);await entry.client?.close().catch(()=>{});throw e;});return entry.ready;
  }

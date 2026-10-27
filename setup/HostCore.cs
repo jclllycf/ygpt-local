@@ -15,7 +15,7 @@ using Microsoft.Win32;
 using Microsoft.Win32.SafeHandles;
 
 public static class HostCore {
- public const string Version="1.0.19";
+ public const string Version="1.0.20";
  public static readonly JavaScriptSerializer Json=new JavaScriptSerializer{MaxJsonLength=32*1024*1024};
  public static string Full(string p){return Path.GetFullPath(p).TrimEnd(Path.DirectorySeparatorChar);}
  // Fresh-install defaults prefer a non-system fixed drive (D: when present)
@@ -107,6 +107,54 @@ public static class HostCore {
  public static void Pause(string data){if(File.Exists(Path.Combine(data,"paused"))&&Stopped(data,DateTime.MinValue))return;string barrier=Path.Combine(data,"maintenance-request");SaveText(barrier,"Reject new calls while the owner checks idle state");try{bool safe=false;try{safe=B(Control(data,"drain"),"safeToStop");}catch{var h=Read(Path.Combine(data,"watchdog-health.json"));safe=S(h,"ownerId")==OwnerId(data)&&NoOwnedWorkers(h);}if(!safe)throw new Exception("Finish active work and pending approvals before maintenance");DateTime requested=DateTime.UtcNow;SaveText(Path.Combine(data,"paused"),"owner maintenance");DateTime deadline=DateTime.UtcNow.AddSeconds(25);while(DateTime.UtcNow<deadline){if(Stopped(data,requested))return;try{var h=Read(Path.Combine(data,"watchdog-health.json"));if(S(h,"ownerId")==OwnerId(data)&&!ProcessAlive(Convert.ToInt32(h["pid"]),Convert.ToInt64(h["birth"]))&&NoOwnedWorkers(h)){h["stopped"]=true;h["phase"]="stopped";h["at"]=DateTime.UtcNow.ToString("o");Save(Path.Combine(data,"watchdog-health.json"),h);return;}}catch{}System.Threading.Thread.Sleep(200);}throw new Exception("Connection has not stopped safely; application files were not replaced");}catch{if(!File.Exists(Path.Combine(data,"paused"))&&File.Exists(barrier))File.Delete(barrier);throw;}}
  public static bool ProofValid(string data,string generation){try{var s=Secrets(data);var e=Read(Path.Combine(data,"first-use-proof.json"));if(S(s,"verificationKey").Length<32)return false;string payload=S(e,"payload"),mac;using(var h=new HMACSHA256(Encoding.UTF8.GetBytes(S(s,"verificationKey"))))mac=Hex(h.ComputeHash(Encoding.UTF8.GetBytes(payload)));if(S(e,"mac")!=mac)return false;var p=Json.Deserialize<Dictionary<string,object>>(payload);return S(p,"generation")==generation&&B(p,"readSucceeded")&&new[]{"official-secure-tunnel","authenticated-oauth"}.Contains(S(p,"transport"));}catch{return false;}}
  public static bool ProcessAlive(int pid,long birth){try{using(var p=Process.GetProcessById(pid))return !p.HasExited&&p.StartTime.ToUniversalTime().Ticks==birth;}catch{return false;}}
+}
+
+// Account connections share the installed binaries and the local engine. Only
+// per-connection credentials are separate. The legacy default stays in place.
+public static class AccountConnections {
+ public static readonly string Primary="primary";
+ public static bool ValidId(string id){return id==Primary||System.Text.RegularExpressions.Regex.IsMatch(id??"",@"^[a-f0-9]{32}$");}
+ public static string Root(string data,string id){if(!ValidId(id))throw new Exception("Invalid account connection");string root=id==Primary?HostCore.Full(data):Path.Combine(HostCore.Full(data),"connections",id);HostCore.CheckPath(root);return root;}
+ public static List<Dictionary<string,object>> List(string data){
+  string file=Path.Combine(data,"connections.json");if(!File.Exists(file))return new List<Dictionary<string,object>>();
+  var document=HostCore.Read(file);if(HostCore.S(document,"product")!="YGPT Local"||!document.ContainsKey("connections"))throw new Exception("Account connections need review");
+  var result=new List<Dictionary<string,object>>();var seen=new HashSet<string>();
+  foreach(object value in (System.Collections.IEnumerable)document["connections"]){var item=value as Dictionary<string,object>;if(item==null||!ValidId(HostCore.S(item,"id"))||HostCore.S(item,"id")==Primary||!seen.Add(HostCore.S(item,"id")))throw new Exception("Invalid account connection record");Root(data,HostCore.S(item,"id"));result.Add(item);}
+  if(result.Count>7)throw new Exception("At most eight account connections are supported");return result;
+ }
+ static void Write(string data,List<Dictionary<string,object>> items){HostCore.Save(Path.Combine(data,"connections.json"),new{product="YGPT Local",connections=items});}
+ static IDisposable Lock(string data){var mutex=new System.Threading.Mutex(false,"Local\\YGPT-connections-"+HostCore.OwnerId(data));bool held=false;try{try{held=mutex.WaitOne(5000);}catch(System.Threading.AbandonedMutexException){held=true;}if(!held)throw new Exception("Connections are being edited in another Setup window. Try again.");return new Lease(mutex);}catch{mutex.Dispose();throw;}}
+ sealed class Lease:IDisposable{System.Threading.Mutex mutex;public Lease(System.Threading.Mutex value){mutex=value;}public void Dispose(){mutex.ReleaseMutex();mutex.Dispose();}}
+ public static string Save(string data,string id,string label,string tunnel,string runtimeKey,bool enabled){
+  using(Lock(data)){
+   var primary=HostCore.Read(Path.Combine(data,"connection.json"));if(HostCore.S(primary,"mode")!="secure-tunnel")throw new Exception("Use Secure MCP Tunnel for the default connection before adding accounts.");
+   label=(label??"").Trim();tunnel=(tunnel??"").Trim();runtimeKey=(runtimeKey??"").Trim();
+   if(label.Length==0||label.Length>60||label.Any(c=>c<' '))throw new Exception("Enter an account name using 1–60 characters.");
+   if(!System.Text.RegularExpressions.Regex.IsMatch(tunnel,@"^tunnel_(?:[a-z0-9]{4}_)?[a-z0-9]{32}$"))throw new Exception("Paste the complete Tunnel ID from this account's organization and workspace.");
+   var items=List(data);bool fresh=String.IsNullOrEmpty(id);if(fresh){if(items.Count>=7)throw new Exception("At most eight account connections can share this installation.");id=Guid.NewGuid().ToString("N");}
+   if(!ValidId(id)||id==Primary)throw new Exception("Use the main Setup steps to change the default account.");
+   var existing=items.FirstOrDefault(x=>HostCore.S(x,"id")==id);if(!fresh&&existing==null)throw new Exception("This connection no longer exists. Refresh the list.");
+   if(HostCore.S(primary,"tunnelId")==tunnel||items.Any(x=>HostCore.S(x,"id")!=id&&HostCore.S(x,"tunnelId")==tunnel))throw new Exception("This Tunnel is already used by another connection. Create a dedicated Tunnel for this account.");
+   if(items.Any(x=>HostCore.S(x,"id")!=id&&String.Equals(HostCore.S(x,"label"),label,StringComparison.OrdinalIgnoreCase)))throw new Exception("Choose a different account name.");
+   string root=Root(data,id);HostCore.PrivateDirectory(root);var secrets=HostCore.Secrets(root);
+   if(runtimeKey.Length>0){if(runtimeKey.Any(c=>c<' ')||runtimeKey.Length>8192)throw new Exception("Enter a valid API key without line breaks.");secrets["runtimeKey"]=runtimeKey;}
+   if(HostCore.S(secrets,"runtimeKey")=="")throw new Exception("Enter the API key that runs this account's Tunnel.");
+   if(HostCore.S(secrets,"bridgeKey")=="")secrets["bridgeKey"]=HostCore.NewKey();
+   HostCore.SaveSecrets(root,secrets);
+   var profile=new Dictionary<string,object>{{"id",id},{"label",label},{"mode","secure-tunnel"},{"tunnelId",tunnel},{"enabled",enabled},{"proxyUrl",HostCore.S(primary,"proxyUrl")}};
+   if(existing!=null)items.Remove(existing);items.Add(profile);Write(data,items);return id;
+  }
+ }
+ public static void Enable(string data,string id,bool enabled){using(Lock(data)){var items=List(data);var item=items.FirstOrDefault(x=>HostCore.S(x,"id")==id);if(item==null)throw new Exception("Connection not found");item["enabled"]=enabled;Write(data,items);}}
+ public static string Status(string data,string id){
+  try{var document=HostCore.Read(Path.Combine(data,"connections-health.json"));if((DateTime.UtcNow-DateTime.Parse(HostCore.S(document,"at")).ToUniversalTime()).TotalSeconds>20)return "No recent status";
+   if(document.ContainsKey("profiles"))foreach(object value in (System.Collections.IEnumerable)document["profiles"]){var item=(Dictionary<string,object>)value;if(HostCore.S(item,"id")!=id)continue;
+    if(HostCore.B(item,"changePending"))return "Waiting for current tasks and approvals to finish";if(HostCore.B(item,"connected"))return "Connected";if(!HostCore.B(item,"enabled"))return "Stopped";
+    string error=HostCore.S(item,"lastError");return error=="RUNTIME_KEY_INVALID_OR_EXPIRED"?"API key needs updating":error=="TUNNEL_PERMISSION_OR_WORKSPACE_DENIED"?"Check Tunnel permissions and workspace":error!=""?"Needs attention: "+error:"Connecting…";
+   }
+   return document.ContainsKey("error")?"Connection settings need review":"Waiting for local service";
+  }catch{return "Waiting for local service";}
+ }
 }
 
 public static class OwnedFiles {

@@ -1,8 +1,8 @@
 {
   "passed": true,
-  "sourceFiles": 397,
+  "sourceFiles": 409,
   "dependencyPackages": 110,
   "findings": [],
   "scope": "Selected clean source tree only; binaries, third-party runtime inventories and publication history require separate checks.",
-  "at": "2026-10-26T12:24:57.252Z"
+  "at": "2026-10-27T05:20:38.658Z"
 }

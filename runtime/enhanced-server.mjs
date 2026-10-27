@@ -274,7 +274,7 @@ async function dispatchScoped(name,args,operationId,reviewed=false){
   }
   if(name==='y_verify_checksum'){const r=await checksum(args.path,args.sha256,{reviewed});return {content:[{type:'text',text:JSON.stringify(r)}],structuredContent:r};}
   if(name==='y_usage_report'){
-    const hours=Math.min(720,Math.max(1,args.windowHours??168)),since=Date.now()-hours*3600000,rows=ledger.usageRows(since);
+    const hours=Math.min(720,Math.max(1,args.windowHours??168)),since=Date.now()-hours*3600000,rows=ledger.usageRows(since,20000,callScope.getStore()?.connectionId??'primary');
     const byState={},byTool={},byError={},bySource={},durations=[];
     for(const r of rows){byState[r.state]=(byState[r.state]??0)+1;const t=byTool[r.name]??={total:0,succeeded:0,failed:0,unknown:0,running:0};t.total++;if(t[r.state]!==undefined)t[r.state]++;if(r.error_code)byError[r.error_code]=(byError[r.error_code]??0)+1;const src=(r.context_label??'unverified')+' · '+(r.transport??'unverified');bySource[src]=(bySource[src]??0)+1;if(r.updated>r.created&&r.state!=='running')durations.push(r.updated-r.created);}
     durations.sort((x,y)=>x-y);const pct=p=>durations.length?durations[Math.min(durations.length-1,Math.floor(p/100*durations.length))]:null;
@@ -340,8 +340,8 @@ function transportOf(msg){
   return process.env.YGPT_TRANSPORT_SOURCE==='official-secure-tunnel'?'secure-tunnel-stdio':'stdio';
 }
 // The calling chat's context, issued on first need and reused within the call.
-function chatContext(){const scope=callScope.getStore();if(!scope.context)scope.context=ledger.context();return scope.context;}
-const callMeta=()=>{const s=callScope.getStore();return {context:s?.context?.hash??null,transport:s?.transport??null};};
+function chatContext(){const scope=callScope.getStore();if(!scope.context)scope.context=ledger.context(null,scope.connectionId??'primary');return scope.context;}
+const callMeta=()=>{const s=callScope.getStore();return {context:s?.context?.hash??null,transport:s?.transport??null,connectionId:s?.connectionId??'primary'};};
 // Record that the calling context owns a durable job it just created.
 function ownCreated(name,result){
   const intent=resourceIntent(name);if(intent.creates!=='job')return;
@@ -352,7 +352,7 @@ async function execute(id,name,args){
   // An approved operation always runs as the chat context that requested it,
   // never as the context of the call that delivered the human decision.
   const requested=ledger.get(id);
-  return callScope.run({context:requested?.contextHash?{hash:requested.contextHash}:null,accessMode:()=>requested?.contextHash&&ledger.fullAccess(requested.contextHash)?'full':'standard',transport:'approval-continuation',delivered:true},()=>executeApproved(id,name,args));
+  return callScope.run({context:requested?.contextHash?{hash:requested.contextHash}:null,connectionId:ledger.operationConnection(id)??'primary',accessMode:()=>requested?.contextHash&&ledger.fullAccess(requested.contextHash)?'full':'standard',transport:'approval-continuation',delivered:true},()=>executeApproved(id,name,args));
 }
 async function executeApproved(id,name,args){
   const access=nativeExtension?.tools().some(t=>t.name===name)?await nativeExtension.authorize(name,args):authorize(name,args);if(access.decision==='deny')throw Error('Policy changed; operation not executed');
@@ -391,6 +391,7 @@ const instructions=['For authorized local Windows file, directory, edit, search,
 async function handle(msg){
   if(msg.jsonrpc!=='2.0')throw Error('JSON-RPC 2.0 required');
   const id=msg.id;
+  if(msg.method==='ygpt/idle'&&process.env.YGPT_TRUST_CONNECTION_META==='1')return emit({jsonrpc:'2.0',id,result:await idleStatus(1)});
   const host=requestHost(msg,init);
   if(msg.method==='initialize'){
     // The authenticated Tunnel may initialize a new ChatGPT chat on its existing
@@ -421,10 +422,19 @@ async function handle(msg){
   const nativeCall=!!nativeExtension?.tools().some(t=>t.name===name)||name==='y_desktop_fixture'&&config.rc10Candidate;
   const {contextToken,...args}=rawArgs;
   // Resolve the calling chat context before anything touches an owned resource.
+  const connectionId=process.env.YGPT_TRUST_CONNECTION_META==='1'?msg.params?._meta?.['ygpt/connection-id']??'primary':'primary';
+  if(connectionId!=='primary'&&!/^[a-f0-9]{32}$/.test(connectionId))throw Error('Invalid transport connection');
+  // Check account ownership before token refresh, UI decisions, result reads,
+  // native approval resumption or resource access. Metadata from a remote
+  // caller is replaced by the authenticated local connection router.
+  let referenced=args.requestId??(['y_call_status','y_call_result'].includes(name)?args.id:null);
+  if(msg.params?.requestState)try{referenced=JSON.parse(ledger.vault.open(msg.params.requestState)).id;}catch{}
+  const account=referenced?(ledger.operationConnection(referenced)??ledger.callConnection(referenced)):null;
+  if(account&&account!==connectionId)return response(id,{state:'rejected',executed:false,code:'CONNECTION_FOREIGN',message:'This request belongs to another account connection.'},true);
   const intent=resourceIntent(name,args);let context=null;
-  if(contextToken){try{context=ledger.context(contextToken);}catch(e){if(intent.creates||intent.uses||intent.lists)return response(id,{state:'rejected',executed:false,code:'CONTEXT_EXPIRED',message:e.message},true);}}
-  if(!context&&intent.creates)context=ledger.context();
-  return callScope.run({context,accessMode:()=>context?.hash&&ledger.fullAccess(context.hash)?'full':'standard',transport:transportOf(msg),delivered:false},()=>callTool({id,msg,host,nativeCall,name,args,contextToken,rawArgs,intent}));
+  if(contextToken){try{context=ledger.context(contextToken,connectionId);}catch(e){if(e.code==='CONNECTION_FOREIGN'||intent.creates||intent.uses||intent.lists)return response(id,{state:'rejected',executed:false,code:e.code??'CONTEXT_EXPIRED',message:e.message},true);}}
+  if(!context&&(intent.creates||connectionId!=='primary'))context=ledger.context(null,connectionId);
+  return callScope.run({context,connectionId,accessMode:()=>context?.hash&&ledger.fullAccess(context.hash)?'full':'standard',transport:transportOf(msg),delivered:false},()=>callTool({id,msg,host,nativeCall,name,args,contextToken,rawArgs,intent}));
 }
 async function callTool({id,msg,host,nativeCall,name,args,contextToken,rawArgs,intent}){
   const descriptor=tools().find(t=>t.name===name);
@@ -485,9 +495,9 @@ async function callTool({id,msg,host,nativeCall,name,args,contextToken,rawArgs,i
     chatAccess:accessStatus(callScope.getStore()?.context?.hash),unknownCommandPolicy:'allow-unless-explicit-high-risk-signal',desktopAccess:{mode:'temporary-full-access',durationMinutes:DESKTOP_FULL_ACCESS_MINUTES,oneApprovalForAllActions:true},screenshotStorage:'inline response; generated PNG deleted before return; image bytes excluded from the local ledger',automatic:['All typed file, directory, search, project and database reads','Desktop inventory and reads of chat-owned bound windows','Ordinary file changes with protected snapshots','Small ordinary cleanup: up to 64 entries / 16 MiB, or a single file up to 32 MiB','Commands and scripts without an identified high-risk signal, including protected-folder references and unknown or encoded code'],
     humanApproval:['Enable or renew Full Access for this chat','First desktop control: temporary Full Access for 100 minutes; no repeated approval within that grant','In Standard mode: major, sensitive or system-path deletes','In Standard mode: destructive, privileged or system-changing commands','In Standard mode: protected, credential-adjacent or system file changes'],hardDenied:[],hardDeniedNote:'Policy approvals can be replaced by owner-enabled Full Access for this chat. Invalid paths, schema and tokens are still rejected. Per-chat resource ownership (SESSION_FOREIGN) remains enforced: a chat can only operate resources it created.',
     desktopRequireEnrollment:false,scope:'private single-owner; resources belong to the chat context that created them',noOsSandbox:true});
-  if(name==='y_pending_approvals'){const mine=callScope.getStore().context?.hash??null,waiting=ledger.pending().filter(o=>o.state==='awaiting_user');
+  if(name==='y_pending_approvals'){const mine=callScope.getStore().context?.hash??null,waiting=ledger.pending().filter(o=>o.state==='awaiting_user'&&ledger.operationConnection(o.id)===callScope.getStore().connectionId);
     return response(id,{operations:waiting.filter(o=>mine&&o.contextHash===mine).map(r=>({id:r.id,state:r.state,title:r.presentation?.title,expiresAt:r.expiresAt})),otherChats:waiting.filter(o=>!mine||o.contextHash!==mine).length});}
-  if(name==='y_recent_calls')return response(id,{calls:ledger.calls(args.limit)});
+  if(name==='y_recent_calls')return response(id,{calls:ledger.calls(args.limit,callScope.getStore().connectionId)});
   if(name==='y_call_status'||name==='y_call_result'){
     const op=ledger.get(args.id),call=ledger.call(args.id);
     if(name==='y_call_status')return response(id,op?{id:op.id,tool:op.tool,state:op.state,reason:op.reason,resultRef:op.resultRef,expiresAt:op.expiresAt,updatedAt:op.updatedAt}:call??{found:false});
@@ -555,11 +565,14 @@ async function callTool({id,msg,host,nativeCall,name,args,contextToken,rawArgs,i
   try{const r=await dispatch(name,args,callId,access.chatGrant===true||access.fullAccess===true);if(!r.isError)ownCreated(name,r);ledger.callFinish(callId,r.structuredContent?.error?.outcomeUnknown?'unknown':r.isError?'failed':'succeeded',r);emit({jsonrpc:'2.0',id,result:{...r,structuredContent:{...(r.structuredContent??{}),ygpt:{callId,resultToken:token}}}});}
   catch(e){const beforeEffect=e.effectStarted===false,state=beforeEffect?'failed':'unknown';ledger.callFinish(callId,state);response(id,{callId,state,executed:beforeEffect?false:null,code:e.code??'EXECUTION_UNCERTAIN',...(e.filesRestored!==undefined?{filesRestored:e.filesRestored,noFilesRestored:e.filesRestored===0}:{}),message:e.message},true);}
 }
-const ownerControl=startOwnerControl({pipe:process.env.YGPT_CONTROL_PIPE,key:process.env.YGPT_LOCAL_CONTROL_KEY,review:createLocalReview({ledger,onApproved:execute}),status:async()=>{const c=catalogSummary();return {product:'YGPT Local',version:config.version,pid:process.pid,localReady:ready&&!!nativeExtension,tools:c.tools,publicTools:c.publicTools,appOnly:c.appOnly,draining:ownerDraining};},drain:async()=>{
- if(activeOwnerRequests||ledger.pending().some(o=>o.state==='awaiting_user')||administratorAccess.sessions.size)return {safeToStop:false,reason:'Active calls, pending approvals or an Administrator executor'};
+async function idleStatus(allowedActive=0){
+ if(activeOwnerRequests>allowedActive||ledger.pending().some(o=>o.state==='awaiting_user')||administratorAccess.sessions.size)return {safeToStop:false,reason:'Active calls, pending approvals or an Administrator executor'};
  let busy=false;const scan=v=>{if(v&&typeof v==='object'){if(['running','queued','starting','pending','awaiting_user','unknown'].includes(v.state))busy=true;for(const child of Object.values(v))scan(child);}};
  try{for(const n of ['y_process_list','y_job_list']){const v=await nativeExtension.engine.invoke(n,{});if(v?.isError||v?.ok===false)throw Error('Inventory failed');scan(v);if(Number(v?.result?.otherChatsActive??0)>0)busy=true;}}catch{return {safeToStop:false,reason:'Owned activity inventory unavailable'};}
- if(!busy)ownerDraining=true;return {safeToStop:!busy,reason:busy?'Owned activity is still active':null};
+ return {safeToStop:!busy,reason:busy?'Owned activity is still active':null};
+}
+const ownerControl=startOwnerControl({pipe:process.env.YGPT_CONTROL_PIPE,key:process.env.YGPT_LOCAL_CONTROL_KEY,review:createLocalReview({ledger,onApproved:execute}),status:async()=>{const c=catalogSummary();return {product:'YGPT Local',version:config.version,pid:process.pid,localReady:ready&&!!nativeExtension,tools:c.tools,publicTools:c.publicTools,appOnly:c.appOnly,draining:ownerDraining};},drain:async()=>{
+ const result=await idleStatus();if(result.safeToStop)ownerDraining=true;return result;
 }});
 async function shutdown(){if(closing)return;closing=true;approvalNotifications.close();ownerControl?.close();administratorAccess.stopAll();await nativeExtension?.engine.close();closePanel();portalServer?.close();releaseLease();setTimeout(()=>process.exit(0),150).unref();}
 process.once('exit',()=>{try{releaseLease();}catch{}});

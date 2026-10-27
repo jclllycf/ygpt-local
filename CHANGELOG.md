@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.0.20
+
+- Add account connections inside the existing native Setup, with independent
+  encrypted keys, Tunnel IDs, status, editing and connect/stop controls.
+- Serve up to eight Tunnels through one local engine and browser relay; keep
+  context capabilities, approvals, Full Access and call results account-bound.
+- Preserve the default connection and share program updates across accounts.
+- Isolate connection failures and defer existing-connection changes until idle.
+
 ## 1.0.19
 
 - Explicitly prefer inline approval resources and renew their cache identities.
