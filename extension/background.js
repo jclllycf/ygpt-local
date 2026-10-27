@@ -9,7 +9,7 @@
 // The profile's signed-in account (chrome.identity) is reported at connect
 // time so the service can tell several browsers/accounts apart and let the
 // owner designate the right one.
-const BUILD=chrome.runtime.getManifest?.()?.version??'1.0.19';
+const BUILD=chrome.runtime.getManifest?.()?.version??'1.0.19.1';
 const DEFAULTS={host:'127.0.0.1',port:19341,token:'',groupName:'YGPT',profileLabel:''};
 let settings={...DEFAULTS};
 let ws=null,wsState='closed',backoff=2000,instanceId=null,attached=new Set();

@@ -20,8 +20,8 @@ test('Fresh approval instances support bounded pending waits and retain decision
   assert.ok(!BAR_URI.includes('rc2'));
   const current=(await c.rpc('resources/read',{uri:BAR_URI})).contents[0];
   const old=(await c.rpc('resources/read',{uri:'ui://ygpt/approval/compact-v1-rc2.html'})).contents[0];
-  assert.equal(current.text,old.text);assert.deepEqual(current._meta['openai/ui'].availableDisplayModes,['inline']);
-  for(const uri of [FULL_ACCESS_URI,'ui://ygpt/access/full-v1.html','ui://ygpt/approval/strip-v10-context-recovery.html'])assert.deepEqual((await c.rpc('resources/read',{uri})).contents[0]._meta['openai/ui'].availableDisplayModes,['inline']);
+  assert.equal(current.text,old.text);assert.deepEqual(current._meta['openai/ui'],{availableDisplayModes:['inline'],preferredDisplayMode:'inline'});
+  for(const uri of [FULL_ACCESS_URI,'ui://ygpt/access/full-v1.html','ui://ygpt/approval/strip-v10-context-recovery.html','ui://ygpt/approval/strip-v12-no-panel.html','ui://ygpt/access/full-v3-no-panel.html'])assert.deepEqual((await c.rpc('resources/read',{uri})).contents[0]._meta['openai/ui'],{availableDisplayModes:['inline'],preferredDisplayMode:'inline'});
   const pending=unpack(await c.call('y_process_run',{executable:process.execPath,args:['-e',"if(false){};console.log('Clear-Disk fixture')"],cwd:f.project}));
   assert.equal(pending.code,'APPROVAL_REQUIRED');
   const args={requestId:pending.requestId,resultToken:pending.resultToken,contextToken:pending.contextToken};
@@ -190,8 +190,8 @@ test('All approvals restore inline once, ignore old PiP hints and collapse each 
  let browser;try{browser=await launchFixtureBrowser({channel:'msedge',headless:true});for(const viewport of [{width:390,height:844},{width:1100,height:760}]){
   for(const kind of ['ordinary','desktop','full-access','administrator']){
    const modes=[];let reads=0;const page=await browser.newPage({viewport}),value=bar();value.instanceId=kind+'-one';if(kind==='full-access'||kind==='administrator')value.presentation=chatAccessPresentation({administrator:kind==='administrator'});if(kind==='desktop')value.presentation=desktopAccessPresentation();value.presentation.displayMode='pip';
-   await page.exposeFunction('ordinaryDisplayMode',v=>{modes.push(v.mode);});await page.exposeFunction('ordinaryStatus',()=>{reads++;return {structuredContent:{state:'awaiting_user'}};});
-   await page.addInitScript(value=>{window.openai={displayMode:'pip',toolResponseMetadata:{yBar:value},callTool:()=>window.ordinaryStatus(),requestDisplayMode:v=>window.ordinaryDisplayMode(v)};},value);await page.route('https://ygpt-fixture.invalid/',route=>route.fulfill({body:barHtmlForTest(),contentType:'text/html'}));await page.goto('https://ygpt-fixture.invalid/');await until(()=>reads>0);assert.deepEqual(modes,['inline']);assert.equal(await page.locator('#details').evaluate(e=>e.open),false);
+   await page.exposeFunction('ordinaryDisplayMode',v=>{modes.push(v.mode);return {mode:'inline'};});await page.exposeFunction('ordinaryStatus',()=>{reads++;return {structuredContent:{state:'awaiting_user'}};});
+   await page.addInitScript(value=>{window.openai={displayMode:'pip',toolResponseMetadata:{yBar:value},callTool:()=>window.ordinaryStatus(),requestDisplayMode:v=>{window.openai.displayMode=v.mode;return window.ordinaryDisplayMode(v)}};},value);await page.route('https://ygpt-fixture.invalid/',route=>route.fulfill({body:barHtmlForTest(),contentType:'text/html'}));await page.goto('https://ygpt-fixture.invalid/');await until(()=>reads>0);assert.deepEqual(modes,['inline']);assert.equal(await page.locator('#details').evaluate(e=>e.open),false);
    await page.locator('#details').evaluate(e=>e.open=true);await page.evaluate(()=>window.dispatchEvent(new CustomEvent('openai:set_globals',{detail:{globals:{}}})));await until(()=>reads>1);assert.deepEqual(modes,['inline']);assert.equal(await page.locator('#details').evaluate(e=>e.open),true,'polling preserves a manual details choice');
    await page.evaluate(()=>{const old=window.openai.toolResponseMetadata.yBar;window.openai.toolResponseMetadata={yBar:{...old,requestId:'NEXT_REQUEST',instanceId:'next-instance'}};window.dispatchEvent(new CustomEvent('openai:set_globals',{detail:{globals:{}}}));});await until(()=>modes.length===2);assert.deepEqual(modes,['inline','inline']);assert.equal(await page.locator('#details').evaluate(e=>e.open),false);assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
    if(kind==='ordinary'){fs.mkdirSync('build',{recursive:true});await page.screenshot({path:'build/approval-inline-'+viewport.width+'.png'});}await page.close();
@@ -207,6 +207,44 @@ test('A silent standard read recovers through compatibility and an old PiP card 
   await page.exposeFunction('fixtureRecoveredTool',async(name,args)=>{compatibilityCalls++;if(name==='y_bar_decide')decisions++;return {structuredContent:{state:decisions?'approved':'awaiting_user',continuation:'follow-up',delivery:args.notifyAction?{granted:false,status:'sent'}:undefined}};});
   await page.exposeFunction('fixtureDisplayMode',async value=>{modes.push(value.mode);return value;});
   await page.addInitScript(()=>{window.openai={callTool:(n,a)=>window.fixtureRecoveredTool(n,a),requestDisplayMode:a=>window.fixtureDisplayMode(a)};});await page.goto('http://127.0.0.1:'+server.address().port);
-  await until(()=>compatibilityCalls>0,20000);const frame=page.frameLocator('#app');await frame.getByRole('button',{name:'Allow once',exact:true}).click();await frame.locator('#state').filter({hasText:'Approved'}).waitFor();assert.equal(decisions,1);await until(()=>modes.includes('inline'),5000);assert.deepEqual(modes,['inline']);
+  await until(()=>compatibilityCalls>0,20000);const frame=page.frameLocator('#app');await frame.getByRole('button',{name:'Allow once',exact:true}).click();await frame.locator('#state').filter({hasText:'Approved'}).waitFor();assert.equal(decisions,1);await until(()=>modes.length===2,5000);assert.deepEqual(modes,['inline','inline']);
  }finally{await browser?.close();await new Promise(r=>server.close(r));}
+});
+
+test('An inline acknowledgement cannot mask an expanded compatibility surface; refresh closes only that surface',async()=>{
+ let browser;try{browser=await launchFixtureBrowser({channel:'msedge',headless:true});
+ for(const displayMode of ['fullscreen','pip','picture-in-picture','inline']){
+  const page=await browser.newPage();let closes=0,decisions=0;
+  await page.exposeFunction('presentationClosed',()=>{closes++;});
+  await page.exposeFunction('presentationTool',name=>{if(name==='y_bar_decide')decisions++;return {structuredContent:{state:'awaiting_user'}};});
+  await page.addInitScript(({value,displayMode})=>{window.openai={displayMode,toolResponseMetadata:{yBar:value},requestDisplayMode:async()=>({mode:'inline'}),requestClose:()=>{window.openai.displayMode='inline';window.presentationClosed();},callTool:n=>window.presentationTool(n)};},{value:bar(),displayMode});
+  await page.route('https://ygpt-fixture.invalid/',route=>route.fulfill({body:barHtmlForTest(),contentType:'text/html'}));await page.goto('https://ygpt-fixture.invalid/');
+  await page.getByRole('button',{name:'Allow once',exact:true}).waitFor();if(displayMode!=='inline')await until(()=>closes===1);else assert.equal(closes,0);
+  assert.equal(await page.locator('main').isVisible(),true);assert.equal(await page.getByRole('button',{name:'Allow once',exact:true}).isEnabled(),true);assert.equal(decisions,0);
+  await page.reload();await page.getByRole('button',{name:'Allow once',exact:true}).waitFor();if(displayMode!=='inline')await until(()=>closes===2);else assert.equal(closes,0);assert.equal(decisions,0);await page.close();
+ }}finally{await browser?.close();}
+});
+
+test('A hung compatibility display request times out without blocking approval controls or closing an inline card',async()=>{
+ let browser;try{browser=await launchFixtureBrowser({channel:'msedge',headless:true});
+ for(const displayMode of ['fullscreen','inline']){
+  const page=await browser.newPage();let closes=0,reads=0;
+  await page.exposeFunction('hungPresentationClosed',()=>{closes++;});await page.exposeFunction('hungPresentationRead',()=>{reads++;return {structuredContent:{state:'awaiting_user'}};});
+  await page.addInitScript(({value,displayMode})=>{window.openai={displayMode,toolResponseMetadata:{yBar:value},requestDisplayMode:()=>new Promise(()=>{}),requestClose:()=>{window.openai.displayMode='inline';window.hungPresentationClosed();},callTool:()=>window.hungPresentationRead()};},{value:bar(),displayMode});
+  await page.route('https://ygpt-fixture.invalid/',route=>route.fulfill({body:barHtmlForTest(),contentType:'text/html'}));await page.goto('https://ygpt-fixture.invalid/');await until(()=>reads>0);
+  assert.equal(await page.getByRole('button',{name:'Allow once',exact:true}).isEnabled(),true);
+  if(displayMode==='fullscreen')await until(()=>closes===1,7000);else{await delay(2300);assert.equal(closes,0);}assert.equal(await page.locator('main').isVisible(),true);await page.close();
+ }}finally{await browser?.close();}
+});
+
+test('A host expansion during an in-flight inline request receives a fresh negotiation',async()=>{
+ let browser,count=0;const outer='<!doctype html><iframe id="app" src="/frame"></iframe><script>window.addEventListener("message",e=>{const m=e.data;if(m.method==="ui/initialize")e.source.postMessage({jsonrpc:"2.0",id:m.id,result:{hostContext:{displayMode:"inline"}}},"*");if(m.method==="ui/request-display-mode"){fetch("/mode");if(!window.sent){window.sent=true;setTimeout(()=>e.source.postMessage({jsonrpc:"2.0",method:"ui/notifications/host-context-changed",params:{displayMode:"fullscreen"}},"*"),20);}setTimeout(()=>e.source.postMessage({jsonrpc:"2.0",id:m.id,result:{mode:"inline"}},"*"),100);}});</script>';
+ const server=http.createServer((q,r)=>{if(q.url==='/mode'){count++;r.end('ok');}else{r.setHeader('Content-Type','text/html');r.end(q.url==='/frame'?barHtmlForTest():outer);}});await new Promise(r=>server.listen(0,'127.0.0.1',r));
+ try{browser=await launchFixtureBrowser({channel:'msedge',headless:true});const page=await browser.newPage();await page.goto('http://127.0.0.1:'+server.address().port);await until(()=>count===4);await delay(500);assert.equal(count,4,'one interrupted request plus three bounded recovery attempts');}finally{await browser?.close();await new Promise(r=>server.close(r));}
+});
+
+test('A compatibility no-op cannot suppress the standard inline negotiation',async()=>{
+ let browser,count=0;const outer='<!doctype html><iframe id="app" src="/frame"></iframe><script>window.addEventListener("message",e=>{const m=e.data;if(m.method==="ui/initialize")e.source.postMessage({jsonrpc:"2.0",id:m.id,result:{hostContext:{displayMode:"inline"}}},"*");if(m.method==="ui/request-display-mode"){fetch("/mode");e.source.postMessage({jsonrpc:"2.0",id:m.id,result:{mode:"inline"}},"*");}});</script>';
+ const server=http.createServer((q,r)=>{if(q.url==='/mode'){count++;r.end('ok');}else{r.setHeader('Content-Type','text/html');r.end(q.url==='/frame'?barHtmlForTest():outer);}});await new Promise(r=>server.listen(0,'127.0.0.1',r));
+ try{browser=await launchFixtureBrowser({channel:'msedge',headless:true});const page=await browser.newPage();await page.addInitScript(()=>{window.openai={displayMode:'inline',requestDisplayMode:()=>undefined,requestClose:()=>undefined};});await page.goto('http://127.0.0.1:'+server.address().port);await until(()=>count===1);await delay(400);assert.equal(count,1);}finally{await browser?.close();await new Promise(r=>server.close(r));}
 });

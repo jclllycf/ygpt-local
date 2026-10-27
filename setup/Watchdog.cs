@@ -70,9 +70,8 @@ public static class YGPTWatchdog {
    // tunnel-client tokenizes mcp.command using shell-style escapes: raw Windows
    // backslashes become escape characters, e.g. D:\\AI becomes D:AI.
    // Windows process spawning also accepts forward-slash absolute paths.
-   string command=StdioMcpCommand(node,Path.Combine(install,"runtime","bootstrap.mjs"));
-   si=new ProcessStartInfo(Path.Combine(install,"runtimes","tunnel-client.exe"),"run --control-plane.tunnel-id "+HostCore.Q(id)+" --control-plane.api-key env:YGPT_TUNNEL_RUNTIME_KEY --mcp.command "+HostCore.Q("command="+command)+" --mcp.stdio-send-initialized-notification --health.listen-addr 127.0.0.1:0 --health.url-file "+HostCore.Q(Path.Combine(data,"tunnel-health.url")));
-   si.EnvironmentVariables["YGPT_TUNNEL_RUNTIME_KEY"]=HostCore.S(secrets,"runtimeKey");si.EnvironmentVariables["YGPT_TRANSPORT_SOURCE"]="official-secure-tunnel";
+   si=new ProcessStartInfo(node,HostCore.Q(Path.Combine(install,"service","connection-host.mjs"))+" "+HostCore.Q(data));
+   si.EnvironmentVariables["YGPT_TRANSPORT_SOURCE"]="official-secure-tunnel";
   }else si=new ProcessStartInfo(node,HostCore.Q(Path.Combine(install,"service","supervisor.mjs"))+" "+HostCore.Q(data));
   si.UseShellExecute=false;si.CreateNoWindow=true;si.WindowStyle=ProcessWindowStyle.Hidden;si.WorkingDirectory=install;si.RedirectStandardOutput=true;si.RedirectStandardError=true;
   string temp=Path.Combine(data,"state","tmp");Directory.CreateDirectory(temp);si.EnvironmentVariables["TEMP"]=temp;si.EnvironmentVariables["TMP"]=temp;

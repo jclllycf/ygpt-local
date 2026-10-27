@@ -1,0 +1,37 @@
+{
+  "version": "1.0.20",
+  "candidateSourceCommit": "26a044f5c0b54c761f982bf6309828e4264b0da9",
+  "ownerReportedWebViewerClosure": true,
+  "ownerReportedConversationContentUnaffected": true,
+  "ownerAuthorizedUpgrade": true,
+  "secondAccountHostAcceptance": false,
+  "nativeAppPresentationAcceptance": false,
+  "administratorAcceptance": false,
+  "cleanWindowsVmAcceptance": false,
+  "browserDepthCheck": {
+    "total": 8,
+    "passed": 8,
+    "failed": 0,
+    "skipped": 0,
+    "actualPrivateDeveloperExtensionLifecycle": true,
+    "existingPersonalBrowserLifecycleTested": false
+  },
+  "branchProtection": {
+    "branch": "main",
+    "requiredPullRequest": true,
+    "requiredApprovals": 0,
+    "requiredGitHubActionsCheck": "windows",
+    "strict": true,
+    "requireConversationResolution": true,
+    "enforceAdmins": true,
+    "allowForcePushes": false,
+    "allowDeletions": false,
+    "verifiedInSavedSettings": true
+  },
+  "artifactPolicy": "Reuse exact locally installed and verified candidate; documentation promotion and CI timeout limits do not change runtime code.",
+  "ciTimeoutMinutes": {
+    "job": 45,
+    "test": 20
+  },
+  "at": "2026-10-27T06:02:04.453Z"
+}

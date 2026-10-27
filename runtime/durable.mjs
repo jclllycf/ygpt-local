@@ -40,7 +40,7 @@ export class DurableLedger {
     // process session. Possessing an ID or output token alone is not ownership.
     this.db.exec('CREATE TABLE IF NOT EXISTS resources(owner TEXT NOT NULL,kind TEXT NOT NULL,id TEXT NOT NULL,context_hash TEXT NOT NULL,created INTEGER NOT NULL,label TEXT,PRIMARY KEY(owner,kind,id));');
     const columns=table=>new Set(this.db.prepare('PRAGMA table_info('+table+')').all().map(c=>c.name));
-      for(const [table,column,type] of [['calls','context_label','TEXT'],['calls','transport','TEXT'],['calls','error_code','TEXT'],['contexts','created','INTEGER'],['contexts','label','TEXT']])
+      for(const [table,column,type] of [['calls','context_label','TEXT'],['calls','transport','TEXT'],['calls','error_code','TEXT'],['contexts','created','INTEGER'],['contexts','label','TEXT'],['contexts','connection_id',"TEXT NOT NULL DEFAULT 'primary'"],['calls','connection_id',"TEXT NOT NULL DEFAULT 'primary'"],['operations','connection_id',"TEXT NOT NULL DEFAULT 'primary'"]])
       if(!columns(table).has(column))this.db.exec('ALTER TABLE '+table+' ADD COLUMN '+column+' '+type);
     this.db.prepare('DELETE FROM resources WHERE owner=? AND kind IN ('+VOLATILE_KINDS.map(()=>'?').join(',')+')').run(this.owner,...VOLATILE_KINDS);
     const interrupted=this.db.prepare("SELECT id FROM operations WHERE owner=? AND state IN ('running','approved')").all(this.owner);
@@ -78,8 +78,8 @@ export class DurableLedger {
       if(prev){if(prev.tool!==tool||this.vault.open(prev.args)!==raw)throw Error('Idempotency key was bound to different arguments');return {operation:this.public(prev),reused:true};}
       const id=randomUUID();const now=Date.now();const receipt=randomBytes(32).toString('hex');
       const clean={...preview,summary:scrub(preview.summary??tool),requestDigest:hash};
-      this.db.prepare('INSERT INTO operations(id,owner,digest,idem,tool,args,preview,state,created,updated,expires,receipt) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)')
-        .run(id,this.owner,hash,idem,tool,this.vault.seal(raw),this.vault.seal(JSON.stringify(clean)),'awaiting_user',now,now,now+ttlMs,digest(receipt));
+      this.db.prepare('INSERT INTO operations(id,owner,digest,idem,tool,args,preview,state,created,updated,expires,receipt,connection_id) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)')
+        .run(id,this.owner,hash,idem,tool,this.vault.seal(raw),this.vault.seal(JSON.stringify(clean)),'awaiting_user',now,now,now+ttlMs,digest(receipt),this.contextConnection(preview.contextHash));
       return {operation:this.get(id),receipt,reused:false};
     });
   }
@@ -129,10 +129,10 @@ export class DurableLedger {
   canRead(id,receipt){return !!receipt&&this.row(id)?.receipt===digest(String(receipt));}
   // Provenance is recorded as a short context label (never the token or its
   // full hash) and the transport kind; host type (Chat vs Agent) is unverified.
-  callStart(name,operationId=null,{context=null,transport=null}={}){const id=randomUUID(),now=Date.now();this.db.prepare('INSERT INTO calls(id,owner,name,operation_id,state,created,updated,context_label,transport) VALUES(?,?,?,?,?,?,?,?,?)').run(id,this.owner,name,operationId,'running',now,now,context?contextLabel(context):null,transport);return id;}
+  callStart(name,operationId=null,{context=null,transport=null,connectionId='primary'}={}){const id=randomUUID(),now=Date.now();this.db.prepare('INSERT INTO calls(id,owner,name,operation_id,state,created,updated,context_label,transport,connection_id) VALUES(?,?,?,?,?,?,?,?,?,?)').run(id,this.owner,name,operationId,'running',now,now,context?contextLabel(context):null,transport,connectionId);return id;}
   callFinish(id,state,response=null,{code=null}={}){const raw=response?JSON.stringify(withoutImageBytes(response)):null;const errorCode=code??response?.structuredContent?.code??response?.structuredContent?.error?.code??null;this.db.prepare('UPDATE calls SET state=?,updated=?,result_digest=?,result=?,error_code=? WHERE owner=? AND id=?').run(state,Date.now(),raw?digest(raw):null,raw&&Buffer.byteLength(raw)<=131072?this.vault.seal(raw):null,typeof errorCode==='string'?errorCode.slice(0,64):null,this.owner,id);}
-  calls(limit=20){return this.db.prepare('SELECT id,name,operation_id,state,created,updated,result_digest,context_label,transport FROM calls WHERE owner=? ORDER BY created DESC LIMIT ?').all(this.owner,Math.min(100,Math.max(1,Number(limit)||20)));}
-  usageRows(since,limit=20000){return this.db.prepare('SELECT name,state,created,updated,context_label,transport,error_code FROM calls WHERE owner=? AND created>=? ORDER BY created LIMIT ?').all(this.owner,since,limit);}
+  calls(limit=20,connectionId='primary'){return this.db.prepare('SELECT id,name,operation_id,state,created,updated,result_digest,context_label,transport FROM calls WHERE owner=? AND connection_id=? ORDER BY created DESC LIMIT ?').all(this.owner,connectionId,Math.min(100,Math.max(1,Number(limit)||20)));}
+  usageRows(since,limit=20000,connectionId='primary'){return this.db.prepare('SELECT name,state,created,updated,context_label,transport,error_code FROM calls WHERE owner=? AND connection_id=? AND created>=? ORDER BY created LIMIT ?').all(this.owner,connectionId,since,limit);}
   call(id,withResult=false){const r=this.db.prepare('SELECT * FROM calls WHERE owner=? AND id=?').get(this.owner,id);if(!r)return null;return {id:r.id,name:r.name,state:r.state,operation_id:r.operation_id,result_digest:r.result_digest,created:r.created,updated:r.updated,...(withResult?{result:r.result?JSON.parse(this.vault.open(r.result)):null}:{})};}
   grant(kind,id){const token=randomBytes(32).toString('hex');if(kind==='ui')this.db.prepare('INSERT INTO ui_capabilities(owner,id,token_hash,created) VALUES(?,?,?,?)').run(this.owner,String(id),digest(token),Date.now());else this.db.prepare('INSERT OR REPLACE INTO scopes(owner,kind,id,token_hash,created) VALUES(?,?,?,?,?)').run(this.owner,kind,String(id),digest(token),Date.now());return token;}
   owns(kind,id,token){if(!token)return false;const hash=digest(String(token));if(kind==='ui'&&this.db.prepare('SELECT 1 FROM ui_capabilities WHERE owner=? AND id=? AND token_hash=?').get(this.owner,String(id),hash))return true;const r=this.db.prepare('SELECT token_hash FROM scopes WHERE owner=? AND kind=? AND id=?').get(this.owner,kind,String(id));return !!r&&r.token_hash===hash;}
@@ -149,15 +149,19 @@ export class DurableLedger {
   });}
   finishUiDelivery(id,token,sent){if(!this.owns('ui_delivery',id,token))throw Error('NOTIFICATION_CAPABILITY_INVALID');if(this.uiDelivery(id)?.event==='ui_notify_sent')return {status:'sent'};this.event(id,sent?'ui_notify_sent':'ui_notify_uncertain','app-capability-validated');return {status:sent?'sent':'unconfirmed'};}
   events(limit=20){const labels={allow_once:'允许这一次',allow_chat:'对话内固定范围允许',deny:'拒绝',expired:'过期',succeeded:'已完成',failed:'失败',unknown:'结果待核实'};return this.db.prepare('SELECT operation_id,event,channel,at FROM approval_events WHERE owner=? ORDER BY at DESC LIMIT ?').all(this.owner,limit).map(r=>({...r,at:new Date(r.at).toISOString(),label:labels[r.event]??r.event,title:this.public(this.row(r.operation_id))?.presentation?.title??'历史操作'}));}
-  context(token){
+  context(token,connectionId=null){
     const now=Date.now();
-    if(token){const hash=digest(String(token));const r=this.db.prepare('SELECT expires,created FROM contexts WHERE owner=? AND token_hash=?').get(this.owner,hash);if(!r||r.expires<=now)throw fail('CONTEXT_EXPIRED','conversation context expired, revoked or invalid; omit contextToken to receive a fresh one (resources of the old context stay with it)');
+    if(token){const hash=digest(String(token));const r=this.db.prepare('SELECT expires,created,connection_id FROM contexts WHERE owner=? AND token_hash=?').get(this.owner,hash);if(!r||r.expires<=now)throw fail('CONTEXT_EXPIRED','conversation context expired, revoked or invalid; omit contextToken to receive a fresh one (resources of the old context stay with it)');
+      if(connectionId!==null&&r.connection_id!==connectionId)throw fail('CONNECTION_FOREIGN','this context belongs to another account connection');
       // Sliding expiry: use keeps the context alive, bounded by its absolute lifetime.
       const created=r.created??r.expires-CONTEXT_IDLE_MS,expires=Math.max(r.expires,Math.min(created+CONTEXT_MAX_MS,now+CONTEXT_IDLE_MS));
       if(expires!==r.expires)this.db.prepare('UPDATE contexts SET expires=? WHERE owner=? AND token_hash=?').run(expires,this.owner,hash);
       return {hash,expires};}
-    const value=randomBytes(32).toString('hex'),expires=now+CONTEXT_IDLE_MS;const hash=digest(value);this.db.prepare('INSERT INTO contexts(owner,token_hash,expires,created) VALUES(?,?,?,?)').run(this.owner,hash,expires,now);return {hash,expires,token:value};
+    const value=randomBytes(32).toString('hex'),expires=now+CONTEXT_IDLE_MS;const hash=digest(value);this.db.prepare('INSERT INTO contexts(owner,token_hash,expires,created,connection_id) VALUES(?,?,?,?,?)').run(this.owner,hash,expires,now,connectionId??'primary');return {hash,expires,token:value};
   }
+  contextConnection(hash){return this.db.prepare('SELECT connection_id FROM contexts WHERE owner=? AND token_hash=?').get(this.owner,hash??'')?.connection_id??'primary';}
+  callConnection(id){return this.db.prepare('SELECT connection_id FROM calls WHERE owner=? AND id=?').get(this.owner,id)?.connection_id??null;}
+  operationConnection(id){return this.row(id)?.connection_id??null;}
   own(kind,id,contextHash,label=null){
     if(typeof contextHash!=='string'||!contextHash)throw fail('SESSION_FOREIGN','an owned resource requires a chat context');
     return this.tx(()=>{const prior=this.ownerOf(kind,id);if(prior&&prior!==contextHash)throw fail('SESSION_FOREIGN','resource already belongs to another chat context');

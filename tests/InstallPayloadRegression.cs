@@ -6,7 +6,7 @@ using System.Security.Cryptography;
 using System.Windows;
 
 // Window constructors are unreachable; this fixture calls only payload logic.
-public class SetupWindow:Window {public SetupWindow(string data,string install){throw new Exception("Setup UI must not run in this fixture");}public void Uninstall(){throw new Exception("Uninstall must not run in this fixture");}}
+public class SetupWindow:Window {public SetupWindow(string data,string install){throw new Exception("Setup UI must not run in this fixture");}public void Uninstall(){throw new Exception("Uninstall must not run in this fixture");}public void OpenConnections(){throw new Exception("Account UI must not run in this fixture");}}
 public class UpdateWindow:Window {public UpdateWindow(){throw new Exception("Updater UI must not run in this fixture");}}
 public class ApprovalWindow:Window {public ApprovalWindow(string data){throw new Exception("Approval UI must not run in this fixture");}}
 public static class InstallPayloadRegression {

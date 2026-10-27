@@ -5,29 +5,45 @@
  const labels={awaiting_user:'Awaiting approval',context_required:'Refresh approval',request_unavailable:'Approval unavailable',approved:'Approved',running:'Running',succeeded:'Completed',failed:'Failed',unknown:'Check result',denied:'Denied',expired:'Expired',not_found:'No request'};
  let card=null,call=null,standard=false,healthy=false,busy=false,notifying=false,timer=null,failures=0,closed=false,compatibilityTools=false;
  const states=new Map(),deliveries=new Map(),inflight=new Set(),requests=new Map();let sequence=0;
- let hostContext={},presentationPending=false,presentationDone=false,closeRequested=false;
+ let hostContext={},presentationPending=false,presentationDone=false,closeRequested=false,presentationRevision=0,presentationTimer=null,presentationAttempts=0;
+ const expanded=mode=>['pip','picture-in-picture','fullscreen'].includes(mode);
+ function presentationChanged(){presentationRevision++;presentationDone=false;presentationAttempts=0;closeRequested=false;clearTimeout(presentationTimer);}
+ function boundedPresentation(action){return new Promise((resolve,reject)=>{const deadline=setTimeout(()=>reject(Error('Presentation timeout')),2000);Promise.resolve().then(action).then(resolve,reject).finally(()=>clearTimeout(deadline));});}
  // Presentation is negotiated independently of tool metadata: a refreshed
  // host can restore the side panel before it replays an old tool result.
  async function preferInline(){
-  const api=window.openai,mode=hostContext.displayMode??api?.displayMode;
-  if(presentationPending||presentationDone)return;
+  const api=window.openai,revision=presentationRevision;
+  if(presentationPending||presentationDone||presentationAttempts>=3)return;
   if(!standard&&typeof api?.requestDisplayMode!=='function')return;
-  presentationPending=true;presentationDone=true;
-  let actual=mode;
+  presentationPending=true;presentationAttempts++;
+  let accepted=false;
   try{
    const supported=hostContext.availableDisplayModes;
    if(!supported||supported.includes('inline')){
-    const result=standard?await request('ui/request-display-mode',{mode:'inline'},2000):await api.requestDisplayMode({mode:'inline'});
-    actual=result?.mode??window.openai?.displayMode??hostContext.displayMode;
+    const result=standard?await request('ui/request-display-mode',{mode:'inline'},2000):await boundedPresentation(()=>api.requestDisplayMode({mode:'inline'}));
+    accepted=result?.mode==='inline'||api?.displayMode==='inline';
+    // An RPC acknowledgement is not a host-context update. In particular,
+    // a compatibility host may acknowledge inline while still reporting PiP.
+    if(standard&&!accepted&&typeof api?.requestDisplayMode==='function'){
+     const fallback=await boundedPresentation(()=>api.requestDisplayMode({mode:'inline'}));accepted=fallback?.mode==='inline'||api.displayMode==='inline';
+    }
    }
   }catch{
-   if(standard&&typeof api?.requestDisplayMode==='function')try{const result=await api.requestDisplayMode({mode:'inline'});actual=result?.mode??api.displayMode;}catch{}
-  }finally{presentationPending=false;}
+   if(standard&&typeof api?.requestDisplayMode==='function')try{const result=await boundedPresentation(()=>api.requestDisplayMode({mode:'inline'}));accepted=result?.mode==='inline'||api.displayMode==='inline';}catch{}
+  }
   // Closing an expanded host surface is distinct from hiding its inline card.
   // Never requestClose when the host has not identified an expanded mode.
-  if(['pip','fullscreen'].includes(actual)&&!closeRequested&&typeof api?.requestClose==='function'){
-   closeRequested=true;try{await api.requestClose();}catch{}
+  const reported=api?.displayMode??hostContext.displayMode;
+  if(revision===presentationRevision&&expanded(reported)&&!closeRequested&&typeof api?.requestClose==='function'){
+   closeRequested=true;try{await boundedPresentation(()=>api.requestClose());}catch{closeRequested=false;}
   }
+  presentationPending=false;
+  const confirmed=api?.displayMode??hostContext.displayMode;
+  if(confirmed==='inline')hostContext.displayMode='inline';
+  presentationDone=revision===presentationRevision&&(confirmed==='inline'||accepted&&!expanded(confirmed));
+  // Retry a missing/late bridge only a bounded number of times. A context
+  // change during an in-flight negotiation must get its own negotiation.
+  if(!presentationDone&&(revision!==presentationRevision||presentationAttempts<3)&&!closed){clearTimeout(presentationTimer);presentationTimer=setTimeout(()=>void preferInline(),250);}
  }
  function unwrap(value){for(let n=0;n<8;n++){
   if(typeof value==='string'){value=JSON.parse(value);continue;}
@@ -76,7 +92,7 @@
  }
  function accept(value){
   const next=metadata(value);if(!next||typeof next.requestId!=='string'||!next.presentation)return;
-  if((card?.instanceId??card?.requestId)!==(next.instanceId??next.requestId)){$('details').open=false;if(card){presentationDone=false;closeRequested=false;}}
+  if((card?.instanceId??card?.requestId)!==(next.instanceId??next.requestId)){$('details').open=false;if(card)presentationChanged();}
   const persisted=window.openai?.widgetState?.privateContent?.ygptDelivery;
   if(persisted?.requestId===next.requestId&&typeof persisted.status==='string')deliveries.set(next.requestId,persisted.status);
   card={...next,state:stableState(next.requestId,next.state)};
@@ -93,7 +109,7 @@
   const message=event.data,pending=requests.get(message.id);
   if(pending){requests.delete(message.id);clearTimeout(pending.deadline);message.error?pending.reject(Object.assign(Error(message.error.message??'Host bridge error'),{code:message.error.code})):pending.resolve(message.result);}
   else if(message.method==='ui/notifications/tool-result')accept(message.params);
-  else if(message.method==='ui/notifications/host-context-changed'){if(message.params?.displayMode!==hostContext.displayMode)presentationDone=false;hostContext={...hostContext,...message.params};void preferInline();}
+  else if(message.method==='ui/notifications/host-context-changed'){if(message.params?.displayMode&&message.params.displayMode!=='inline'&&message.params.displayMode!==hostContext.displayMode)presentationChanged();hostContext={...hostContext,...message.params};void preferInline();}
  });
  async function notify(event=null){
   if(event&&!event.isTrusted||!card?.uiToken||!call||notifying||['sent','returned'].includes(deliveries.get(card.requestId)))return;
@@ -150,22 +166,25 @@
  $('notify').addEventListener('click',event=>notify(event));
  function globals(event){
   const openai=window.openai;if(typeof openai?.callTool==='function'&&!standard){call=(name,args)=>openai.callTool(name,args);healthy=true;}
-  const mode=event?.detail?.globals?.displayMode??openai?.displayMode;if(mode){if(mode!==hostContext.displayMode)presentationDone=false;hostContext.displayMode=mode;}
+  const mode=event?.detail?.globals?.displayMode??openai?.displayMode;if(mode){if(mode!=='inline'&&mode!==hostContext.displayMode)presentationChanged();hostContext.displayMode=mode;}
   void preferInline();
   accept(event?.detail?.globals?.toolResponseMetadata??openai?.toolResponseMetadata);
   if(card){render();schedule(0);}
  }
  window.addEventListener('openai:set_globals',globals);globals();
- if(window.parent!==window)request('ui/initialize',{appInfo:{name:'YGPT approval',version:'1.0.18'},appCapabilities:{availableDisplayModes:['inline']},protocolVersion:'2026-01-26'}).then(result=>{
-  standard=true;if(result.hostContext?.displayMode&&result.hostContext.displayMode!==hostContext.displayMode)presentationDone=false;hostContext={...hostContext,...result.hostContext};void preferInline();
+ if(window.parent!==window)request('ui/initialize',{appInfo:{name:'YGPT approval',version:'1.0.20'},appCapabilities:{availableDisplayModes:['inline']},protocolVersion:'2026-01-26'}).then(result=>{
+  // Some ChatGPT compatibility methods silently ignore calls without a
+  // synchronous user event. Always negotiate again over the real standard
+  // bridge, even when its initial mode matches the compatibility globals.
+  standard=true;presentationChanged();hostContext={...hostContext,...result.hostContext};void preferInline();
   healthy=true;call=async(name,args)=>{const compat=window.openai?.callTool;if(compatibilityTools&&typeof compat==='function')return compat(name,args);try{return await request('tools/call',{name,arguments:args});}catch(error){if(typeof compat==='function'&&(error.code===-32601||name==='y_bar_status'&&!args.notifyAction)){const result=await compat(name,args);compatibilityTools=true;return result;}throw error;}};
   window.parent.postMessage({jsonrpc:'2.0',method:'ui/notifications/initialized'},'*');
   const resize=()=>{const rect=document.querySelector('main').getBoundingClientRect();window.parent.postMessage({jsonrpc:'2.0',method:'ui/notifications/size-changed',params:{width:Math.ceil(rect.width),height:Math.ceil(rect.height)}},'*');};
   if(typeof ResizeObserver==='function')new ResizeObserver(()=>requestAnimationFrame(resize)).observe(document.querySelector('main'));resize();globals();schedule(0);
  }).catch(()=>{if(!call)note('This host did not connect approval controls. Open this conversation on the web or use the Windows approval center. Nothing was approved.');});
  else if(!call)note('Open this component inside the YGPT app in ChatGPT.');
- window.addEventListener('pagehide',()=>{closed=true;clearTimeout(timer);});
- window.addEventListener('pageshow',event=>{closed=false;if(event.persisted){presentationDone=false;closeRequested=false;}globals();refresh();schedule();});
+ window.addEventListener('pagehide',()=>{closed=true;clearTimeout(timer);clearTimeout(presentationTimer);});
+ window.addEventListener('pageshow',event=>{closed=false;if(event.persisted)presentationChanged();globals();refresh();schedule();});
  document.addEventListener('visibilitychange',()=>{if(document.visibilityState!=='hidden'){globals();refresh();schedule();}});
  window.addEventListener('focus',()=>{refresh();schedule();});
 })();

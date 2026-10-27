@@ -1,5 +1,23 @@
 # Changelog
 
+## 1.0.20
+
+- Add account connections inside the existing native Setup, with independent
+  encrypted keys, Tunnel IDs, status, editing and connect/stop controls.
+- Serve up to eight Tunnels through one local engine and browser relay; keep
+  context capabilities, approvals, Full Access and call results account-bound.
+- Preserve the default connection and share program updates across accounts.
+- Isolate connection failures and defer existing-connection changes until idle.
+
+## 1.0.19
+
+- Explicitly prefer inline approval resources and renew their cache identities.
+- Always negotiate on the standard bridge after initialization, even after a silent compatibility no-op.
+- Bound presentation timeouts/recovery and retain host-context changes during negotiation.
+- Do not mistake an inline acknowledgement for a confirmed collapse of an expanded surface.
+- Keep host-restored viewers and missing component mounts separate from fixture acceptance.
+- Add an explicitly enabled, optional-permission ChatGPT display helper for host viewers that restore outside a mounted approval component.
+
 ## 1.0.18
 
 - Added automatic local capability discovery, a per-chat MCP client and unified CLI/Agent dispatch.

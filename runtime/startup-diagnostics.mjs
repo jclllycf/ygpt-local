@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import {randomUUID} from 'node:crypto';
-const version='1.0.18';
+const version='1.0.20';
 const clean=value=>String(value??'').replace(/(?:Bearer\s+\S+|[a-zA-Z_]*(?:token|secret|password)["']?\s*[:=]\s*[^\s,;}]+)/gi,'[redacted]').slice(0,2000);
 function save(file,value){
   const temp=file+'.'+randomUUID()+'.tmp';

@@ -1,0 +1,113 @@
+{
+  "version": "1.0.19",
+  "candidate": true,
+  "presentation": {
+    "availableDisplayModes": [
+      "inline"
+    ],
+    "preferredDisplayMode": "inline",
+    "standardNegotiationAfterCompatibility": true,
+    "boundedPresentationRecovery": true,
+    "legacyResourceAliasesRetained": true
+  },
+  "localValidation": {
+    "nativeBuild": "passed",
+    "approvalDesktopCspTests": {
+      "total": 21,
+      "passed": 21,
+      "failed": 0
+    },
+    "displayHelperExtensionTests": {
+      "total": 44,
+      "passed": 37,
+      "failed": 0,
+      "skipped": 7
+    },
+    "publicSourceAudit": "passed",
+    "setupVersionAndIcons": {
+      "passed": 4,
+      "failed": 0
+    }
+  },
+  "hostObservations": {
+    "existingWebConversationInspected": true,
+    "viewerRestoredAfterRefresh": true,
+    "viewerRestoredWithoutMountedComponent": true,
+    "compatibilityDisplayMethodCanRequireSynchronousUserEvent": true,
+    "newHelperEnabled": "owner-confirmed-and-observed-in-content-script-context",
+    "newHelperRealHostAcceptance": "partial-presentation-passed-host-content-load-errors-remain",
+    "productionApprovalDecisionSubmittedByTest": false,
+    "nativeMobileAcceptance": "not-tested",
+    "ownerAuthorizedHelper": true,
+    "connectedBrowserProfiles": 2,
+    "reportedExtensionVersion": "1.0.19.1",
+    "postActivationWebCheck": {
+      "browserProfile": "owner-selected-luoyu",
+      "originalConversationUsed": true,
+      "reloads": 3,
+      "restoredViewerObservedAfterReload": false,
+      "completedDesktopCardObservedInline": true,
+      "cardUsesCurrentBoundedPresentationBundle": true,
+      "detailsInitiallyCollapsed": true,
+      "appRetryUsedToRecoverCard": true,
+      "ordinaryResponseLoadErrorsAlsoObserved": true,
+      "hostLoadErrorCause": "not-established",
+      "newApprovalDecisionClickTested": false,
+      "otherBrowserProfileAcceptance": "not-tested",
+      "fullAccessAndAdministratorLiveAcceptance": "not-tested",
+      "privateConversationScreenshotPublished": false,
+      "at": "2026-10-26T13:07:08.898Z"
+    }
+  },
+  "access": {
+    "chatgptSitePermission": "optional-owner-enabled",
+    "readsChatBodies": false,
+    "sendsMessagesOrApprovesOperations": false,
+    "browserToolRelayOwnershipChanged": false
+  },
+  "windowsCi": {
+    "commit": "b1a2b3769df64737ffa17707c10aa66bacf7b0d5",
+    "url": "https://github.com/jclllycf/ygpt-local/actions/runs/40322374064",
+    "conclusion": "success",
+    "tests": {
+      "total": 203,
+      "passed": 189,
+      "failed": 0,
+      "skipped": 14
+    }
+  },
+  "installed": {
+    "version": "1.0.19",
+    "manifestFiles": 6616,
+    "manifestMismatches": 0,
+    "packageManifestMatches": true,
+    "protectedCredentialsConnectionPairingUnchanged": true,
+    "stateAuditPassed": true,
+    "health": {
+      "version": "1.0.19",
+      "phase": "connected",
+      "localReady": true,
+      "tunnelConnected": true,
+      "restarts": 0,
+      "lastError": ""
+    }
+  },
+  "packages": [
+    {
+      "file": "YGPTLocal-Setup-1.0.19-win-x64.exe",
+      "bytes": 98861056,
+      "sha256": "0c88b3588915c231dbf0f072605d17097a9b6bf0d1b1f7129e631ab3cb068f2a"
+    },
+    {
+      "file": "YGPTLocal-Update-1.0.19-win-x64.exe",
+      "bytes": 98861056,
+      "sha256": "0ed73670fba465998e16993f3a0becf2bde083a0cadeabe07433c8da8a52b4f2"
+    },
+    {
+      "file": "ygpt-local-portable-1.0.19-win-x64.zip",
+      "bytes": 97863676,
+      "sha256": "00d785ac6c8d368fb9e686fa7f8b9da92d2ad83b2acfacd8cdcabd0add2b4993"
+    }
+  ],
+  "at": "2026-10-26T13:07:08.898Z"
+}

@@ -43,7 +43,7 @@ public static class YGPTApp {
   bool ownSetup;using(var setupOwner=new Mutex(true,"Local\\YGPT-setup-"+HostCore.OwnerId(data),out ownSetup)){if(!ownSetup)return;
   if(args.Contains("--update")||Path.GetFileNameWithoutExtension(Assembly.GetExecutingAssembly().Location).IndexOf("Update",StringComparison.OrdinalIgnoreCase)>=0){ServicePointManager.SecurityProtocol=SecurityProtocolType.Tls12;var updateApp=new Application();updateApp.Run(new UpdateWindow());return;}
   ServicePointManager.SecurityProtocol=SecurityProtocolType.Tls12;
-  var app=new Application();var w=new SetupWindow(data,selectedInstall);
+  var app=new Application();var w=new SetupWindow(data,selectedInstall);if(args.Contains("--connections"))w.OpenConnections();
   if(args.Contains("--uninstall"))w.Loaded+=(s,e)=>w.Uninstall();app.Run(w);}
  }catch(Exception ex){if(args.Contains("--apply-update")){try{string target=Arg(args,"--install-dir",Base),errors=Path.Combine(target,".updates");Directory.CreateDirectory(errors);HostCore.Save(Path.Combine(errors,"last-update-error.json"),new{product="YGPT Local",version=Version,message=ex.Message,at=DateTime.UtcNow.ToString("o")});}catch{}Environment.ExitCode=1;return;}MessageBox.Show(ex.Message,"YGPT Local",MessageBoxButton.OK,MessageBoxImage.Error);Environment.ExitCode=1;}}
  public static string Hash(string file){using(var s=File.OpenRead(file))using(var h=SHA256.Create())return BitConverter.ToString(h.ComputeHash(s)).Replace("-","").ToLowerInvariant();}
