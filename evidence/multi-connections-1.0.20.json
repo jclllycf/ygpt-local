@@ -5,15 +5,16 @@
   "validation": {
     "build": "passed",
     "fullSuite": {
-      "tests": 208,
-      "passed": 194,
+      "tests": 210,
+      "passed": 196,
       "failed": 0,
       "skipped": 14,
       "skipScope": "Platform-specific fixture requirements; not counted as passed"
     },
     "publicSourceAudit": "passed",
     "nativeSetupFixture": "passed; rendered native WPF form with disposable DPAPI credentials",
-    "multiConnectionFixture": "passed; overlapping RPC IDs, forged identity, contexts, approval decisions, Full Access, result tokens, concurrent reads, independent failure and deferred reconfiguration"
+    "multiConnectionFixture": "passed; overlapping RPC IDs, forged identity, contexts, approval decisions, Full Access, result tokens, concurrent reads, independent failure and deferred reconfiguration",
+    "transportLifecycle": "Actual IPC worker tests reclaim the Tunnel child on owner disconnect and stop; unrelated engine work survives"
   },
   "localInstallation": {
     "version": "1.0.20",
@@ -25,23 +26,24 @@
     "engineReady": true,
     "defaultTunnelConnected": true,
     "watchdogRestarts": 0,
-    "secondAccountConfigured": false
+    "secondAccountConfigured": false,
+    "finalPackageInstalled": true
   },
   "artifacts": [
     {
       "file": "YGPTLocal-Setup-1.0.20-win-x64.exe",
-      "bytes": 98937344,
-      "sha256": "68cc4d3f2ea518ee4dac0e7872ca25db755b65ae54b933747127045f6b681159"
+      "bytes": 98937856,
+      "sha256": "fdfcfdb5c419f61c7c0623ebea02292f9abb357557f382797fe598ce68134d6c"
     },
     {
       "file": "YGPTLocal-Update-1.0.20-win-x64.exe",
-      "bytes": 98937344,
-      "sha256": "243af735cdd49c084b4017cb2f0d2a4d3c41564f1c0466043a2722610ec1fbc8"
+      "bytes": 98937856,
+      "sha256": "92f33a85983b99104e842c00c1c714eda92ffdb1f04303a07fbc44a1589504f2"
     },
     {
       "file": "ygpt-local-portable-1.0.20-win-x64.zip",
-      "bytes": 97922740,
-      "sha256": "aa654cd6ed75f6df57b610cef664d4b8dc9f4a62dfd82a87e73e347cc765862f"
+      "bytes": 97923559,
+      "sha256": "9cadb355c2c536b91e3b66a9fe8cdfe60ff7af3259aa3eb63960e8293e1a286f"
     }
   ],
   "acceptance": {
@@ -50,5 +52,5 @@
     "priorPresentationHostLimitations": "1.0.19 host acceptance boundaries remain documented; this feature does not establish new mobile or Administrator acceptance."
   },
   "publicReleaseCreated": false,
-  "at": "2026-10-27T05:20:36.499Z"
+  "at": "2026-10-27T05:31:06.603Z"
 }

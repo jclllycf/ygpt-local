@@ -8,8 +8,9 @@ import {readConnectionProfiles,connectionRoot,connectionRevision,saveConnectionH
 import {ConnectionRouter} from './connection-router.mjs';
 import {nativeWindows} from '../runtime/windows-native.mjs';
 
-export async function startConnectionHost({install,data,pipe,broker,readProfiles=readConnectionProfiles,readSecrets=loadSecrets,checkTunnel=id=>nativeWindows('tunnel-inventory',{id},15000),spawnTunnel=spawn,probeReady,intervalMs=3000}){
+export async function startConnectionHost({install,data,pipe,broker,readProfiles=readConnectionProfiles,readSecrets=loadSecrets,checkTunnel=id=>nativeWindows('tunnel-inventory',{id},15000),spawnTunnel,probeReady,intervalMs=3000}){
 const entries=new Map();let closing=false,ticking=false;
+spawnTunnel??=((executable,args,options)=>spawn(process.execPath,[path.join(install,'service/tunnel-worker.mjs'),executable,...args],{...options,stdio:['ignore','pipe','pipe','ipc']}));
 const router=await new ConnectionRouter({pipe,broker,profile:id=>entries.get(id)}).start();
 const quote=value=>'"'+value.replaceAll('\\','/').replaceAll('"','\\"')+'"';
 const classify=text=>/invalid_api_key|key_expired|\b401\b|unauthorized/i.test(text)?'RUNTIME_KEY_INVALID_OR_EXPIRED':/\b403\b|forbidden|permission_denied/i.test(text)?'TUNNEL_PERMISSION_OR_WORKSPACE_DENIED':/\b429\b|rate.limit/i.test(text)?'OPENAI_TUNNEL_RATE_LIMITED':/certificate|x509/i.test(text)?'TUNNEL_TLS_OR_CERTIFICATE_ERROR':/timeout|unreachable|refused/i.test(text)?'TUNNEL_NETWORK_UNREACHABLE':null;
@@ -32,7 +33,7 @@ function launch(e){
  e.child.on('error',()=>{e.error='TUNNEL_START_FAILED';});
  e.child.once('exit',()=>{e.child=null;e.restarts++;e.retryAt=Date.now()+Math.min(120000,2000*2**Math.min(e.restarts,6));});
 }
-async function stop(e){e.stopping=true;if(e.child){const child=e.child;child.kill();await new Promise(resolve=>{child.once('exit',resolve);setTimeout(resolve,3000).unref();});}e.stopping=false;}
+async function stop(e){e.stopping=true;if(e.child){const child=e.child;await new Promise(resolve=>{child.once('exit',resolve);if(child.connected)child.send({action:'stop'},()=>{});else child.kill();setTimeout(resolve,3000).unref();});}e.stopping=false;}
 async function tick(){
  if(ticking||closing)return;ticking=true;
  try{
@@ -50,7 +51,7 @@ async function tick(){
   }
   for(const [id,e] of entries)if(!wanted.has(id)&&await canChange()){await stop(e);entries.delete(id);}
   const profilesHealth=await Promise.all([...entries.values()].map(async e=>({id:e.id,label:e.label,enabled:e.enabled,connected:await ready(e),phase:!e.enabled?'disabled':e.changePending?'waiting-for-idle':e.blocked?'needs-attention':e.child?'connecting':'reconnecting',restarts:e.restarts,lastError:e.error??'',changePending:e.changePending===true})));
-  for(const h of profilesHealth)if(h.connected)h.phase='connected';
+  for(const h of profilesHealth)if(h.connected){h.phase='connected';h.lastError='';entries.get(h.id).error='';}
   saveConnectionHealth(path.join(data,'connections-health.json'),{product:'YGPT Local',profiles:profilesHealth,at:new Date().toISOString()});
  }catch{saveConnectionHealth(path.join(data,'connections-health.json'),{product:'YGPT Local',error:'CONNECTION_CONFIGURATION_NEEDS_REVIEW',at:new Date().toISOString()});}
  finally{ticking=false;}
