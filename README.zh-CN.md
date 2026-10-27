@@ -77,4 +77,4 @@ RC3 开发不停止当前正常生产 Tunnel，也不把其他 Tunnel 的安装�
 1.0.18 新增本机 MCP 路由与 CLI／Agent 调度，自动发现常见配置，保留各 Agent 的账号、模型、权限和环境。可在对话里分工、查看进度和取消任务，详见 [本机工具指南](docs/LOCAL_TOOLS.md)。原有浏览器调试、6 小时待授权期限和 100 分钟桌面 Full Access 保留。详见[版本说明](docs/RELEASE_1.0.18_ZH.md)。
 
 
-1.0.20 开发候选版新增 Setup 多账号配置：不同账号填写独立 Tunnel 与加密 API Key，同时复用程序、引擎、浏览器配对和 Update 更新。参见[多账号配置指南](docs/ACCOUNT_CONNECTIONS.md)及[候选说明](docs/RELEASE_1.0.20_ZH.md)。所包含的 1.0.19 内嵌显示修正仍保留其宿主验收限制。
+1.0.20 新增 Setup 多账号配置：不同账号填写独立 Tunnel 与加密 API Key，同时复用程序、引擎、浏览器配对和 Update 更新。参见[多账号配置指南](docs/ACCOUNT_CONNECTIONS.md)及[发行说明](docs/RELEASE_1.0.20_ZH.md)。所包含的 1.0.19 内嵌显示修正仍保留其宿主验收限制。
