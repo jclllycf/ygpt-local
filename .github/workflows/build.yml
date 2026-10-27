@@ -19,6 +19,7 @@ concurrency:
 jobs:
   windows:
     runs-on: windows-latest
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -31,6 +32,7 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
       - run: npm run build
       - run: npm test
+        timeout-minutes: 20
         env:
           YGPT_TEST_PYTHON: ${{ github.workspace }}\build\runtimes\python\python.exe
       - run: node scripts/licenses.mjs
