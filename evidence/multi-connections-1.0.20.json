@@ -18,17 +18,16 @@
   },
   "localInstallation": {
     "version": "1.0.20",
-    "manifestFiles": 6624,
+    "manifestFiles": 6625,
     "manifestMismatches": 0,
-    "packageManifestMatches": false,
+    "packageManifestMatches": true,
     "credentialsConnectionPairingPreserved": true,
     "stateAuditPassed": true,
     "engineReady": true,
     "defaultTunnelConnected": true,
     "watchdogRestarts": 0,
     "secondAccountConfigured": false,
-    "finalPackageInstalled": false,
-    "pending": "The initial multi-account candidate remains healthy. Final transport-lifetime update rolled back because the open Setup window holds the assets directory; close Setup before retrying."
+    "finalPackageInstalled": true
   },
   "artifacts": [
     {
@@ -53,5 +52,5 @@
     "priorPresentationHostLimitations": "1.0.19 host acceptance boundaries remain documented; this feature does not establish new mobile or Administrator acceptance."
   },
   "publicReleaseCreated": false,
-  "at": "2026-10-27T05:32:38.441Z"
+  "at": "2026-10-27T05:37:37.615Z"
 }
