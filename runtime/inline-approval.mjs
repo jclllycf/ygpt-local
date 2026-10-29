@@ -2,9 +2,10 @@ import {createHash,randomUUID} from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import {config,RUNTIME,INSTALL} from './config.mjs';
+import {desktopApprovalState} from './desktop-approval-state.mjs';
 // New resource URI forces hosts to fetch the revised CSP and bridge bundle.
-export const BAR_URI='ui://ygpt/approval/strip-v13-inline-preferred.html';
-export const FULL_ACCESS_URI='ui://ygpt/access/full-v4-inline-preferred.html';
+export const BAR_URI='ui://ygpt/approval/strip-v14-desktop-access.html';
+export const FULL_ACCESS_URI='ui://ygpt/access/full-v5-desktop-access.html';
 // The prior ChatGPT tool catalog can retain this URI across conversations.
 // Serve the NEW strip at this legacy address rather than the retired large card.
 export const LEGACY_BAR_URI='ui://ygpt/approval/card-v1.html';
@@ -12,7 +13,7 @@ export const LEGACY_BAR_URI='ui://ygpt/approval/card-v1.html';
 export const INSPECTION_URI=config.chatAppConsent?BAR_URI:'ui://ygpt/approval/inspection-v1.html';
 // Resource addresses are protocol identifiers, not display branding. Old chats
 // retain these exact addresses and must still receive the current component.
-const knownResources=[BAR_URI,FULL_ACCESS_URI,'ui://ygpt/approval/strip-v12-no-panel.html','ui://ygpt/access/full-v3-no-panel.html','ui://ygpt/approval/strip-v11-inline-wait.html','ui://ygpt/access/full-v2-inline.html','ui://ygpt/approval/strip-v10-context-recovery.html','ui://ygpt/access/full-v1.html','ui://ygpt/approval/strip-v9-access-options.html','ui://ygpt/approval/strip-v8-desktop-flow.html',LEGACY_BAR_URI,INSPECTION_URI,'ui://ygpt/approval/strip-v5.html','ui://ygpt/approval/compact-v1-rc2.html','ui://ygpt/approval/strip-v4-rc18.html','ui://ygpt/approval/strip-v3.html',...['compact-v11-3','interactive-v11-2c','interactive-v11-2b','interactive-v11-2','interactive-v11-1','interactive-v11','inspection-v1'].map(n=>'ui://ygpt/approval/'+n+'.html')];
+const knownResources=[BAR_URI,FULL_ACCESS_URI,'ui://ygpt/approval/strip-v13-inline-preferred.html','ui://ygpt/access/full-v4-inline-preferred.html','ui://ygpt/approval/strip-v12-no-panel.html','ui://ygpt/access/full-v3-no-panel.html','ui://ygpt/approval/strip-v11-inline-wait.html','ui://ygpt/access/full-v2-inline.html','ui://ygpt/approval/strip-v10-context-recovery.html','ui://ygpt/access/full-v1.html','ui://ygpt/approval/strip-v9-access-options.html','ui://ygpt/approval/strip-v8-desktop-flow.html',LEGACY_BAR_URI,INSPECTION_URI,'ui://ygpt/approval/strip-v5.html','ui://ygpt/approval/compact-v1-rc2.html','ui://ygpt/approval/strip-v4-rc18.html','ui://ygpt/approval/strip-v3.html',...['compact-v11-3','interactive-v11-2c','interactive-v11-2b','interactive-v11-2','interactive-v11-1','interactive-v11','inspection-v1'].map(n=>'ui://ygpt/approval/'+n+'.html')];
 export const approvalGuidance='Show one fresh inline approval card for this request at the current conversation step, with details collapsed. Do not open a side panel or reuse an earlier request card. Immediately call y_wait_approval with the original requestId, resultToken and contextToken. While continueWaiting or taskPending is true, call y_wait_approval again with those same arguments; a bounded wait timeout is not task completion. Do not send a final answer saying approved work is blocked, finished or needs a new user message merely because a decision is pending. After the decision, continue the original task from its existing result without repeating the action. If the host ended the response, the card sends one continuation notification when no wait is active. The host controls exact card placement and whether cards mount during generation; do not promise to override that. Only an explicit card or local-center decision grants permission.';
 export function approvalTaskState(state){
  const pending=['awaiting_user','approved','running'].includes(state);
@@ -36,10 +37,11 @@ export function chatApprovalResult(ledger,args={}){
   return {isError:true,content:[{type:'text',text:JSON.stringify(value)}],structuredContent:value,_meta:{yBar:{...value,instanceId:'ygpt-approval-recovery-'+randomUUID(),uiToken:'',presentation:{title:'Refresh this approval',target:'Original chat context required',impact:'This card is unavailable. The original operation remains saved; no action was executed.',purpose:message,technical:code},chatScope:{eligible:false},enabled:false,note:'Ask ChatGPT to refresh this approval with the original chat context. If it is lost, use the Windows approval center. No action was executed.'}}};
  }
  const enabled=barEnabled()&&matched&&operation.state==='awaiting_user'&&Date.parse(operation.expiresAt)>Date.now();
- const value={requestId:operation?.id??'NONE',state:operation?.state??'not_found',approvalEnabled:enabled,requiresOriginalChatContext:!!operation&&!matched,...approvalTaskState(operation?.state),renderer:'mcp-app',message:approvalGuidance};
+ const value={requestId:operation?.id??'NONE',state:operation?.state??'not_found',...desktopApprovalState(ledger,operation),approvalEnabled:enabled,requiresOriginalChatContext:!!operation&&!matched,...approvalTaskState(operation?.state),renderer:'mcp-app',message:approvalGuidance};
+ const error=operation&&ledger.result(operation.id)?.structuredContent?.error,executionError=error?{code:error.code,message:String(error.message??'').slice(0,500),outcomeUnknown:!!error.outcomeUnknown}:undefined;
  const presentation=operation?.presentation??{title:'No request to review',target:'No pending operation selected',impact:'No command or file change will run.',purpose:'Pass a pending requestId and its original contextToken.',denied:'Nothing changes.',risk:'None',reversible:'No operation',administrator:'No elevation',technical:''};
  // Keep the capability exclusively in the host-to-app metadata channel.
- return {content:[{type:'text',text:JSON.stringify(value)}],structuredContent:value,_meta:{yBar:{...value,instanceId:'ygpt-approval-'+value.requestId+'-'+randomUUID(),uiToken:barEnabled()&&matched?ledger.grant('ui',operation.id):'',presentation:{...presentation,displayMode:'inline'},chatScope:operation?.chatScope??{eligible:false,explanation:'No conversation grant available.'},expiresAt:operation?.expiresAt??null,enabled,demo:false,note:matched?'':operation?'Use the pending request and original contextToken from the chat that created it. Do not repeat the action.':'No pending request.'}}};
+ return {content:[{type:'text',text:JSON.stringify(value)}],structuredContent:value,_meta:{yBar:{...value,executionError,instanceId:'ygpt-approval-'+value.requestId+'-'+randomUUID(),uiToken:barEnabled()&&matched?ledger.grant('ui',operation.id):'',presentation:{...presentation,displayMode:'inline'},chatScope:operation?.chatScope??{eligible:false,explanation:'No conversation grant available.'},expiresAt:operation?.expiresAt??null,enabled,demo:false,note:matched?'':operation?'Use the pending request and original contextToken from the chat that created it. Do not repeat the action.':'No pending request.'}}};
 }
 const text=value=>({content:[{type:'text',text:JSON.stringify(value)}],structuredContent:value});
 export const barTools=[
@@ -103,7 +105,7 @@ export function handleBar(name,args,ledger,onApproved,isWaiting=()=>false){
  if(name==='y_bar_status'){
   const delivery=args.notifyAction==='claim'||args.notifyAction==='retry'?ledger.reserveUiDelivery(id,args.notifyAction==='retry'):args.notifyAction==='sent'||args.notifyAction==='uncertain'?ledger.finishUiDelivery(id,args.deliveryToken,args.notifyAction==='sent'):null;
   const result=ledger.result(id),error=result?.structuredContent?.error;
-  return text({requestId:id,state:operation.state,updatedAt:operation.updatedAt,expiresAt:operation.expiresAt,rendererConnected:true,notificationSent:ledger.uiDelivery(id)?.event==='ui_notify_sent',continuation,...(error?{executionError:{code:error.code,message:String(error.message??'').slice(0,500),outcomeUnknown:!!error.outcomeUnknown}}:{}),...(delivery?{delivery}:{})});
+  return text({requestId:id,state:operation.state,updatedAt:operation.updatedAt,expiresAt:operation.expiresAt,...desktopApprovalState(ledger,operation),rendererConnected:true,notificationSent:ledger.uiDelivery(id)?.event==='ui_notify_sent',continuation,...(error?{executionError:{code:error.code,message:String(error.message??'').slice(0,500),outcomeUnknown:!!error.outcomeUnknown}}:{}),...(delivery?{delivery}:{})});
  }
  if(!config.allowInlineDecisions)throw Error('Inline decisions disabled until the trusted host passes acceptance');
  ledger.event(id,'ui_decision_received','app-capability-validated');

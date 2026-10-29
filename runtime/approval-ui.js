@@ -86,7 +86,7 @@
   else if(!healthy)note('Connecting to approval controls… If buttons do not appear, open this same conversation on the web or use the Windows approval center.');
   else if(enabled)note(p.approveLabel?'Choose '+p.approveLabel+' or Deny. This applies only to the chat and duration shown above.':card.chatScope?.eligible?'Review the exact action, then choose. A decision on another device appears here automatically.':'Choose Allow once or Deny. The same decision is shared with your other devices.');
   else if(card.state==='succeeded')note('Completed. The original result is available.');
-  else if(card.state==='failed'||card.state==='unknown')note((card.executionError?.code?card.executionError.code+': ':'')+(card.executionError?.message||'The desktop action did not return a confirmed success.')+(card.executionError?.outcomeUnknown?' Inspect the window before retrying; no action was resubmitted.':' Your authorization was saved. Inspect the target before choosing the next action.'));
+  else if(card.state==='failed'||card.state==='unknown')note((card.desktopAccess?.active?'Full Access is enabled for this chat. The selected desktop step failed. ':'')+(card.executionError?.code?card.executionError.code+': ':'')+(card.executionError?.message||'The desktop action did not return a confirmed success.')+(card.executionError?.outcomeUnknown?' Inspect the window before retrying; no action was resubmitted.':card.desktopAccess?.active?' Read the current windows and bind the intended target; no new approval is needed while access is active.':' Your decision was saved. Inspect the target before choosing the next action.'));
   else if(card.state==='denied')note('Denied. Nothing was executed.');
   void preferInline();
  }
@@ -144,7 +144,7 @@
   try{
    const value=unwrap(await call('y_bar_status',{requestId:id,uiToken:current.uiToken}));healthy=true;failures=0;
    if(card?.requestId!==id)return;
-   const before=card.state,wasWaiting=deliveries.get(id)==='waiting';card={...card,state:stableState(id,value.state),expiresAt:value.expiresAt??card.expiresAt,executionError:value.executionError??card.executionError};
+   const before=card.state,wasWaiting=deliveries.get(id)==='waiting';card={...card,state:stableState(id,value.state),expiresAt:value.expiresAt??card.expiresAt,executionError:value.executionError??card.executionError,desktopAccess:value.desktopAccess??card.desktopAccess,stateLabel:value.desktopAccess?value.stateLabel:card.stateLabel};
    const decided=['approved','running','succeeded','failed','unknown','denied'].includes(card.state);
    if(value.notificationSent)delivery(id,'sent');else if(decided&&value.continuation==='result-returned')delivery(id,'returned');else if(decided&&value.continuation==='waiting-tool')delivery(id,'waiting');render();
    if(decided&&!['waiting-tool','result-returned'].includes(value.continuation)&&!value.notificationSent&&(before==='awaiting_user'||wasWaiting))await notify();
@@ -172,7 +172,7 @@
   if(card){render();schedule(0);}
  }
  window.addEventListener('openai:set_globals',globals);globals();
- if(window.parent!==window)request('ui/initialize',{appInfo:{name:'YGPT approval',version:'1.0.20'},appCapabilities:{availableDisplayModes:['inline']},protocolVersion:'2026-01-26'}).then(result=>{
+ if(window.parent!==window)request('ui/initialize',{appInfo:{name:'YGPT approval',version:'1.0.21'},appCapabilities:{availableDisplayModes:['inline']},protocolVersion:'2026-01-26'}).then(result=>{
   // Some ChatGPT compatibility methods silently ignore calls without a
   // synchronous user event. Always negotiate again over the real standard
   // bridge, even when its initial mode matches the compatibility globals.

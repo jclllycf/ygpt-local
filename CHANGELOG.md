@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.0.21
+
+- Preserve an explicitly approved 100-minute desktop chat grant when the
+  originally reviewed window disappears or changes while waiting for consent.
+- Refuse the stale desktop step with a durable `DESKTOP_TARGET_STALE` result
+  and guide the same chat to read current windows and bind a fresh target.
+- Show granted access separately from failed execution in desktop and mobile
+  approval cards, with renewed resource URIs and existing inline defaults.
+- Keep original operations terminal, preserve account/context isolation, and
+  never reactivate historical approvals or replay an old action on upgrade.
+
 ## 1.0.20
 
 - Add account connections inside the existing native Setup, with independent
