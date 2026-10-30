@@ -63,7 +63,7 @@ export class LocalMcp {
             const fetch=async(input,init={})=>{const target=new URL(typeof input==='string'||input instanceof URL?input:input.url);if(target.origin!==url.origin)throw new EngineError('MCP_ORIGIN_CHANGED','MCP transport attempted to change origin');return globalThis.fetch(input,{...init,redirect:'error'});};
             transport=spec.transport==='sse'?new SSEClientTransport(url,{requestInit:{headers},fetch}):new StreamableHTTPClientTransport(url,{requestInit:{headers},fetch,reconnectionOptions:{maxRetries:0}});
           }
-          entry.transport=transport;entry.client=new Client({name:'YGPT Local tool router',version:'1.0.20'},{capabilities:{}});
+          entry.transport=transport;entry.client=new Client({name:'YGPT Local tool router',version:'1.0.22'},{capabilities:{}});
           await entry.client.connect(transport,{timeout:20000});
         }
         if(entry.client.getServerVersion?.()?.name==='YGPT Local')throw new EngineError('MCP_RECURSION','The configured endpoint routes back to YGPT Local');

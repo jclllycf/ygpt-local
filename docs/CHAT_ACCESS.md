@@ -23,6 +23,14 @@ Use `y_admin_run` with an explicit `.exe`, literal `args`, absolute `cwd` and op
 
 While active, this chat may read private files, modify files, run commands and operate desktop windows without further YGPT policy approvals. Other chats retain Standard mode. Requests already waiting for a decision remain pending; enabling Full Access does not execute them. Retrieve any existing approved result instead of replaying the operation.
 
+Desktop consent and the selected window step have separate outcomes. From
+1.0.21, if that window disappears or changes while waiting, the confirmed
+100-minute grant remains active, but the old step returns
+`DESKTOP_TARGET_STALE` without execution. Keep the original contextToken, read
+the current windows and bind the intended target; no new approval is needed
+while the grant is active. The card reports “Access granted” with the desktop
+error. Upgrading never reactivates failed historical requests or replays them.
+
 The mode does not elevate Windows privileges. Schema, valid local paths, preimage checks, task output tokens, resource ownership and engine limits remain enforced. Other chats' browser tabs, windows, processes and jobs remain inaccessible. Revocation affects subsequent authorization checks; it does not cancel a running process or undo completed actions. Renewal requires another explicit card decision.
 
 A chat context is a server-issued capability, not an authenticated OpenAI conversation identity. Do not copy its token into another conversation, public logs or GitHub. A restarted broker may retain the grant until its original expiration while that context remains live. If a host does not report conversation closure, the fixed expiration and explicit revoke action provide the end boundary.

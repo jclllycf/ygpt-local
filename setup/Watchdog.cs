@@ -11,6 +11,9 @@ using Microsoft.Win32.SafeHandles;
 
 public static class YGPTWatchdog {
  static DateTime nextHousekeeping=DateTime.MinValue;
+ static DateTime nextStartupCheck=DateTime.MinValue;
+ static Dictionary<string,object> startupRegistration;
+ static void CheckStartup(){if(DateTime.UtcNow<nextStartupCheck)return;nextStartupCheck=DateTime.UtcNow.AddMinutes(5);try{startupRegistration=HostCore.CheckStartupRegistration(install,data);}catch{startupRegistration=new Dictionary<string,object>{{"state","check-failed"},{"error","STARTUP_TASK_CHECK_FAILED"},{"checkedAt",DateTime.UtcNow.ToString("o")}};}}
  static string install=AppDomain.CurrentDomain.BaseDirectory,data;static Process child;static int restarts=0;static bool authFailure=false;static string phase="starting",lastError="";static int lastExitCode=-1,retryInSeconds=0;static DateTime started=DateTime.UtcNow;static IntPtr job=IntPtr.Zero;
  [DllImport("kernel32.dll",CharSet=CharSet.Unicode)] static extern IntPtr CreateJobObject(IntPtr attributes,string name);
  [DllImport("kernel32.dll",SetLastError=true)] static extern bool SetInformationJobObject(IntPtr job,int cls,IntPtr info,uint length);
@@ -34,7 +37,7 @@ public static class YGPTWatchdog {
    return failure;
   }catch{return null;}
  }
- static void Health(bool localReady,bool connected){var startupFailure=StartupFailure(localReady);if(startupFailure!=null)lastError=HostCore.S(startupFailure,"code","STARTUP_FAILED");HostCore.Save(Path.Combine(data,"watchdog-health.json"),new{product="YGPT Local",version=HostCore.Version,ownerId=HostCore.OwnerId(data),installRoot=install,pid=Process.GetCurrentProcess().Id,birth=Process.GetCurrentProcess().StartTime.ToUniversalTime().Ticks,childPid=child!=null&&!child.HasExited?(int?)child.Id:null,phase=startupFailure!=null?"engine-startup-failed":phase,localReady=localReady,tunnelConnected=connected,restarts=restarts,lastError=lastError,startupFailure=startupFailure,lastExitCode=lastExitCode,retryInSeconds=retryInSeconds,stopped=phase=="stopped",guiRequired=false,at=DateTime.UtcNow.ToString("o")});}
+ static void Health(bool localReady,bool connected){var startupFailure=StartupFailure(localReady);if(startupFailure!=null)lastError=HostCore.S(startupFailure,"code","STARTUP_FAILED");HostCore.Save(Path.Combine(data,"watchdog-health.json"),new{product="YGPT Local",version=HostCore.Version,ownerId=HostCore.OwnerId(data),installRoot=install,pid=Process.GetCurrentProcess().Id,birth=Process.GetCurrentProcess().StartTime.ToUniversalTime().Ticks,childPid=child!=null&&!child.HasExited?(int?)child.Id:null,phase=startupFailure!=null?"engine-startup-failed":phase,localReady=localReady,tunnelConnected=connected,restarts=restarts,lastError=lastError,startupFailure=startupFailure,startupRegistration=startupRegistration,lastExitCode=lastExitCode,retryInSeconds=retryInSeconds,stopped=phase=="stopped",guiRequired=false,at=DateTime.UtcNow.ToString("o")});}
  static bool Connected(){try{string p=Path.Combine(data,"tunnel-health.url");HostCore.CheckPath(p);var u=new Uri(File.ReadAllText(p).Trim());if(u.Scheme!="http"||u.Host!="127.0.0.1"||u.IsDefaultPort||u.UserInfo!=""||u.Query!=""||u.Fragment!="")return false;var q=(HttpWebRequest)WebRequest.Create(u.GetLeftPart(UriPartial.Authority)+"/readyz");q.Proxy=null;q.Timeout=2000;using(var r=(HttpWebResponse)q.GetResponse())return r.StatusCode==HttpStatusCode.OK;}catch{return false;}}
  static string ClassifyClientError(string line){
   if(String.IsNullOrWhiteSpace(line))return "";
@@ -85,6 +88,7 @@ public static class YGPTWatchdog {
    var connection=HostCore.Read(Path.Combine(data,"connection.json"));var secrets=HostCore.Secrets(data);bool fresh;using(var owner=new Mutex(true,"Local\\YGPT-owner-"+HostCore.OwnerId(data),out fresh)){if(!fresh)return 0;
     string tunnel=HostCore.S(connection,"tunnelId",HostCore.S(connection,"publicOrigin",data));bool unique;using(var tunnelOwner=new Mutex(true,"Local\\YGPT-tunnel-"+HostCore.HashText(System.Security.Principal.WindowsIdentity.GetCurrent().User.Value+"|"+tunnel).Substring(0,32),out unique)){if(!unique){phase="other-owner-active";Health(false,false);return 2;}
      int failures=0;while(!File.Exists(Path.Combine(data,"paused"))){
+      CheckStartup();
       if(child!=null&&child.HasExited){try{child.WaitForExit(300);}catch{}try{lastExitCode=child.ExitCode;}catch{lastExitCode=-1;}if(lastError=="")lastError="TUNNEL_CLIENT_EXITED_CODE_"+lastExitCode;if(authFailure){StopChild();phase="credentials-required";Health(false,false);return 0;}StopChild();failures++;restarts++;phase="reconnecting";int backoff=Math.Min(120,2*(1<<Math.Min(failures,6)));WaitRetry(backoff);if(File.Exists(Path.Combine(data,"paused")))break;}
       if(child==null){try{lastExitCode=-1;Launch(connection,secrets);phase="starting";}catch(Exception e){lastError=new[]{"TUNNEL_ALREADY_OWNED","TUNNEL_OWNER_UNKNOWN","PROXY_SETTINGS_INVALID","OWNED_JOB_UNAVAILABLE"}.Contains(e.Message)?e.Message:"START_FAILED";phase="needs-attention";Health(false,false);return 3;}}
       bool local=false;try{local=HostCore.B(HostCore.Control(data,"status"),"localReady");}catch{}

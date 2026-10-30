@@ -72,3 +72,33 @@ test('Numbered Chrome profiles permit only the owned network-service capability 
  const cache=path.join(state,'home','AppData','Local','Google','Chrome','User Data','Profile 1','Cache');grant(cache,'S-1-1-0');
  assert.throws(()=>nativeWindows('state-verify',{root:state}),e=>e.code==='STATE_DESCENDANT_ACL_UNSAFE'&&e.path===cache);
 });
+
+test('Known installer and WebView caches accept only their expected principals, never control state or links',{skip:process.platform!=='win32'},()=>{
+ const dir=fs.mkdtempSync(path.join(nativeTestRoot,'application-caches-')),state=path.join(dir,'state');
+ const prepared=nativeWindows('state-prepare',{root:state});
+ const edgeSid='S-1-15-3-1024-3239966617-1410756637-3494353204-65451782-2225605771-3526040376-1730753648-3419555762';
+ const grant=(p,sid)=>execFileSync('icacls.exe',[p,'/grant','*'+sid+':M'],{windowsHide:true,stdio:'pipe'});
+ const owner=p=>execFileSync('icacls.exe',[p,'/setowner','*'+prepared.ownerSid,'/T','/Q'],{windowsHide:true,stdio:'pipe'});
+ const add=(relative,sid,file=false)=>{const p=path.join(state,relative);fs.mkdirSync(file?path.dirname(p):p,{recursive:true});if(file)fs.writeFileSync(p,'fixture');grant(p,sid);owner(p);return p;};
+ const wheel='engine-home/AppData/Local/pip/cache/wheels/ab/cd/ef/0123456789abcdef01234567/example.whl';
+ for(const [relative,sid,file] of [
+  ['tmp/WinGet','S-1-5-32-544'],['tmp/WinGet/package/cache.bin','S-1-5-32-544',true],
+  [wheel,'S-1-5-32-544',true],
+  ['tmp/tmpabcdef12/EBWebView/Default/Cache',edgeSid],
+  ['home/AppData/Roaming/Example.exe/EBWebView/Default/Network',edgeSid],
+  ['engine-home/AppData/Local/io.github.clash-verge-rev.clash-verge-rev/EBWebView/Default/Shared Dictionary',edgeSid]
+ ])add(relative,sid,file);
+ owner(state);assert.equal(nativeWindows('state-verify',{root:state}).descendantsChecked,true);
+ const remove=p=>{assert.ok(path.resolve(p).startsWith(path.resolve(state)+path.sep));fs.rmSync(p,{recursive:true});};
+ for(const [relative,sid,file] of [
+  ['tmp/WinGet-lookalike','S-1-5-32-544'],['tmp/ordinary','S-1-5-32-544'],
+  ['engine-home/AppData/Local/pip/cache/wheels/ab/cd/ef/0123456789abcdef01234567/private.json','S-1-5-32-544',true],
+  ['home/AppData/Roaming/Example.exe/EBWebView/Default/Credentials',edgeSid],
+  ['tmp/tmpabcdef12/Default/Network',edgeSid],['credentials.dpapi','S-1-5-32-544',true]
+ ]){const p=add(relative,sid,file);assert.throws(()=>nativeWindows('state-verify',{root:state}),e=>e.code==='STATE_DESCENDANT_ACL_UNSAFE'&&e.path===p,relative);remove(p);}
+ const cache=path.join(state,'tmp','WinGet');grant(cache,'S-1-1-0');
+ assert.throws(()=>nativeWindows('state-verify',{root:state}),e=>e.code==='STATE_DESCENDANT_ACL_UNSAFE'&&e.path===cache);
+ execFileSync('icacls.exe',[cache,'/remove:g','*S-1-1-0'],{windowsHide:true,stdio:'pipe'});
+ const outside=path.join(dir,'outside'),link=path.join(cache,'linked');fs.mkdirSync(outside);fs.symlinkSync(outside,link,'junction');
+ assert.throws(()=>nativeWindows('state-verify',{root:state}),e=>e.code==='STATE_LINK_REFUSED'&&e.path===link);
+});
