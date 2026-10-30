@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.0.22
+
+- Validate the background executable against the installed manifest and report
+  missing or changed files as installation repairs, separately from Tunnel keys.
+- Reconcile the enabled, exact-owner startup task periodically and add a
+  five-minute recovery trigger alongside sign-in startup, without elevating,
+  overriding disabled/foreign tasks, or restoring quarantined files.
+- Report live process identity and actual startup registration in Settings and
+  Watchdog health rather than treating an old heartbeat as a working connection.
+- Recognize narrowly scoped WinGet, pip wheel and embedded WebView cache ACLs
+  owned by the current user. Preserve credential, unknown-principal and link
+  rejection; never relax the private state root.
+
 ## 1.0.21
 
 - Preserve an explicitly approved 100-minute desktop chat grant when the

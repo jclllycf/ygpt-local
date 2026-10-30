@@ -8,7 +8,7 @@ export class BrokerClient{
  readline.createInterface({input:this.child.stdout}).on('line',s=>{let m;try{m=JSON.parse(s);}catch{return;}const p=this.pending.get(m.id);if(!p)return;this.pending.delete(m.id);clearTimeout(p.timer);m.error?p.reject(Object.assign(Error(m.error.message),{code:m.error.code})):p.resolve(m.result);});
  this.child.once('exit',()=>{this.exited=true;for(const p of this.pending.values()){clearTimeout(p.timer);p.reject(Error('Broker disconnected. Query existing operation before retrying any write.'));}this.pending.clear();});
  if(!initialize)return this;
- try{this.info=await this.rpc('initialize',{protocolVersion:'2025-11-25',capabilities:{},clientInfo:{name:'YGPT Local supervisor',version:'1.0.21'}});this.notify('notifications/initialized');return this;}catch(e){await this.close();throw e;}}
+ try{this.info=await this.rpc('initialize',{protocolVersion:'2025-11-25',capabilities:{},clientInfo:{name:'YGPT Local supervisor',version:'1.0.22'}});this.notify('notifications/initialized');return this;}catch(e){await this.close();throw e;}}
  notify(method,params={}){this.child.stdin.write(JSON.stringify({jsonrpc:'2.0',method,params})+'\n');}
  rpc(method,params={},timeoutMs=60000){if(this.exited)return Promise.reject(Error('Broker is offline; no operation was replayed'));const id=++this.seq;return new Promise((resolve,reject)=>{const timer=setTimeout(()=>{this.pending.delete(id);reject(Error('Request timed out. Check its status before retrying.'));},timeoutMs);this.pending.set(id,{resolve,reject,timer});this.child.stdin.write(JSON.stringify({jsonrpc:'2.0',id,method,params})+'\n');});}
  call(name,args={}){return this.rpc('tools/call',{name,arguments:args});}
