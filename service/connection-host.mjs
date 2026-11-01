@@ -63,7 +63,9 @@ return {tick,close:shutdown,entries,router};
 }
 if(process.argv[1]&&path.resolve(process.argv[1])===fileURLToPath(import.meta.url)){
  const install=fileURLToPath(new URL('..',import.meta.url)),data=path.resolve(process.argv[2]),pipe=process.env.YGPT_CONTROL_PIPE+'-connections';
- const broker=await new BrokerClient({entry:path.join(install,'runtime/bootstrap.mjs'),config:path.join(data,'ygpt.config.json'),cwd:install,trustConnectionMeta:true}).start({initialize:false});
+ // Complete local state verification and engine initialization before exposing
+ // ready Tunnels. A remote request must not spend its host deadline booting us.
+ const broker=await new BrokerClient({entry:path.join(install,'runtime/bootstrap.mjs'),config:path.join(data,'ygpt.config.json'),cwd:install,trustConnectionMeta:true}).start();
  const host=await startConnectionHost({install,data,pipe,broker});
  process.once('SIGINT',()=>void host.close());process.once('SIGTERM',()=>void host.close());
 }

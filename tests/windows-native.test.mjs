@@ -18,6 +18,7 @@ test('Native Windows checks preserve read-only AST boundaries without executing 
 test('Native state ACL audit rejects a linked descendant and a drive root; never weakens private state',()=>{
  const dir=fs.mkdtempSync(path.join(nativeTestRoot,'native-')),state=path.join(dir,'state');
  assert.equal(nativeWindows('state-prepare',{root:state}).protected,true);fs.writeFileSync(path.join(state,'ordinary.txt'),'KEEP');assert.equal(nativeWindows('state-verify',{root:state}).descendantsChecked,true);
+ assert.equal(nativeWindows('state-prepare',{root:state}).rootAclChanged,false,'An already-private root must not re-propagate its DACL across every descendant');
  assert.throws(()=>nativeWindows('state-prepare',{root:path.parse(state).root}),/DRIVE_ROOT_REFUSED/);
  const target=path.join(dir,'outside');fs.mkdirSync(target);fs.writeFileSync(path.join(target,'untouched.txt'),'UNTOUCHED');fs.symlinkSync(target,path.join(state,'link'),'junction');
  assert.throws(()=>nativeWindows('state-verify',{root:state}),/STATE_LINK_REFUSED/);assert.equal(fs.readFileSync(path.join(target,'untouched.txt'),'utf8'),'UNTOUCHED');

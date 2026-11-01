@@ -1,5 +1,21 @@
 # Changelog
 
+## 1.0.23
+
+- Give transport, broker and terminal workers a checked per-state TEMP/TMP
+  sibling outside authorization state. Java and other vendor temporary ACLs
+  can no longer contaminate the controller's recursive startup audit.
+- Keep the temporary outer boundary owner-only and reject replacement links,
+  foreign ownership or broadened access. Temporary contents are not trusted
+  as keys, permissions, job records or configuration.
+- Retain the last observed engine startup failure across transport retries;
+  only a ready local engine and connected Tunnel reset reconnect backoff.
+- Finish bounded local initialization before advertising ready Tunnels, and
+  diagnose large-state audit timeouts separately from missing native helpers.
+- Avoid reapplying an already-private root ACL to its full descendant tree on
+  every restart; retain the complete descendant verification.
+- Preserve all existing account identities and state, with no automatic replay.
+
 ## 1.0.22
 
 - Validate the background executable against the installed manifest and report

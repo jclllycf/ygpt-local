@@ -13,7 +13,10 @@ public static class WatchdogStartupRegression {
   Failure(root,launch.AddMilliseconds(1));var h=Health(root,false);
   Check(HostCore.S(h,"lastError")=="STATE_LINK_REFUSED"&&HostCore.S(h,"phase")=="engine-startup-failed","Watchdog hid the startup refusal");
   var failure=h["startupFailure"] as Dictionary<string,object>;Check(failure!=null&&HostCore.S(failure,"path")==@"D:\YGPT state\link"&&HostCore.S(failure,"target")==@"\??\D:\wrong","Watchdog lost refusal paths");
+  Set("started",launch.AddMinutes(1));h=Health(root,false);
+  Check(h["startupFailure"]==null&&h["lastStartupFailure"]!=null&&HostCore.S(h,"lastError")=="STATE_LINK_REFUSED","Retry erased the last observed engine failure");
   Set("lastError","");h=Health(root,true);Check(h["startupFailure"]==null,"Healthy engine retained a startup failure");
+  Check(h["lastStartupFailure"]==null,"Recovery retained obsolete retry diagnostics");
   Failure(root,launch.AddMinutes(-1));h=Health(root,false);Check(h["startupFailure"]==null,"Prior transport failure masqueraded as this launch");
   Console.WriteLine("WATCHDOG_STARTUP_PASS");return 0;
  }

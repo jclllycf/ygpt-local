@@ -15,6 +15,12 @@ test('Native state refusal preserves the error code, offending path and reparse 
   });
 });
 
+test('A bounded native audit timeout is diagnosed and never treated as verified state',t=>{
+ t.mock.method(childProcess,'spawnSync',()=>({status:null,stdout:'',error:Object.assign(Error('timed out'),{code:'ETIMEDOUT'})}));syncBuiltinESMExports();
+ t.after(()=>{t.mock.restoreAll();syncBuiltinESMExports();});
+ assert.throws(()=>nativeWindows('state-verify',{root:'D:\\fixture-state'},10),e=>e.code==='STATE_AUDIT_TIMEOUT');
+});
+
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';

@@ -15,7 +15,7 @@ using Microsoft.Win32;
 using Microsoft.Win32.SafeHandles;
 
 public static class HostCore {
- public const string Version="1.0.22";
+ public const string Version="1.0.23";
  public static readonly JavaScriptSerializer Json=new JavaScriptSerializer{MaxJsonLength=32*1024*1024};
  public static string Full(string p){return Path.GetFullPath(p).TrimEnd(Path.DirectorySeparatorChar);}
  // Fresh-install defaults prefer a non-system fixed drive (D: when present)
@@ -39,6 +39,16 @@ public static class HostCore {
  public static void CheckPath(string p){for(string t=Path.GetFullPath(p);!String.IsNullOrEmpty(t);t=Path.GetDirectoryName(t)){if((File.Exists(t)||Directory.Exists(t))&&(File.GetAttributes(t)&FileAttributes.ReparsePoint)!=0)throw new IOException("Linked paths are not permitted");}}
  public static bool Within(string p,string root){return Full(p).StartsWith(Full(root)+"\\",StringComparison.OrdinalIgnoreCase);}
  public static void PrivateDirectory(string p){CheckPath(p);Directory.CreateDirectory(p);var acl=new DirectorySecurity();acl.SetAccessRuleProtection(true,false);foreach(var sid in new[]{WindowsIdentity.GetCurrent().User,new SecurityIdentifier("S-1-5-18")})acl.AddAccessRule(new FileSystemAccessRule(sid,FileSystemRights.FullControl,InheritanceFlags.ContainerInherit|InheritanceFlags.ObjectInherit,PropagationFlags.None,AccessControlType.Allow));Directory.SetAccessControl(p,acl);}
+ // Application TEMP is not authorization state. Audit only its private outer
+ // boundary; vendor-created descendants are never used as control authority.
+ public static string ExecutionTempRoot(string state){
+  state=Full(state);if(state==Path.GetPathRoot(state).TrimEnd('\\'))throw new IOException("DRIVE_ROOT_REFUSED");CheckPath(state);
+  string temp=state+".work-tmp";CheckPath(temp);if(File.Exists(temp))throw new IOException("EXECUTION_TEMP_NOT_DIRECTORY");
+  if(!Directory.Exists(temp)){PrivateDirectory(temp);var fresh=Directory.GetAccessControl(temp);fresh.SetOwner(WindowsIdentity.GetCurrent().User);Directory.SetAccessControl(temp,fresh);}
+  var acl=Directory.GetAccessControl(temp);string sid=WindowsIdentity.GetCurrent().User.Value;
+  if(acl.GetOwner(typeof(SecurityIdentifier)).Value!=sid||!acl.AreAccessRulesProtected||acl.GetAccessRules(true,true,typeof(SecurityIdentifier)).Cast<FileSystemAccessRule>().Any(r=>r.AccessControlType==AccessControlType.Allow&&r.IdentityReference.Value!=sid&&r.IdentityReference.Value!="S-1-5-18"))throw new IOException("EXECUTION_TEMP_BOUNDARY_UNSAFE");
+  return temp;
+ }
  public static Dictionary<string,object> Secrets(string data){string p=Path.Combine(data,"credentials.dpapi");if(!File.Exists(p))return new Dictionary<string,object>();CheckPath(p);string s=File.ReadAllText(p);if(!s.StartsWith("dpapi:"))throw new Exception("Unencrypted credential store refused");return Json.Deserialize<Dictionary<string,object>>(Encoding.UTF8.GetString(ProtectedData.Unprotect(Convert.FromBase64String(s.Substring(6)),null,DataProtectionScope.CurrentUser)));}
  public static void SaveSecrets(string data,Dictionary<string,object> s){PrivateDirectory(data);string p=Path.Combine(data,"credentials.dpapi");if(File.Exists(p))File.Copy(p,p+".before-"+DateTime.UtcNow.Ticks);SaveText(p,"dpapi:"+Convert.ToBase64String(ProtectedData.Protect(Encoding.UTF8.GetBytes(Json.Serialize(s)),null,DataProtectionScope.CurrentUser)));}
  public static void SaveText(string p,string text){CheckPath(p);string tmp=p+".new-"+Guid.NewGuid().ToString("N");File.WriteAllText(tmp,text,new UTF8Encoding(false));if(File.Exists(p))File.Replace(tmp,p,null);else File.Move(tmp,p);}
