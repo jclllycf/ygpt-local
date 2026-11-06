@@ -21,7 +21,8 @@ export function migrateExecutionProfiles(state){
    if(!alias(source,target))throw Error('EXECUTION_PROFILE_LINK_REFUSED');
    continue;
   }
-  if(nativeWindows('execution-home-source',{root:state,kind}).path!==source)throw Error('EXECUTION_PROFILE_SOURCE_CHANGED');
+  const checkedSource=nativeWindows('execution-home-source',{root:state,kind}).path;
+  if(!same(fs.realpathSync(checkedSource),fs.realpathSync(source)))throw Error('EXECUTION_PROFILE_SOURCE_CHANGED');
   if(fs.readdirSync(target).length)throw Error('EXECUTION_PROFILE_DESTINATION_NOT_EMPTY');
   plans.push({kind,source,target,moved:false,linked:false});
  }

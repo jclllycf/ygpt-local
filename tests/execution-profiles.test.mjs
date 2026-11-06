@@ -4,6 +4,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {createHash} from 'node:crypto';
 import {execFileSync} from 'node:child_process';
+import * as childProcess from 'node:child_process';
+import {syncBuiltinESMExports} from 'node:module';
 import {nativeWindows} from '../runtime/windows-native.mjs';
 import {executionHome} from '../runtime/execution-temp.mjs';
 import {cleanEnvironment} from '../engine/src/environment.mjs';
@@ -62,4 +64,17 @@ test('A mid-migration junction failure restores both original profiles without r
  assert.throws(()=>migrateExecutionProfiles(state),/fixture junction failure/);
  for(const kind of ['home','engine-home']){const source=path.join(state,kind);assert.equal(fs.lstatSync(source).isSymbolicLink(),false);assert.equal(fs.readFileSync(path.join(source,'keep.txt'),'utf8'),kind);}
  assert.equal(fs.existsSync(path.join(state,'execution-profiles-migration.json')),false);
+});
+
+test('Native canonical spelling of the same source is accepted',{skip:process.platform!=='win32'},t=>{
+ const f=fixture(),state=f.config.stateDir,prepared=nativeWindows('state-prepare',{root:state});
+ const source=path.join(state,'home');fs.mkdirSync(source);fs.writeFileSync(path.join(source,'keep.txt'),'KEEP');
+ execFileSync('icacls.exe',[source,'/setowner','*'+prepared.ownerSid,'/T','/Q'],{windowsHide:true,stdio:'pipe'});
+ const original=childProcess.spawnSync;
+ t.mock.method(childProcess,'spawnSync',(exe,args,options)=>{
+  const result=original(exe,args,options),request=JSON.parse(options.input);
+  if(request.action==='execution-home-source'&&result.status===0){const value=JSON.parse(result.stdout);value.result.path=value.result.path.toUpperCase();return {...result,stdout:JSON.stringify(value)};}
+  return result;
+ });syncBuiltinESMExports();t.after(()=>{t.mock.restoreAll();syncBuiltinESMExports();});
+ assert.deepEqual(migrateExecutionProfiles(state).migrated,['home']);assert.equal(fs.readFileSync(path.join(source,'keep.txt'),'utf8'),'KEEP');
 });
