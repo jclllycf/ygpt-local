@@ -22,7 +22,8 @@ export function migrateExecutionProfiles(state){
    continue;
   }
   const checkedSource=nativeWindows('execution-home-source',{root:state,kind}).path;
-  if(!same(fs.realpathSync(checkedSource),fs.realpathSync(source)))throw Error('EXECUTION_PROFILE_SOURCE_CHANGED');
+  const checkedReal=fs.realpathSync(checkedSource),sourceReal=fs.realpathSync(source);
+  if(!same(checkedReal,sourceReal))throw Object.assign(Error('EXECUTION_PROFILE_SOURCE_CHANGED'),{checkedSource,source,checkedReal,sourceReal});
   if(fs.readdirSync(target).length)throw Error('EXECUTION_PROFILE_DESTINATION_NOT_EMPTY');
   plans.push({kind,source,target,moved:false,linked:false});
  }
