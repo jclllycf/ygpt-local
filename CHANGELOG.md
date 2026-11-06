@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.0.24
+
+- Move subprocess HOME, USERPROFILE, APPDATA and LOCALAPPDATA outside the
+  authorization state tree, completing the TEMP/TMP separation from 1.0.23.
+- During an idle upgrade, move the two existing isolated application profiles
+  without copying or changing their files. Keep exact legacy junctions so
+  application settings, cached tools and absolute paths remain usable.
+- Validate profile containers and exact alias destinations; refuse foreign
+  links, broadened outer boundaries and nonempty migration conflicts. Roll
+  back completed moves if a later migration step fails.
+- Keep keys, permission records and controller files under the existing strict
+  recursive audit. Vendor-managed application data is not control authority.
+- Clear obsolete account-connected health before engine initialization so old
+  Tunnel status cannot disguise a current local startup failure.
+
 ## 1.0.23
 
 - Give transport, broker and terminal workers a checked per-state TEMP/TMP

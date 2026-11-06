@@ -15,7 +15,7 @@ using Microsoft.Win32;
 using Microsoft.Win32.SafeHandles;
 
 public static class HostCore {
- public const string Version="1.0.23";
+ public const string Version="1.0.24";
  public static readonly JavaScriptSerializer Json=new JavaScriptSerializer{MaxJsonLength=32*1024*1024};
  public static string Full(string p){return Path.GetFullPath(p).TrimEnd(Path.DirectorySeparatorChar);}
  // Fresh-install defaults prefer a non-system fixed drive (D: when present)
@@ -48,6 +48,20 @@ public static class HostCore {
   var acl=Directory.GetAccessControl(temp);string sid=WindowsIdentity.GetCurrent().User.Value;
   if(acl.GetOwner(typeof(SecurityIdentifier)).Value!=sid||!acl.AreAccessRulesProtected||acl.GetAccessRules(true,true,typeof(SecurityIdentifier)).Cast<FileSystemAccessRule>().Any(r=>r.AccessControlType==AccessControlType.Allow&&r.IdentityReference.Value!=sid&&r.IdentityReference.Value!="S-1-5-18"))throw new IOException("EXECUTION_TEMP_BOUNDARY_UNSAFE");
   return temp;
+ }
+ static string ExecutionProfileBase(string state){state=Full(state);if(state==Path.GetPathRoot(state).TrimEnd('\\'))throw new IOException("DRIVE_ROOT_REFUSED");CheckPath(state);return state+".work-profiles";}
+ static void ExecutionDirectory(string dir,bool protect,bool create){
+  CheckPath(dir);if(File.Exists(dir))throw new IOException("EXECUTION_HOME_NOT_DIRECTORY");
+  if(!Directory.Exists(dir)){if(!create)throw new IOException("EXECUTION_HOME_MISSING");if(protect)PrivateDirectory(dir);else Directory.CreateDirectory(dir);var fresh=Directory.GetAccessControl(dir);fresh.SetOwner(WindowsIdentity.GetCurrent().User);Directory.SetAccessControl(dir,fresh);}
+  var acl=Directory.GetAccessControl(dir);string sid=WindowsIdentity.GetCurrent().User.Value;
+  if(acl.GetOwner(typeof(SecurityIdentifier)).Value!=sid||(protect&&!acl.AreAccessRulesProtected)||acl.GetAccessRules(true,true,typeof(SecurityIdentifier)).Cast<FileSystemAccessRule>().Any(r=>r.AccessControlType==AccessControlType.Allow&&r.IdentityReference.Value!=sid&&r.IdentityReference.Value!="S-1-5-18"))throw new IOException("EXECUTION_HOME_BOUNDARY_UNSAFE");
+ }
+ public static string ExecutionHomeRoot(string state,string kind,bool create=true){
+  if(kind!="home"&&kind!="engine-home")throw new IOException("EXECUTION_HOME_KIND_INVALID");
+  string container=ExecutionProfileBase(state),home=Path.Combine(container,kind);ExecutionDirectory(container,true,create);ExecutionDirectory(home,false,create);return home;
+ }
+ public static string LegacyExecutionHome(string state,string kind){
+  if(kind!="home"&&kind!="engine-home")throw new IOException("EXECUTION_HOME_KIND_INVALID");ExecutionProfileBase(state);string home=Path.Combine(Full(state),kind);ExecutionDirectory(home,false,false);return home;
  }
  public static Dictionary<string,object> Secrets(string data){string p=Path.Combine(data,"credentials.dpapi");if(!File.Exists(p))return new Dictionary<string,object>();CheckPath(p);string s=File.ReadAllText(p);if(!s.StartsWith("dpapi:"))throw new Exception("Unencrypted credential store refused");return Json.Deserialize<Dictionary<string,object>>(Encoding.UTF8.GetString(ProtectedData.Unprotect(Convert.FromBase64String(s.Substring(6)),null,DataProtectionScope.CurrentUser)));}
  public static void SaveSecrets(string data,Dictionary<string,object> s){PrivateDirectory(data);string p=Path.Combine(data,"credentials.dpapi");if(File.Exists(p))File.Copy(p,p+".before-"+DateTime.UtcNow.Ticks);SaveText(p,"dpapi:"+Convert.ToBase64String(ProtectedData.Protect(Encoding.UTF8.GetBytes(Json.Serialize(s)),null,DataProtectionScope.CurrentUser)));}

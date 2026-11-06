@@ -3,6 +3,8 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import {execFileSync} from 'node:child_process';
+import {nativeWindows} from '../runtime/windows-native.mjs';
 import {upgradeData} from '../service/upgrade.mjs';
 import {YBrowserFacade} from '../engine/src/browser-engine.mjs';
 import {YBrowserEngine} from '../engine/src/browser-engine.mjs';
@@ -12,10 +14,12 @@ test('Legacy data moves inside the chosen application, preserving keys, SQLite a
   try{
     const install=path.join(root,'chosen app'),data=path.join(root,'legacy-data'),dest=path.join(install,'data');
     fs.mkdirSync(path.join(install,'engine','build'),{recursive:true});fs.writeFileSync(path.join(install,'engine','build','YDesktop.exe'),'new fixture');
+    const state=path.join(data,'state'),prepared=nativeWindows('state-prepare',{root:state});
     const cache=path.join(data,'state','home','.bun','install','cache');fs.mkdirSync(path.join(cache,'package@1'),{recursive:true});
     fs.symlinkSync(path.join(cache,'package@1'),path.join(cache,'package-link'),'junction');
     fs.writeFileSync(path.join(data,'credentials.dpapi'),'opaque-secret');fs.writeFileSync(path.join(data,'state','operations-rc.sqlite3'),'opaque-ledger');
     fs.writeFileSync(path.join(data,'ygpt.config.json'),JSON.stringify({product:'YGPT Local',stateDir:path.join(data,'state'),ingressId:'stable-identity',desktopAllowedApps:[{path:path.join(install,'engine','build','YDesktop.exe'),sha256:'old'}]}));
+    execFileSync('icacls.exe',[state,'/setowner','*'+prepared.ownerSid,'/T','/Q'],{windowsHide:true,stdio:'pipe'});
     const result=upgradeData({install,data});assert.equal(result.data,dest);assert.equal(fs.existsSync(data),false);
     assert.equal(fs.readFileSync(path.join(dest,'credentials.dpapi'),'utf8'),'opaque-secret');assert.equal(fs.readFileSync(path.join(dest,'state','operations-rc.sqlite3'),'utf8'),'opaque-ledger');
     assert.equal(fs.realpathSync(path.join(dest,path.relative(data,cache),'package-link')),fs.realpathSync(path.join(dest,path.relative(data,cache),'package@1')));

@@ -5,3 +5,7 @@ import {nativeWindows} from './windows-native.mjs';
 export function executionTemp(stateDir){
  return nativeWindows('execution-temp',{root:stateDir}).path;
 }
+
+export function executionHome(stateDir,kind){
+ return nativeWindows('execution-home',{root:stateDir,kind}).path;
+}

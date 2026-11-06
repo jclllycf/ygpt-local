@@ -8,7 +8,7 @@ import {executionTemp} from './execution-temp.mjs';
 export function prepareState(root=config.stateDir){
   const acl=nativeWindows('state-prepare',{root},180000);
   executionTemp(root);
-  for(const rel of ['tmp','jobs','engine-home','engine-home/AppData/Roaming','engine-home/AppData/Local'])fs.mkdirSync(path.join(root,rel),{recursive:true});
+  for(const rel of ['tmp','jobs'])fs.mkdirSync(path.join(root,rel),{recursive:true});
   return acl;
 }
 export function vault(root=config.stateDir){
