@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {createHash} from 'node:crypto';
 import {execFileSync} from 'node:child_process';
-import * as childProcess from 'node:child_process';
+import childProcess from 'node:child_process';
 import {syncBuiltinESMExports} from 'node:module';
 import {nativeWindows} from '../runtime/windows-native.mjs';
 import {executionHome} from '../runtime/execution-temp.mjs';
