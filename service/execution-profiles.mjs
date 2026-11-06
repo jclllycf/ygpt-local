@@ -22,7 +22,9 @@ export function migrateExecutionProfiles(state){
    continue;
   }
   const checkedSource=nativeWindows('execution-home-source',{root:state,kind}).path;
-  const checkedReal=fs.realpathSync(checkedSource),sourceReal=fs.realpathSync(source);
+  // The JS realpath implementation can retain DOS 8.3 aliases on Windows.
+  // Resolve both with the native API before comparing the checked source.
+  const checkedReal=fs.realpathSync.native(checkedSource),sourceReal=fs.realpathSync.native(source);
   if(!same(checkedReal,sourceReal))throw Object.assign(Error('EXECUTION_PROFILE_SOURCE_CHANGED'),{checkedSource,source,checkedReal,sourceReal});
   if(fs.readdirSync(target).length)throw Error('EXECUTION_PROFILE_DESTINATION_NOT_EMPTY');
   plans.push({kind,source,target,moved:false,linked:false});

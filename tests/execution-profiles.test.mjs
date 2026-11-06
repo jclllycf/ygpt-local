@@ -78,3 +78,17 @@ test('Native canonical spelling of the same source is accepted',{skip:process.pl
  });syncBuiltinESMExports();t.after(()=>{t.mock.restoreAll();syncBuiltinESMExports();});
  assert.deepEqual(migrateExecutionProfiles(state).migrated,['home']);assert.equal(fs.readFileSync(path.join(source,'keep.txt'),'utf8'),'KEEP');
 });
+
+test('An actual Windows 8.3 source alias migrates without a false source-change refusal',{skip:process.platform!=='win32'},t=>{
+ const f=fixture(),state=f.config.stateDir,prepared=nativeWindows('state-prepare',{root:state});
+ const source=path.join(state,'home');fs.mkdirSync(source);fs.writeFileSync(path.join(source,'keep.txt'),'KEEP SHORT ALIAS');
+ execFileSync('icacls.exe',[source,'/setowner','*'+prepared.ownerSid,'/T','/Q'],{windowsHide:true,stdio:'pipe'});
+ const ps=path.join(process.env.SystemRoot,'System32','WindowsPowerShell','v1.0','powershell.exe');
+ const shortRoot=execFileSync(ps,['-NoProfile','-NonInteractive','-Command',"(New-Object -ComObject Scripting.FileSystemObject).GetFolder('"+f.dir.replaceAll("'","''")+"').ShortPath"],{windowsHide:true,encoding:'utf8'}).trim();
+ if(shortRoot.toLowerCase()===f.dir.toLowerCase()){t.skip('8.3 names are disabled for this fixture volume');return;}
+ const shortState=path.join(shortRoot,'data','state');
+ assert.equal(fs.realpathSync.native(shortState).toLowerCase(),fs.realpathSync.native(state).toLowerCase());
+ assert.deepEqual(migrateExecutionProfiles(shortState).migrated,['home']);
+ assert.equal(fs.readFileSync(path.join(source,'keep.txt'),'utf8'),'KEEP SHORT ALIAS');
+ assert.equal(nativeWindows('state-verify',{root:state}).descendantsChecked,true);
+});
