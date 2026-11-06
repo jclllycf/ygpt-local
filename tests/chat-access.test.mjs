@@ -144,6 +144,7 @@ test('Small cleanup uses verified snapshots and the actual Windows Recycle Bin',
  if(process.platform!=='win32'||!fs.existsSync(bin)){t.skip('No existing Windows Recycle Bin on this fixture volume; snapshot policy is tested separately');return;}
  const c=await f.client().start();try{
   const trash=[path.join(f.project,'cleanup-a.txt'),path.join(f.project,'cleanup-b.txt')];for(const file of trash)fs.writeFileSync(file,'disposable fixture');
+  const folder=path.join(f.project,'cleanup-folder');fs.mkdirSync(folder);fs.writeFileSync(path.join(folder,'owned-fixture.txt'),'disposable folder fixture');trash.push(folder);
   const response=await c.call('y_file_trash',{paths:trash});assert.ok(!response.isError,JSON.stringify(response));const cleaned=unpack(response);assert.ok(cleaned.snapshotId);assert.equal(cleaned.coverage,'complete');assert.ok(trash.every(file=>!fs.existsSync(file)));
  }finally{await c.close();}
 });

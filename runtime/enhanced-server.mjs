@@ -33,6 +33,7 @@ import {startOwnerControl} from './owner-control.mjs';
 import {callScope,resourceIntent,ownershipViolation,createdId,currentAccessMode} from './ownership.mjs';
 import {chatAccessTool,chatAccessGate,chatAccessPresentation,chatAccessStatus,chatAccessStatusMetadata,desktopAccessPresentation,DESKTOP_FULL_ACCESS_MINUTES} from './chat-access.mjs';
 import {desktopApprovalState,desktopApprovalResult} from './desktop-approval-state.mjs';
+import {approvalOutcome} from './approval-outcome.mjs';
 import {consumeScreenshot,cleanupOldScreenshots} from './screenshot-cleanup.mjs';
 import {AdministratorAccess} from './admin-access.mjs';
 import {ApprovalNotifications} from './approval-notifications.mjs';
@@ -240,16 +241,19 @@ async function dispatchScoped(name,args,operationId,reviewed=false){
     const r=await (reviewed?nativeExtension.invokeApproved(name,engineArgs):nativeExtension.engine.invoke(name,engineArgs));
     if(name==='y_job_list'&&r.ok)r.result=visibleJobs(r.result);
     if(name==='y_job_status'&&r.ok)r.result=withDownloadProgress(r.result,args.id);
-    if(r.ok&&['y_process_run','y_process_start','y_job_submit'].includes(name)){
-      const kind=name==='y_job_submit'?'job':'session',id=kind==='job'?r.result.job_id:r.result.sessionId;
-      if(id&&!(kind==='job'&&r.result.reused))r.result.outputToken=ledger.grant(kind,id);
+    if(['y_process_run','y_process_start','y_job_submit'].includes(name)){
+      const kind=name==='y_job_submit'?'job':'session',id=kind==='job'?r.result?.job_id:r.result?.sessionId;
+      // A failed/timed-out owned session still needs its original output
+      // capability for read-only reconciliation; never start it again.
+      if(id&&!(kind==='job'&&r.result.reused)&&(r.ok||kind==='session'&&nativeExtension.engine.terminal.get(id)))r.result.outputToken=ledger.grant(kind,id);
     }
     if(saved){
       if(name==='y_job_submit'&&r.ok)trackJobSnapshot(args.id,saved.id);
       else if(name==='y_process_start'&&r.ok){
         const session=r.result.sessionId;
-        const timer=setInterval(async()=>{try{const status=nativeExtension.engine.terminal.status(session);if(status.state!=='running'){clearInterval(timer);backups.finish(saved.id,status.state==='succeeded');}}catch{clearInterval(timer);backups.interrupt(saved.id,'Interactive process outcome uncertain');}},1000);timer.unref();
-      }else backups.finish(saved.id,r.ok&&!r.error?.outcomeUnknown);
+        const timer=setInterval(async()=>{try{const status=nativeExtension.engine.terminal.poll(session);if(status.state!=='running'){clearInterval(timer);backups.finish(saved.id,status.state==='succeeded');}}catch{clearInterval(timer);backups.interrupt(saved.id,'Interactive process outcome uncertain');}},1000);timer.unref();
+      }else if(r.error?.outcomeUnknown)backups.interrupt(saved.id,'Process ended without a confirmed complete outcome; inspect the existing output and effects');
+      else backups.finish(saved.id,r.ok);
       r.prewriteBackup={id:saved.id,coverage:'bounded project files; protected, linked, new and external files are excluded'};
     }
     const artifact=r.result;
@@ -388,7 +392,7 @@ function grantScopeOf(name,args){return name==='y_chat_access'?{eligible:false,k
 // Server instructions: one canonical y_ catalog, per-chat context, approvals.
 const instructions=['For authorized local Windows file, directory, edit, search, project or build requests, call YGPT Local typed tools first; never claim completion without their results. For general knowledge do not probe the PC.',
  'Read with y_file_read / y_file_read_many / y_search_text / y_project_inspect / y_sqlite_read (typed reads are automatic). Change files with y_file_edit or y_file_patch using the expectedSha256 you read, then read back; STALE_PREIMAGE means someone else changed the file: re-read, never overwrite blindly. Remove files only with y_file_trash.',
- 'Use y_process_run/start for short commands and y_job_submit for long work (pass a fresh UUID as id; resubmitting the same id never runs it twice).',
+ 'Use y_process_run for short non-interactive commands. Its timeoutMs is a hard execution limit, not an approval or waiting deadline. Use y_process_start for interactive/long sessions and y_job_submit for durable work (pass a fresh UUID as id; resubmitting the same id never runs it twice). Poll the original session/job. A command timeout does not cancel the saved permission; inspect partial effects and never request the same approval or replay it automatically.',
  'Standard mode: typed reads, window inventory and inspection of bound windows, ordinary file changes, small snapshotted cleanups and commands without a high-risk signal run automatically. Sensitive file changes, major deletions and privileged/system changes require review. Desktop binding or input asks once for 100-minute Full Access to this chat; after confirmation, no further YGPT policy approval is needed within that period. Other chats and resource ownership remain separate.',
  'Owner default-allow command policy: unfamiliar scripts, variable assignments, loops, dynamic/encoded code, multiline arguments, and references to protected folders do not require approval by themselves. Do not invent an authorization requirement for an unproven read. Only an explicit high-risk signal such as destructive deletion, privilege/system changes, protected writes or credential upload triggers review. Unknown code is allowed without claiming it has been proven safe or read-only.',
  'Full Access for development: y_chat_access action=status checks THIS chat; action=request_full asks the owner to enable it on a dedicated card (durationMinutes defaults to 120, maximum 720). Show the card and wait for its confirmed decision. Retain the returned contextToken on all calls, including status and revoke. While active, this chat can perform all YGPT actions with current Windows permissions without further policy approvals. Other chats, resource ownership, path integrity and task output tokens remain unchanged. Never invent a fullAccess flag or use another chat context. action=revoke or y_close_context ends the grant; enabling the development mode never executes existing pending requests.',
@@ -494,7 +498,7 @@ async function callTool({id,msg,host,nativeCall,name,args,contextToken,rawArgs,i
     finally{const remaining=approvalWaiters.get(args.requestId)-1;if(remaining)approvalWaiters.set(args.requestId,remaining);else approvalWaiters.delete(args.requestId);}
     if(operation&&!['awaiting_user','approved','running'].includes(operation.state)){if(deliveredApprovals.size>=2048)deliveredApprovals.clear();deliveredApprovals.add(args.requestId);}
     const state=operation?.state??'not_found',flow=approvalTaskState(state);
-    return response(id,{requestId:args.requestId,state,result:['succeeded','failed','unknown'].includes(state)?ledger.result(args.requestId):null,...desktopApprovalState(ledger,operation),...flow,message:flow.continueWaiting?approvalGuidance:'Continue the original task from this existing decision/result. Never repeat the original action.'});
+    return response(id,{requestId:args.requestId,state,result:['succeeded','failed','unknown'].includes(state)?ledger.result(args.requestId):null,...approvalOutcome(ledger,operation),...desktopApprovalState(ledger,operation),...flow,message:flow.continueWaiting?approvalGuidance:'Continue the original task from this existing decision/result. Never repeat the original action or request the same approval again. A saved decision and a failed/uncertain execution are separate outcomes.'});
   }
   if(name==='y_preview_approval_ui'&&uiEnabled())return emit({jsonrpc:'2.0',id,result:previewResult()});
   if(name==='y_ping')return response(id,{version:config.version,policyVersion:config.rc10Candidate?10:config.rc9Candidate?9:8,modules:['file','terminal','search','browser','desktop','system'],rc10Candidate:config.rc10Candidate,rc9Candidate:config.rc9Candidate,engineReady:ready,approvalReady:config.chatAppConsent&&barEnabled()||!noLocalReview&&portal()!=='unavailable',approvalInterface:config.chatAppConsent?'mcp-app-capability':config.rc9Candidate?'unverified-host-suspended':config.localApprovalDisabled?'disabled':barEnabled()?'inline-strip':'local-wpf',localApprovalDisabled:noLocalReview,inlineDecisionsEnabled:barEnabled()&&config.allowInlineDecisions,inChatUI:barEnabled(),nativeElicitation:false,

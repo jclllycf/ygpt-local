@@ -46,6 +46,15 @@ test('Polling small pages returns every buffered stdout/stderr character',async 
   assert.equal(out,'abcdefghij');assert.equal(err,'1234567');
 });
 
+test('Non-interactive run closes stdin while an interactive session accepts later input',async t=>{
+ const {terminal}=await fixture(t),args=['-e',"let s='';process.stdin.on('data',b=>s+=b);process.stdin.on('end',()=>console.log('EOF:'+s));"];
+ const completed=await terminal.run({executable:process.execPath,args,timeoutMs:5000});
+ assert.equal(completed.state,'succeeded');assert.equal(completed.stdout.trim(),'EOF:');
+ const session=await terminal.start({executable:process.execPath,args,timeoutMs:5000});assert.equal(session.state,'running');
+ await terminal.input(session.sessionId,'fixture input',{end:true});await terminal.get(session.sessionId).done;
+ assert.equal(terminal.poll(session.sessionId).stdout.trim(),'EOF:fixture input');
+});
+
 test('Durable worker receives the exact validated cwd outside the engine root',async t=>{
   const {terminal,root}=await fixture(t),outside=await fs.mkdtemp(path.join(os.tmpdir(),'ygpt-job-outside-'));
   t.after(()=>fs.rm(outside,{recursive:true,force:true}));

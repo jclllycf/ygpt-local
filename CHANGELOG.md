@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.0.25
+
+- Keep the saved approval decision separate from command/file/desktop execution
+  outcomes. Cards show the actual error and retained permission instead of
+  misreporting every failed action as a desktop or authorization failure.
+- Preserve complete status diagnostics when the card notifies ChatGPT, restores
+  a terminal result or receives stale host metadata. New versioned resources
+  retain compatibility with earlier conversation cards.
+- Close stdin for non-interactive commands while retaining interactive input
+  for process sessions. Report hard execution deadlines as PROCESS_TIMEOUT with
+  uncertain partial effects; never replay a command or renew its approval.
+- Preserve owned output capabilities after process failures for inspection of
+  the existing session. Correct interactive snapshot polling to use that session.
+
 ## 1.0.24
 
 - Move subprocess HOME, USERPROFILE, APPDATA and LOCALAPPDATA outside the

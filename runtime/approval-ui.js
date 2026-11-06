@@ -65,6 +65,21 @@
  }
  function delivery(id,status){deliveries.set(id,status);try{window.openai?.setWidgetState?.({privateContent:{ygptDelivery:{requestId:id,status}}});}catch{}}
  function note(text){$('note').textContent=text;}
+ const outcomeFields=['executionError','desktopAccess','chatAccess','stateLabel','decisionSaved','permissionGranted','tool','operationKind'];
+ function applyStatus(id,value){
+  if(card?.requestId!==id)return;
+  const next={...card,state:stableState(id,value.state),expiresAt:value.expiresAt??card.expiresAt};
+  for(const field of outcomeFields)if(Object.prototype.hasOwnProperty.call(value,field))next[field]=value[field];
+  if(value.desktopAccess&&!Object.prototype.hasOwnProperty.call(value,'stateLabel'))delete next.stateLabel;
+  card=next;
+ }
+ function failureNote(){
+  const desktop=!!card.desktopAccess||card.tool?.startsWith('y_desktop_'),error=card.executionError;
+  const saved=card.permissionGranted?'Approval saved. ':card.decisionSaved?'Decision saved. ':'';
+  const access=card.desktopAccess?.active?'Full Access is enabled for this chat. The selected desktop step failed. ':card.chatAccess?.active?'Full Access remains enabled for this chat. '+saved:saved;
+  const inspect=error?.outcomeUnknown?desktop?' Inspect the window and saved result before choosing the next action; no action was resubmitted.':' Inspect the saved output and effects before choosing the next action; no command was resubmitted.':card.desktopAccess?.active?' Read the current windows and bind the intended target; no new approval is needed while access is active.':' Inspect the existing result; do not request the same approval or repeat the operation automatically.';
+  return access+(error?.code?error.code+': ':'')+(error?.message||'The '+(desktop?'desktop action':'action')+' did not return a confirmed success.')+inspect+(deliveries.get(card.requestId)==='unconfirmed'?' Chat notification was not confirmed; Resume chat retries the message only.':'');
+ }
  function render(){
   if(!card)return;const p=card.presentation??{},expired=card.expiresAt&&Date.parse(card.expiresAt)<=Date.now();
   document.querySelector('main').dataset.state=card.state;document.querySelector('main').dataset.delivery=deliveries.get(card.requestId)??'';
@@ -80,13 +95,13 @@
   const status=deliveries.get(card.requestId);
   $('notify').hidden=!card.uiToken||status!=='unconfirmed'||['awaiting_user','expired','not_found'].includes(card.state);$('notify').disabled=notifying;
   if(card.demo)note('Preview only. No operation can execute.');
+  else if(card.state==='failed'||card.state==='unknown')note(failureNote());
   else if(status==='unconfirmed')note('Decision saved. Chat notification was not confirmed. Choose Resume chat to retry the message only.');
   else if(expired&&card.state==='awaiting_user')note('This card has expired. Check its saved status; do not repeat the operation.');
   else if(card.note)note(card.note);
   else if(!healthy)note('Connecting to approval controls… If buttons do not appear, open this same conversation on the web or use the Windows approval center.');
   else if(enabled)note(p.approveLabel?'Choose '+p.approveLabel+' or Deny. This applies only to the chat and duration shown above.':card.chatScope?.eligible?'Review the exact action, then choose. A decision on another device appears here automatically.':'Choose Allow once or Deny. The same decision is shared with your other devices.');
   else if(card.state==='succeeded')note('Completed. The original result is available.');
-  else if(card.state==='failed'||card.state==='unknown')note((card.desktopAccess?.active?'Full Access is enabled for this chat. The selected desktop step failed. ':'')+(card.executionError?.code?card.executionError.code+': ':'')+(card.executionError?.message||'The desktop action did not return a confirmed success.')+(card.executionError?.outcomeUnknown?' Inspect the window before retrying; no action was resubmitted.':card.desktopAccess?.active?' Read the current windows and bind the intended target; no new approval is needed while access is active.':' Your decision was saved. Inspect the target before choosing the next action.'));
   else if(card.state==='denied')note('Denied. Nothing was executed.');
   void preferInline();
  }
@@ -95,9 +110,11 @@
   if((card?.instanceId??card?.requestId)!==(next.instanceId??next.requestId)){$('details').open=false;if(card)presentationChanged();}
   const persisted=window.openai?.widgetState?.privateContent?.ygptDelivery;
   if(persisted?.requestId===next.requestId&&typeof persisted.status==='string')deliveries.set(next.requestId,persisted.status);
+  const previous=card?.requestId===next.requestId?card:null;
   card={...next,state:stableState(next.requestId,next.state)};
+  if(previous&&terminal.has(previous.state)&&!terminal.has(next.state))for(const field of outcomeFields)if(Object.prototype.hasOwnProperty.call(previous,field))card[field]=previous[field];
   if(card.uiToken&&!deliveries.has(card.requestId)&&['approved','running','succeeded','failed','unknown','denied'].includes(card.state))delivery(card.requestId,'unconfirmed');
-  render();schedule(0);
+  render();void refresh();schedule(0);
  }
  function request(method,params,timeout=12000){const id='ygpt-ui-'+(++sequence);
   return new Promise((resolve,reject)=>{const deadline=setTimeout(()=>{requests.delete(id);reject(Error('Host bridge timeout'));},timeout);
@@ -117,7 +134,7 @@
   try{
    const status=unwrap(await call('y_bar_status',{requestId:id,uiToken:current.uiToken}));
    if(status.state==='awaiting_user')throw Error('No decision committed');
-   if(card?.requestId===id){card={...card,state:stableState(id,status.state)};render();}
+   if(card?.requestId===id){applyStatus(id,status);render();}
    if(status.continuation==='waiting-tool'){delivery(id,'waiting');return;}
    if(status.continuation==='result-returned'){delivery(id,'returned');return;}
    const reserved=unwrap(await call('y_bar_status',{requestId:id,uiToken:current.uiToken,notifyAction:event?'retry':'claim'})).delivery;
@@ -144,7 +161,7 @@
   try{
    const value=unwrap(await call('y_bar_status',{requestId:id,uiToken:current.uiToken}));healthy=true;failures=0;
    if(card?.requestId!==id)return;
-   const before=card.state,wasWaiting=deliveries.get(id)==='waiting';card={...card,state:stableState(id,value.state),expiresAt:value.expiresAt??card.expiresAt,executionError:value.executionError??card.executionError,desktopAccess:value.desktopAccess??card.desktopAccess,stateLabel:value.desktopAccess?value.stateLabel:card.stateLabel};
+   const before=card.state,wasWaiting=deliveries.get(id)==='waiting';applyStatus(id,value);
    const decided=['approved','running','succeeded','failed','unknown','denied'].includes(card.state);
    if(value.notificationSent)delivery(id,'sent');else if(decided&&value.continuation==='result-returned')delivery(id,'returned');else if(decided&&value.continuation==='waiting-tool')delivery(id,'waiting');render();
    if(decided&&!['waiting-tool','result-returned'].includes(value.continuation)&&!value.notificationSent&&(before==='awaiting_user'||wasWaiting))await notify();
@@ -157,7 +174,7 @@
   try{
    const result=unwrap(await call('y_bar_decide',{requestId:id,uiToken:current.uiToken,decision:choice}));
    if(!['approved','running','succeeded','failed','unknown','denied'].includes(result.state))throw Error('Unexpected decision state');
-   if(card?.requestId===id){card={...card,state:stableState(id,result.state)};busy=false;render();}
+   if(card?.requestId===id){applyStatus(id,result);busy=false;render();}
    if(result.continuation==='waiting-tool')delivery(id,'waiting');else if(result.continuation==='result-returned')delivery(id,'returned');else await notify();schedule();
   }catch{await refresh();if(card?.state==='awaiting_user')note('Decision not confirmed. It was not resubmitted; wait for the controls to reconnect.');}
   finally{busy=false;render();}
@@ -172,7 +189,7 @@
   if(card){render();schedule(0);}
  }
  window.addEventListener('openai:set_globals',globals);globals();
- if(window.parent!==window)request('ui/initialize',{appInfo:{name:'YGPT approval',version:'1.0.24'},appCapabilities:{availableDisplayModes:['inline']},protocolVersion:'2026-01-26'}).then(result=>{
+ if(window.parent!==window)request('ui/initialize',{appInfo:{name:'YGPT approval',version:'1.0.25'},appCapabilities:{availableDisplayModes:['inline']},protocolVersion:'2026-01-26'}).then(result=>{
   // Some ChatGPT compatibility methods silently ignore calls without a
   // synchronous user event. Always negotiate again over the real standard
   // bridge, even when its initial mode matches the compatibility globals.

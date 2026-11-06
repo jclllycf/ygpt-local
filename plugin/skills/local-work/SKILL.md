@@ -9,6 +9,14 @@ Before editing, read the current file and use its expected SHA-256 when availabl
 
 Use only the current `tools/list` catalog. There are no historical aliases or alternative tool prefixes.
 
+An approval decision and its execution result are separate. If a saved decision
+is followed by PROCESS_TIMEOUT or another execution error, inspect that original
+result/session and its effects; do not request the same approval again or replay
+the command. timeoutMs is a hard process lifetime, not a waiting-tool deadline.
+Use y_process_start with an appropriate lifetime or y_job_submit for long work.
+Non-interactive y_process_run closes stdin; interactive input stays open until
+y_process_input sends end=true. Preserve the same context and output capability.
+
 All approvals, including Full Access and Administrator requests, default inline with details collapsed. Never automatically open a side panel, PiP or fullscreen. For Full Access plus Administrator access, use y_chat_access action=request_full with administrator=true only at the user's request. The owner must confirm both the chat card and Windows UAC on the PC; never decide UAC for them. Check administrator.active separately from mode=full. Use y_admin_run for commands that need elevation; ordinary typed file and desktop tools retain their normal token. Cancelling UAC leaves ordinary Full Access active. Expiry, revoke, context close or bridge disconnect stops the temporary executor. Never replay an elevated command whose outcome is unknown.
 
 On `APPROVAL_REQUIRED`, show one fresh `y_show_approval` at the current conversation step using the original requestId, resultToken and contextToken. Immediately keep the task pending with bounded `y_wait_approval` calls. While `continueWaiting` or `taskPending` is true, wait again with the same original arguments, including after approval while execution is running. A bounded timeout is not task completion: do not send a final answer saying work is finished, blocked, or requires another user message merely because approval is pending. Continue from the existing result automatically. The card sends one continuation notification if no wait remains active; the operation is never replayed. Never call private decision tools from the model or copy capabilities into another chat. ChatGPT controls exact card placement and its response lifecycle; do not promise arbitrary paragraph insertion or an uninterruptible response.

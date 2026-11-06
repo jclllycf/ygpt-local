@@ -64,7 +64,7 @@ test('A window closed while awaiting consent preserves approved chat access and 
   await call('y_desktop_action',{targetId:binding.result.targetId,action:'setValue',automationId:'FixtureInput',value:'RECOVERED_AFTER_CONSENT',...ctx});
   assert.equal((await call('y_desktop_value',{targetId:binding.result.targetId,automationId:'FixtureInput',...ctx})).result.result.value,'RECOVERED_AFTER_CONSENT');
   assert.equal((await call('y_call_status',{id:pending.requestId,...ctx})).state,'failed','Original action remains terminal and is never replayed');
-  await call('y_chat_access',{action:'revoke',...ctx});const revoked=await call('y_bar_status',ui);assert.equal(revoked.desktopAccess.active,false);assert.equal(revoked.stateLabel,undefined);
+  await call('y_chat_access',{action:'revoke',...ctx});const revoked=await call('y_bar_status',ui);assert.equal(revoked.desktopAccess.active,false);assert.equal(revoked.chatAccess.active,false);assert.equal(revoked.permissionGranted,true,'The original decision remains saved after revoking the separate access grant');assert.equal(revoked.stateLabel,'Approved · action failed');
  }finally{for(const pid of children)try{process.kill(pid);}catch{}await c.close();}
 });
 

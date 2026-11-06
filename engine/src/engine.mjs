@@ -7,6 +7,7 @@ import {z} from 'zod';
 import {YFileEngine,EngineError,sha256} from './file-engine.mjs';
 import {YSearchEngine} from './search-engine.mjs';
 import {YTerminalEngine} from './terminal-engine.mjs';
+import {processFailure} from './process-outcome.mjs';
 import {YBrowserFacade} from './browser-engine.mjs';
 import {BrowserExtensions} from './browser-extensions.mjs';
 import {YDesktopEngine} from './desktop-engine.mjs';
@@ -99,8 +100,8 @@ export async function createEngine(config,{authorize,backupManager,ledger:outerL
   },{description:'One bounded read of a project: directory structure, package manifests and read-only Git state (branch, dirty summary, recent commits)'});
   add('y_search_text',{directory:str.default('.'),pattern:str,regex:z.boolean().default(false),caseSensitive:z.boolean().default(true),glob:str.optional(),offset:z.number().int().min(0).max(5000).default(0),maxMatches:z.number().int().min(1).max(2000).default(100)},a=>search.findText(a.directory,a.pattern,a));
   add('y_search_files',{directory:str.default('.'),pattern:str.default('*'),offset:z.number().int().min(0).default(0),limit:z.number().int().min(1).max(1000).default(100)},a=>search.findFiles(a.directory,a.pattern,a));
-  add('y_process_run',processSpec,a=>terminal.run(a),{mutating:true});
-  add('y_process_start',processSpec,a=>terminal.start(a),{mutating:true});
+  add('y_process_run',processSpec,a=>terminal.run(a),{mutating:true,description:'Run a short command with stdin closed. timeoutMs is a hard execution limit (default 10 seconds), not an approval or tool-wait deadline; reaching it stops the process and leaves partial effects unconfirmed. Use y_process_start for interactive/long tasks and y_job_submit for durable work, then poll the original session/job. Never repeat a timed-out command or request the same approval again.'});
+  add('y_process_start',processSpec,a=>terminal.start(a),{mutating:true,description:'Start an owned process session and return immediately. Set timeoutMs to the intended total lifetime (default 10 seconds); poll with the same contextToken and outputToken. stdin stays open for y_process_input; send end=true after input when the command expects EOF. Use a durable job for work that must survive transport loss.'});
   add('y_process_poll',{sessionId:sid,offset:z.number().int().min(0).default(0),limit:z.number().int().min(1).max(65536).default(65536)},a=>terminal.poll(a.sessionId,a));
   add('y_process_input',{sessionId:sid,text:z.string().max(65536),end:z.boolean().default(false)},a=>terminal.input(a.sessionId,a.text,a),{mutating:true});
   add('y_process_cancel',{sessionId:sid},a=>terminal.cancel(a.sessionId),{mutating:true});
@@ -142,7 +143,7 @@ export async function createEngine(config,{authorize,backupManager,ledger:outerL
         const decision=authorize?await authorize({tool:name,args:a,mutating:t.mutating,openWorld:t.annotations?.openWorldHint,root}):{allowed:config.mode==='fixture'};
         if(decision?.allowed!==true)throw new EngineError(decision?.code??/^(TARGET_FOREIGN|SESSION_FOREIGN)\b/.exec(decision?.reason??'')?.[1]??'RC9_BLOCKED',decision?.reason??'Outer policy did not authorize this exact operation');
         operation=ledger.begin(name,a,name==='y_browser_wait'?undefined:requestKey);if(operation.reused)return operation.result;
-        const result=await t.handler(a),processError=name==='y_process_run'&&result.state!=='succeeded'||['y_browser_extensions','y_mcp'].includes(name)&&result.ok===false,response={product:'YGPT Local',callId:operation.id,ok:!processError,result,...(processError?{error:{code:result.code??(name==='y_mcp'?'MCP_TOOL_FAILED':'PROCESS_EXIT_FAILED'),message:result.details??('Operation ended with state '+(result.state??'failed'))}}:{})};ledger.finish(operation.id,response);return response;
+        const result=await t.handler(a),error=name==='y_process_run'?processFailure(result):['y_browser_extensions','y_mcp'].includes(name)&&result.ok===false?{code:result.code??(name==='y_mcp'?'MCP_TOOL_FAILED':'PROCESS_EXIT_FAILED'),message:result.details??('Operation ended with state '+(result.state??'failed'))}:null,response={product:'YGPT Local',callId:operation.id,ok:!error,result,...(error?{error}:{})};ledger.finish(operation.id,response);return response;
       }catch(e){const outcomeUnknown=e.outcomeUnknown===true||['UIA_TIMEOUT','JOB_CONTROL_TIMEOUT'].includes(e.code)||e.name==='TimeoutError';const response={product:'YGPT Local',callId:operation?.id??null,ok:false,error:{code:e.code??(outcomeUnknown?'RESULT_UNKNOWN':'EXECUTION_FAILED'),message:String(e.message).slice(0,1000),...(e.hresult?{hresult:e.hresult}:{}),...(e.action?{action:e.action}:{}),...(e.inputDiagnostics?{inputDiagnostics:e.inputDiagnostics}:{}),...(e.effectStarted===false?{effectStarted:false}:{}),...(outcomeUnknown?{outcomeUnknown:true}:{})}};if(operation&&!operation.reused)ledger.finish(operation.id,response);return response;}
     },
     async close(){await Promise.allSettled([terminal.close(),browser.close(),extensions.close(),local.close()]);if(!outerLedger)ledger.close();await release();}
