@@ -42,12 +42,12 @@ export class YTerminalEngine {
     const spec=await this.validate(input),env=await cleanEnvironment(this.stateDir);
     if(this.closing)throw new EngineError('ENGINE_CLOSED','Process engine is closing');
     const child=spawn(spec.executable,spec.args,{cwd:spec.cwd,env,shell:false,windowsHide:true,stdio:['pipe','pipe','pipe']});
-    const s={id,owner,child,state:'running',stdout:'',stderr:'',bytes:0,truncated:false,timedOut:false,exitCode:null,startedAt:new Date().toISOString()};this.sessions.set(id,s);
+    const s={id,owner,child,state:'running',stdout:'',stderr:'',bytes:0,truncated:false,timedOut:false,timeoutMs:spec.timeoutMs,exitCode:null,startedAt:new Date().toISOString()};this.sessions.set(id,s);
     child.stdin.on('error',()=>{}); // write callback reports EPIPE without crashing the MCP server
     const decoders={stdout:new StringDecoder('utf8'),stderr:new StringDecoder('utf8')};s.done=new Promise(resolve=>{s.resolve=resolve;});
     for(const key of ['stdout','stderr'])child[key].on('data',b=>{const room=this.maxOutputBytes-s.bytes;if(room>0){s[key]+=decoders[key].write(b.subarray(0,room));s.bytes+=Math.min(room,b.length);}if(b.length>room){s.truncated=true;void terminateProcessTree(child);}});
     s.timer=setTimeout(()=>{s.timedOut=true;void terminateProcessTree(child);},spec.timeoutMs);
-    child.once('error',e=>{s.error=e.message;s.state='failed';clearTimeout(s.timer);s.resolve();});
+    child.once('error',e=>{e.effectStarted=false;s.error=e.message;s.state='failed';clearTimeout(s.timer);s.resolve();});
     child.once('close',(code,signal)=>{clearTimeout(s.timer);s.stdout+=decoders.stdout.end();s.stderr+=decoders.stderr.end();s.exitCode=code;s.signal=signal;s.endedAt=new Date().toISOString();s.state=s.cancelled?'cancelled':s.timedOut?'timed_out':code===0?'succeeded':'failed';s.resolve();});
     this.starting.delete(id);
     await new Promise((resolve,reject)=>{child.once('spawn',resolve);child.once('error',reject);});return this.poll(id);
@@ -60,7 +60,7 @@ export class YTerminalEngine {
     if(!Number.isInteger(offset)||offset<0||!Number.isInteger(limit)||limit<1||limit>65536)throw new EngineError('BAD_RANGE','Invalid output range');
     return this.view(this.get(id),{offset,limit});
   }
-  view(s,{offset,limit}){const id=s.id;return {sessionId:id,state:s.state,ownedPid:s.child.pid,stdout:s.stdout.slice(offset,offset+limit),stderr:s.stderr.slice(offset,offset+limit),nextOffset:Math.max(offset,Math.min(offset+limit,Math.max(s.stdout.length,s.stderr.length))),exitCode:s.exitCode,signal:s.signal??null,truncated:s.truncated,timedOut:s.timedOut,error:s.error,startedAt:s.startedAt,endedAt:s.endedAt,interactive:'pipes; not a PTY'};
+  view(s,{offset,limit}){const id=s.id;return {sessionId:id,state:s.state,ownedPid:s.child.pid,stdout:s.stdout.slice(offset,offset+limit),stderr:s.stderr.slice(offset,offset+limit),nextOffset:Math.max(offset,Math.min(offset+limit,Math.max(s.stdout.length,s.stderr.length))),exitCode:s.exitCode,signal:s.signal??null,truncated:s.truncated,timedOut:s.timedOut,timeoutMs:s.timeoutMs,error:s.error,startedAt:s.startedAt,endedAt:s.endedAt,interactive:'pipes; not a PTY'};
   }
   async input(id,text,{end=false}={}){const s=this.get(id);if(s.state!=='running'||typeof text!=='string'||Buffer.byteLength(text)>65536)throw new EngineError('BAD_INPUT','Session closed or input too large');await new Promise((resolve,reject)=>s.child.stdin.write(text,e=>e?reject(e):resolve()));if(end)s.child.stdin.end();return {sessionId:id,bytes:Buffer.byteLength(text)};}
   async cancel(id){const s=this.get(id);return this.stop(s);}
@@ -68,6 +68,6 @@ export class YTerminalEngine {
   list(){const owner=this.owner(),all=[...this.sessions.values()],mine=all.filter(s=>s.owner===owner);
     return {sessions:mine.map(s=>this.view(s,{offset:0,limit:1})).map(({stdout,stderr,...s})=>s),otherChats:all.length-mine.length,otherChatsActive:all.filter(s=>s.owner!==owner&&s.state==='running').length};}
   owned(owner=this.owner()){return [...this.sessions.values()].filter(s=>s.owner===owner).map(s=>({sessionId:s.id,state:s.state,ownedPid:s.child.pid,startedAt:s.startedAt}));}
-  async run(input={}){const p=await this.start(input);await this.get(p.sessionId).done;return this.poll(p.sessionId);}
+  async run(input={}){const p=await this.start(input),s=this.get(p.sessionId);s.child.stdin.end();await s.done;return this.poll(p.sessionId);}
   async close(){this.closing=true;await Promise.all([...this.sessions.values()].filter(s=>s.state==='running').map(s=>this.stop(s)));}
 }

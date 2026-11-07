@@ -15,7 +15,7 @@ using Microsoft.Win32;
 using Microsoft.Win32.SafeHandles;
 
 public static class HostCore {
- public const string Version="1.0.20";
+ public const string Version="1.0.26";
  public static readonly JavaScriptSerializer Json=new JavaScriptSerializer{MaxJsonLength=32*1024*1024};
  public static string Full(string p){return Path.GetFullPath(p).TrimEnd(Path.DirectorySeparatorChar);}
  // Fresh-install defaults prefer a non-system fixed drive (D: when present)
@@ -39,6 +39,30 @@ public static class HostCore {
  public static void CheckPath(string p){for(string t=Path.GetFullPath(p);!String.IsNullOrEmpty(t);t=Path.GetDirectoryName(t)){if((File.Exists(t)||Directory.Exists(t))&&(File.GetAttributes(t)&FileAttributes.ReparsePoint)!=0)throw new IOException("Linked paths are not permitted");}}
  public static bool Within(string p,string root){return Full(p).StartsWith(Full(root)+"\\",StringComparison.OrdinalIgnoreCase);}
  public static void PrivateDirectory(string p){CheckPath(p);Directory.CreateDirectory(p);var acl=new DirectorySecurity();acl.SetAccessRuleProtection(true,false);foreach(var sid in new[]{WindowsIdentity.GetCurrent().User,new SecurityIdentifier("S-1-5-18")})acl.AddAccessRule(new FileSystemAccessRule(sid,FileSystemRights.FullControl,InheritanceFlags.ContainerInherit|InheritanceFlags.ObjectInherit,PropagationFlags.None,AccessControlType.Allow));Directory.SetAccessControl(p,acl);}
+ // Application TEMP is not authorization state. Audit only its private outer
+ // boundary; vendor-created descendants are never used as control authority.
+ public static string ExecutionTempRoot(string state){
+  state=Full(state);if(state==Path.GetPathRoot(state).TrimEnd('\\'))throw new IOException("DRIVE_ROOT_REFUSED");CheckPath(state);
+  string temp=state+".work-tmp";CheckPath(temp);if(File.Exists(temp))throw new IOException("EXECUTION_TEMP_NOT_DIRECTORY");
+  if(!Directory.Exists(temp)){PrivateDirectory(temp);var fresh=Directory.GetAccessControl(temp);fresh.SetOwner(WindowsIdentity.GetCurrent().User);Directory.SetAccessControl(temp,fresh);}
+  var acl=Directory.GetAccessControl(temp);string sid=WindowsIdentity.GetCurrent().User.Value;
+  if(acl.GetOwner(typeof(SecurityIdentifier)).Value!=sid||!acl.AreAccessRulesProtected||acl.GetAccessRules(true,true,typeof(SecurityIdentifier)).Cast<FileSystemAccessRule>().Any(r=>r.AccessControlType==AccessControlType.Allow&&r.IdentityReference.Value!=sid&&r.IdentityReference.Value!="S-1-5-18"))throw new IOException("EXECUTION_TEMP_BOUNDARY_UNSAFE");
+  return temp;
+ }
+ static string ExecutionProfileBase(string state){state=Full(state);if(state==Path.GetPathRoot(state).TrimEnd('\\'))throw new IOException("DRIVE_ROOT_REFUSED");CheckPath(state);return state+".work-profiles";}
+ static void ExecutionDirectory(string dir,bool protect,bool create){
+  CheckPath(dir);if(File.Exists(dir))throw new IOException("EXECUTION_HOME_NOT_DIRECTORY");
+  if(!Directory.Exists(dir)){if(!create)throw new IOException("EXECUTION_HOME_MISSING");if(protect)PrivateDirectory(dir);else Directory.CreateDirectory(dir);var fresh=Directory.GetAccessControl(dir);fresh.SetOwner(WindowsIdentity.GetCurrent().User);Directory.SetAccessControl(dir,fresh);}
+  var acl=Directory.GetAccessControl(dir);string sid=WindowsIdentity.GetCurrent().User.Value;
+  if(acl.GetOwner(typeof(SecurityIdentifier)).Value!=sid||(protect&&!acl.AreAccessRulesProtected)||acl.GetAccessRules(true,true,typeof(SecurityIdentifier)).Cast<FileSystemAccessRule>().Any(r=>r.AccessControlType==AccessControlType.Allow&&r.IdentityReference.Value!=sid&&r.IdentityReference.Value!="S-1-5-18"))throw new IOException("EXECUTION_HOME_BOUNDARY_UNSAFE");
+ }
+ public static string ExecutionHomeRoot(string state,string kind,bool create=true){
+  if(kind!="home"&&kind!="engine-home")throw new IOException("EXECUTION_HOME_KIND_INVALID");
+  string container=ExecutionProfileBase(state),home=Path.Combine(container,kind);ExecutionDirectory(container,true,create);ExecutionDirectory(home,false,create);return home;
+ }
+ public static string LegacyExecutionHome(string state,string kind){
+  if(kind!="home"&&kind!="engine-home")throw new IOException("EXECUTION_HOME_KIND_INVALID");ExecutionProfileBase(state);string home=Path.Combine(Full(state),kind);ExecutionDirectory(home,false,false);return home;
+ }
  public static Dictionary<string,object> Secrets(string data){string p=Path.Combine(data,"credentials.dpapi");if(!File.Exists(p))return new Dictionary<string,object>();CheckPath(p);string s=File.ReadAllText(p);if(!s.StartsWith("dpapi:"))throw new Exception("Unencrypted credential store refused");return Json.Deserialize<Dictionary<string,object>>(Encoding.UTF8.GetString(ProtectedData.Unprotect(Convert.FromBase64String(s.Substring(6)),null,DataProtectionScope.CurrentUser)));}
  public static void SaveSecrets(string data,Dictionary<string,object> s){PrivateDirectory(data);string p=Path.Combine(data,"credentials.dpapi");if(File.Exists(p))File.Copy(p,p+".before-"+DateTime.UtcNow.Ticks);SaveText(p,"dpapi:"+Convert.ToBase64String(ProtectedData.Protect(Encoding.UTF8.GetBytes(Json.Serialize(s)),null,DataProtectionScope.CurrentUser)));}
  public static void SaveText(string p,string text){CheckPath(p);string tmp=p+".new-"+Guid.NewGuid().ToString("N");File.WriteAllText(tmp,text,new UTF8Encoding(false));if(File.Exists(p))File.Replace(tmp,p,null);else File.Move(tmp,p);}
@@ -54,21 +78,42 @@ public static class HostCore {
   try{return String.Equals(((SecurityIdentifier)new NTAccount(recorded).Translate(typeof(SecurityIdentifier))).Value,expected.Value,StringComparison.OrdinalIgnoreCase);}catch{return false;}
  }
  public static string TaskName(string data){return "YGPT-Local-"+OwnerId(data).Substring(0,12)+"-Watchdog";}
+ public static string BackgroundBinaryIssue(string install){
+  string exe=Path.Combine(Full(install),"YGPTWatchdog.exe");if(!File.Exists(exe))return "BACKGROUND_BINARY_MISSING";
+  try{CheckPath(exe);var manifest=Read(Path.Combine(install,"manifest.json"));var entries=manifest["files"] as System.Collections.IEnumerable;if(entries==null)return "BACKGROUND_BINARY_UNVERIFIED";
+   foreach(object item in entries){var entry=item as Dictionary<string,object>;if(entry!=null&&S(entry,"path")=="YGPTWatchdog.exe")return String.Equals(Hash(exe),S(entry,"sha256"),StringComparison.OrdinalIgnoreCase)?"":"BACKGROUND_BINARY_CHANGED";}
+  }catch{return "BACKGROUND_BINARY_UNVERIFIED";}return "BACKGROUND_BINARY_UNVERIFIED";
+ }
+ public static bool OwnedStartupTask(dynamic task,string install,string data){dynamic actions=task.Definition.Actions;return (int)actions.Count==1&&(int)actions.Item(1).Type==0&&String.Equals(Convert.ToString(actions.Item(1).Path),Path.Combine(Full(install),"YGPTWatchdog.exe"),StringComparison.OrdinalIgnoreCase)&&String.Equals(Convert.ToString(actions.Item(1).Arguments),"--data-dir "+Q(Full(data)),StringComparison.OrdinalIgnoreCase)&&SameUserPrincipal(Convert.ToString(task.Definition.Principal.UserId),WindowsIdentity.GetCurrent().User);}
+ public static bool StartupRecoveryTrigger(dynamic task){foreach(dynamic trigger in task.Definition.Triggers)if((int)trigger.Type==1&&Convert.ToString(trigger.Repetition.Interval)=="PT5M")return true;return false;}
+ public static Dictionary<string,object> CheckStartupRegistration(string install,string data,bool repair=true){
+  bool enabled=B(Read(Path.Combine(data,"connection.json")),"autoStart");var result=new Dictionary<string,object>{{"configured",enabled},{"state",enabled?"not-checked":"off"},{"changed",false},{"checkedAt",DateTime.UtcNow.ToString("o")}};if(!enabled)return result;
+  string issue=BackgroundBinaryIssue(install);if(issue!=""){result["state"]="integrity-error";result["error"]=issue;return result;}
+  dynamic service=Activator.CreateInstance(Type.GetTypeFromProgID("Schedule.Service"));service.Connect();dynamic root=service.GetFolder("\\"),task=null;
+  try{task=root.GetTask(TaskName(data));}catch(Exception e){if(e.HResult!=unchecked((int)0x80070002))throw;}
+  if(task!=null&&!OwnedStartupTask(task,install,data)){result["state"]="foreign-task-preserved";result["error"]="STARTUP_TASK_OWNERSHIP_MISMATCH";return result;}
+  if(task!=null&&!(bool)task.Enabled){result["state"]="disabled-in-windows";result["error"]="STARTUP_TASK_DISABLED";return result;}
+  if(task==null||!StartupRecoveryTrigger(task)){if(!repair){result["state"]=task==null?"missing":"recovery-trigger-missing";return result;}RegisterTask(install,data,true);result["changed"]=true;task=root.GetTask(TaskName(data));}
+  result["state"]="registered";result["recoveryTrigger"]=StartupRecoveryTrigger(task);return result;
+ }
  public static void RegisterTask(string install,string data,bool enabled){
   dynamic service=Activator.CreateInstance(Type.GetTypeFromProgID("Schedule.Service"));service.Connect();dynamic root=service.GetFolder("\\");string taskName=TaskName(data),exe=Path.Combine(Full(install),"YGPTWatchdog.exe");
   // Task Scheduler COM's 0x80070002 (task not found) may be projected by .NET
    // as FileNotFoundException, not only COMException. First-run absence is expected.
    dynamic prior=null;try{prior=root.GetTask(taskName);}catch(Exception e){if(e.HResult!=unchecked((int)0x80070002))throw;}
-  if(prior!=null){dynamic actions=prior.Definition.Actions;bool owned=(int)actions.Count==1&&(int)actions.Item(1).Type==0&&String.Equals(Convert.ToString(actions.Item(1).Path),exe,StringComparison.OrdinalIgnoreCase)&&String.Equals(Convert.ToString(actions.Item(1).Arguments),"--data-dir "+Q(Full(data)),StringComparison.OrdinalIgnoreCase)&&SameUserPrincipal(Convert.ToString(prior.Definition.Principal.UserId),WindowsIdentity.GetCurrent().User);if(!owned)throw new InvalidOperationException("The existing startup task belongs to another configuration; it was preserved");}
+  if(prior!=null&&!OwnedStartupTask(prior,install,data))throw new InvalidOperationException("The existing startup task belongs to another configuration; it was preserved");
   if(!enabled){if(prior!=null)root.DeleteTask(taskName,0);return;}
+  string binaryIssue=BackgroundBinaryIssue(install);if(binaryIssue!="")throw new InvalidOperationException(binaryIssue+": Verify the installation and Windows Security Protection history. No file was restored or security exception added.");
   dynamic task=service.NewTask(0);task.RegistrationInfo.Description="YGPT Local private connection; no setup window required";task.RegistrationInfo.Author="YGPT Local";task.Principal.UserId=WindowsIdentity.GetCurrent().User.Value;task.Principal.LogonType=3;task.Principal.RunLevel=0;
   task.Settings.Enabled=true;task.Settings.Hidden=true;task.Settings.StartWhenAvailable=true;task.Settings.DisallowStartIfOnBatteries=false;task.Settings.StopIfGoingOnBatteries=false;task.Settings.ExecutionTimeLimit="PT0S";task.Settings.MultipleInstances=2;task.Settings.RestartCount=3;task.Settings.RestartInterval="PT1M";
-  dynamic trigger=task.Triggers.Create(9);trigger.UserId=WindowsIdentity.GetCurrent().User.Value;trigger.Delay="PT10S";dynamic action=task.Actions.Create(0);action.Path=exe;action.Arguments="--data-dir "+Q(Full(data));action.WorkingDirectory=Full(install);root.RegisterTaskDefinition(taskName,task,6,WindowsIdentity.GetCurrent().User.Value,null,3,null);
+  dynamic trigger=task.Triggers.Create(9);trigger.UserId=WindowsIdentity.GetCurrent().User.Value;trigger.Delay="PT10S";dynamic action=task.Actions.Create(0);action.Path=exe;action.Arguments="--data-dir "+Q(Full(data));action.WorkingDirectory=Full(install);
+  dynamic recovery=task.Triggers.Create(1);recovery.StartBoundary=DateTime.Now.AddMinutes(1).ToString("yyyy-MM-dd'T'HH:mm:ss",System.Globalization.CultureInfo.InvariantCulture);recovery.Repetition.Interval="PT5M";recovery.Repetition.StopAtDurationEnd=false;
+  root.RegisterTaskDefinition(taskName,task,6,WindowsIdentity.GetCurrent().User.Value,null,3,null);
   // Remove only this installation's former GUI startup registration. An
   // unrelated production owner or another data directory is never modified.
   using(var k=Registry.CurrentUser.OpenSubKey("Software\\Microsoft\\Windows\\CurrentVersion\\Run",true)){if(k!=null){string old=Convert.ToString(k.GetValue("YGPTLocal"));if(old.IndexOf(Q(Path.Combine(Full(install),"YGPTLocal.exe")),StringComparison.OrdinalIgnoreCase)>=0&&old.IndexOf(Q(Full(data)),StringComparison.OrdinalIgnoreCase)>=0)k.DeleteValue("YGPTLocal",false);}}
  }
- public static void Start(string install,string data){CheckPath(data);foreach(string file in new[]{"paused","maintenance-request"}){string p=Path.Combine(data,file);CheckPath(p);if(File.Exists(p))File.Delete(p);}Process.Start(new ProcessStartInfo(Path.Combine(install,"YGPTWatchdog.exe"),"--data-dir "+Q(data)){UseShellExecute=false,CreateNoWindow=true,WindowStyle=ProcessWindowStyle.Hidden,WorkingDirectory=install});}
+ public static void Start(string install,string data){CheckPath(data);string issue=BackgroundBinaryIssue(install);if(issue!="")throw new InvalidOperationException(issue+": Check Windows Security Protection history and repair from a verified update. Do not replace keys or repeatedly recreate Tunnels.");foreach(string file in new[]{"paused","maintenance-request"}){string p=Path.Combine(data,file);CheckPath(p);if(File.Exists(p))File.Delete(p);}Process.Start(new ProcessStartInfo(Path.Combine(install,"YGPTWatchdog.exe"),"--data-dir "+Q(data)){UseShellExecute=false,CreateNoWindow=true,WindowStyle=ProcessWindowStyle.Hidden,WorkingDirectory=install});}
  static bool Stopped(string data,DateTime after){try{var h=Read(Path.Combine(data,"watchdog-health.json"));return S(h,"ownerId")==OwnerId(data)&&B(h,"stopped")&&DateTime.Parse(S(h,"at")).ToUniversalTime()>=after&&!ProcessAlive(Convert.ToInt32(h["pid"]),Convert.ToInt64(h["birth"]));}catch{return false;}}
  // WMI can report synthetic or malformed executable paths for unrelated processes.
  // Do not let one foreign invalid path disable a verified owner-only repair.

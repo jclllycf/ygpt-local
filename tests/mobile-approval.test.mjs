@@ -64,6 +64,14 @@ test('Manual Windows owner review binds the exact request and executes once; not
 
 function bar(){return {requestId:'CROSS_DEVICE_FIXTURE',uiToken:'private-widget-fixture',presentation:{title:'Review fixture action',target:'No production operation',impact:'Fixture only'},chatScope:{eligible:true},state:'awaiting_user',expiresAt:new Date(Date.now()+60000).toISOString(),enabled:true};}
 
+test('Phone and desktop distinguish approved access from a stale window and keep details collapsed',async()=>{
+ let browser;try{browser=await launchFixtureBrowser({channel:'msedge',headless:true});for(const viewport of [{width:390,height:844},{width:1100,height:760}]){
+  const page=await browser.newPage({viewport});await page.exposeFunction('desktopApprovalStatus',()=>({structuredContent:{state:'failed',stateLabel:'Access granted',desktopAccess:{active:true},executionError:{code:'DESKTOP_TARGET_STALE',message:'The reviewed desktop window is no longer available.',outcomeUnknown:false},continuation:'result-returned'}}));
+  await page.addInitScript(value=>{window.openai={toolResponseMetadata:{yBar:value},callTool:()=>window.desktopApprovalStatus()};},bar());await page.route('https://ygpt-desktop-access.invalid/',r=>r.fulfill({body:barHtmlForTest(),contentType:'text/html'}));await page.goto('https://ygpt-desktop-access.invalid/');
+  await page.locator('#state').filter({hasText:'Access granted'}).waitFor();assert.match(await page.locator('#note').textContent(),/Full Access is enabled/);assert.match(await page.locator('#note').textContent(),/no new approval/);assert.match(await page.locator('#note').textContent(),/DESKTOP_TARGET_STALE/);assert.equal(await page.locator('#actions').isVisible(),false);assert.equal(await page.locator('details[open]').count(),0);assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));await page.close();
+ }}finally{await browser?.close();}
+});
+
 test('Missing, foreign and expired approval contexts return recovery errors without decision capabilities',async()=>{
  const f=fixture(),c=await f.client().start();try{
   const tools=(await c.rpc('tools/list')).tools;assert.ok(tools.find(t=>t.name==='y_show_approval').inputSchema.required.includes('contextToken'));

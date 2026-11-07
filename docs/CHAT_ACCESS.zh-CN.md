@@ -27,6 +27,8 @@
 
 首次桌面操控卡明确申请 100 分钟 Full Access，确认后只执行此次请求一次。期间后续窗口绑定、点击、输入、快捷键和命令复用授权。此前其他待定请求不会自动重放；到期或撤销后，下一次输入先暂停等待续期。`y_desktop_action action=keys` 支持 `CTRL+L`、`CTRL+T`、`ENTER` 等快捷键，仍须核对控件、原生错误和结果是否不确定。
 
+从 1.0.26 起，如果等待期间初始窗口关闭，只读绑定请求仍会完成权限授予，并返回 `bindingRequired=true`、`executed=false` 和最新的只读窗口清单 `recovery.inventory`。这表示尚未绑定窗口、没有发送输入。模型应携带原 contextToken，从清单选择当前任务对应的窗口，再绑定其新 hwnd；授权有效期内无需再次确认。旧窗口上的点击或按键失败仍保留真实错误，不会对其他窗口自动重放。更新不会改写或重新执行历史请求。
+
 桌面操控主要读取 Windows 控件树，截图是独立图片观察。生成的 PNG 以内联图片发送，返回前删除本地文件；本地结果历史保留元数据，不保留图片内容，启动时回收过期的程序截图。其他图片、凭据与快照保持完整。已经传给 ChatGPT 的图片遵循宿主保留规则。
 
 组合键一次发送完整的按下与松开序列。输入失败保留 inputDiagnostics：请求/实际送入的事件数量、Win32 错误和进程完整性级别。返回零本身不能证明 UIPI 拦截，见 [Microsoft SendInput](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-sendinput)。INPUT_INTEGRITY_MISMATCH 在输入前确认目标权限更高；其他错误不能据此反复申请授权或自动提权。部分输入成功、或此前已输入后再失败时，结果仍可能不确定，应核对窗口与键盘状态，不能重放操作。服务重启后需要重新选择并绑定当前窗口，旧桌面 targetId 不会恢复。

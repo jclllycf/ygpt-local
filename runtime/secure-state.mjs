@@ -4,9 +4,11 @@ import {execFileSync} from 'node:child_process';
 import {createCipheriv,createDecipheriv,randomBytes} from 'node:crypto';
 import {config,RUNTIME,cleanEnv} from './config.mjs';
 import {nativeWindows} from './windows-native.mjs';
+import {executionTemp} from './execution-temp.mjs';
 export function prepareState(root=config.stateDir){
-  const acl=nativeWindows('state-prepare',{root});
-  for(const rel of ['tmp','jobs','engine-home','engine-home/AppData/Roaming','engine-home/AppData/Local'])fs.mkdirSync(path.join(root,rel),{recursive:true});
+  const acl=nativeWindows('state-prepare',{root},180000);
+  executionTemp(root);
+  for(const rel of ['tmp','jobs'])fs.mkdirSync(path.join(root,rel),{recursive:true});
   return acl;
 }
 export function vault(root=config.stateDir){
@@ -25,7 +27,7 @@ export function protectForWindows(value){
   });
 }
 export function verifyState(root=config.stateDir){
-  return nativeWindows('state-verify',{root},25000);
+  return nativeWindows('state-verify',{root},180000);
 }
 export function acquireLease(){
   const lock=path.join(config.stateDir,'bridge.lock');

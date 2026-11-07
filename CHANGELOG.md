@@ -1,5 +1,88 @@
 # Changelog
 
+## 1.0.26
+
+- Resolve a selected HWND directly instead of treating the visible, titled
+  discovery list as window identity. Temporary hiding or title changes no
+  longer falsely invalidate an existing window; closed handles still fail.
+- Complete a verified desktop Full Access grant independently of an obsolete
+  initial window binding. A closed window returns bindingRequired, the exact
+  skipped-step diagnostic, a current read-only window inventory and a fresh-bind
+  continuation without requesting another approval or replaying desktop input.
+- Keep stale input actions and uncertain effects as failures. Retain per-chat
+  ownership, executable/process identity checks, expiry and revocation.
+- Explain the unbound state on phone/desktop cards; update tool descriptions
+  and remove obsolete per-action consent wording. Historical results stay intact.
+
+## 1.0.25
+
+- Keep the saved approval decision separate from command/file/desktop execution
+  outcomes. Cards show the actual error and retained permission instead of
+  misreporting every failed action as a desktop or authorization failure.
+- Preserve complete status diagnostics when the card notifies ChatGPT, restores
+  a terminal result or receives stale host metadata. New versioned resources
+  retain compatibility with earlier conversation cards.
+- Close stdin for non-interactive commands while retaining interactive input
+  for process sessions. Report hard execution deadlines as PROCESS_TIMEOUT with
+  uncertain partial effects; never replay a command or renew its approval.
+- Preserve owned output capabilities after process failures for inspection of
+  the existing session. Correct interactive snapshot polling to use that session.
+
+## 1.0.24
+
+- Move subprocess HOME, USERPROFILE, APPDATA and LOCALAPPDATA outside the
+  authorization state tree, completing the TEMP/TMP separation from 1.0.23.
+- During an idle upgrade, move the two existing isolated application profiles
+  without copying or changing their files. Keep exact legacy junctions so
+  application settings, cached tools and absolute paths remain usable.
+- Validate profile containers and exact alias destinations; refuse foreign
+  links, broadened outer boundaries and nonempty migration conflicts. Roll
+  back completed moves if a later migration step fails.
+- Keep keys, permission records and controller files under the existing strict
+  recursive audit. Vendor-managed application data is not control authority.
+- Clear obsolete account-connected health before engine initialization so old
+  Tunnel status cannot disguise a current local startup failure.
+
+## 1.0.23
+
+- Give transport, broker and terminal workers a checked per-state TEMP/TMP
+  sibling outside authorization state. Java and other vendor temporary ACLs
+  can no longer contaminate the controller's recursive startup audit.
+- Keep the temporary outer boundary owner-only and reject replacement links,
+  foreign ownership or broadened access. Temporary contents are not trusted
+  as keys, permissions, job records or configuration.
+- Retain the last observed engine startup failure across transport retries;
+  only a ready local engine and connected Tunnel reset reconnect backoff.
+- Finish bounded local initialization before advertising ready Tunnels, and
+  diagnose large-state audit timeouts separately from missing native helpers.
+- Avoid reapplying an already-private root ACL to its full descendant tree on
+  every restart; retain the complete descendant verification.
+- Preserve all existing account identities and state, with no automatic replay.
+
+## 1.0.22
+
+- Validate the background executable against the installed manifest and report
+  missing or changed files as installation repairs, separately from Tunnel keys.
+- Reconcile the enabled, exact-owner startup task periodically and add a
+  five-minute recovery trigger alongside sign-in startup, without elevating,
+  overriding disabled/foreign tasks, or restoring quarantined files.
+- Report live process identity and actual startup registration in Settings and
+  Watchdog health rather than treating an old heartbeat as a working connection.
+- Recognize narrowly scoped WinGet, pip wheel and embedded WebView cache ACLs
+  owned by the current user. Preserve credential, unknown-principal and link
+  rejection; never relax the private state root.
+
+## 1.0.21
+
+- Preserve an explicitly approved 100-minute desktop chat grant when the
+  originally reviewed window disappears or changes while waiting for consent.
+- Refuse the stale desktop step with a durable `DESKTOP_TARGET_STALE` result
+  and guide the same chat to read current windows and bind a fresh target.
+- Show granted access separately from failed execution in desktop and mobile
+  approval cards, with renewed resource URIs and existing inline defaults.
+- Keep original operations terminal, preserve account/context isolation, and
+  never reactivate historical approvals or replay an old action on upgrade.
+
 ## 1.0.20
 
 - Add account connections inside the existing native Setup, with independent

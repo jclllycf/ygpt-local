@@ -1,10 +1,11 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import {executionTemp,executionHome} from '../../runtime/execution-temp.mjs';
 // An interpreter is not an OS sandbox. The outer RC9 broker owns permission decisions.
 export async function cleanEnvironment(stateDir) {
   const env={};
   for(const k of ['PATH','SystemRoot','WINDIR','SystemDrive','COMSPEC','PATHEXT','PROCESSOR_ARCHITECTURE','NUMBER_OF_PROCESSORS']) if(process.env[k])env[k]=process.env[k];
-  const home=path.join(stateDir,'home'), temp=path.join(stateDir,'tmp');
+  const home=executionHome(stateDir,'home'), temp=executionTemp(stateDir);
   for(const dir of [home,temp,path.join(home,'AppData','Roaming'),path.join(home,'AppData','Local')])await fs.mkdir(dir,{recursive:true});
   return {...env,HOME:home,USERPROFILE:home,APPDATA:path.join(home,'AppData','Roaming'),LOCALAPPDATA:path.join(home,'AppData','Local'),TEMP:temp,TMP:temp,
     PATHEXT:'.COM;.EXE;.BAT;.CMD',PYTHONUTF8:'1',PYTHONIOENCODING:'utf-8',PYTHONDONTWRITEBYTECODE:'1',GIT_TERMINAL_PROMPT:'0',

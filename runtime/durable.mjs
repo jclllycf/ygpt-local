@@ -126,6 +126,7 @@ export class DurableLedger {
     if(update.changes)this.event(id,state,'execution-result');
   }
   result(id){const r=this.row(id);return r?.result?JSON.parse(this.vault.open(r.result)):null;}
+  approvalDecision(id){const r=this.db.prepare("SELECT event FROM approval_events WHERE owner=? AND operation_id=? AND event IN ('allow_once','allow_chat','deny') ORDER BY at LIMIT 1").get(this.owner,id);return r?{decision:r.event==='allow_once'?'once':r.event==='allow_chat'?'chat':'deny'}:null;}
   canRead(id,receipt){return !!receipt&&this.row(id)?.receipt===digest(String(receipt));}
   // Provenance is recorded as a short context label (never the token or its
   // full hash) and the transport kind; host type (Chat vs Agent) is unverified.

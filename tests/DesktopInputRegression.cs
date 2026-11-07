@@ -1,6 +1,9 @@
 using System;
 using System.Reflection;
 using System.Runtime.InteropServices;
+using System.Collections.Generic;
+using System.Web.Script.Serialization;
+using System.Windows.Forms;
 class DesktopInputRegression {
  static FieldInfo effect=typeof(YDesktop).GetField("effectStarted",BindingFlags.Static|BindingFlags.NonPublic);
  static void Check(bool value,string message){if(!value)throw new Exception(message);}
@@ -10,7 +13,7 @@ class DesktopInputRegression {
   Check(failed,"failure must be reported");Check((bool)effect.GetValue(null)==uncertain,"effect certainty must follow actual inserted count");
   Check((uint)YDesktop.inputDiagnostics["inserted"]==inserted,"actual count");Check((int)YDesktop.inputDiagnostics["win32Error"]==error,"native error");
  }
- static void Main(){
+ [STAThread] static void Main(){
   Check(IntPtr.Size==8&&Marshal.SizeOf(typeof(YDesktop.INPUT))==40,"Win64 INPUT layout");
   var chord=YDesktop.KeyInputs("CTRL+SHIFT+R");Check(chord.Length==6,"one complete chord batch");ushort[] keys={0x11,0x10,0x52,0x52,0x10,0x11};
   for(int n=0;n<chord.Length;n++){Check(chord[n].type==1&&chord[n].key.vk==keys[n],"ordered down/reverse-up");Check(chord[n].key.flags==(n<3?0u:2u),"all releases present");}
@@ -19,6 +22,20 @@ class DesktopInputRegression {
   Failure(4,0,0,"INPUT_NOT_INSERTED",false);Failure(4,0,5,"INPUT_ACCESS_DENIED",false);Failure(4,0,87,"INPUT_INVALID_PARAMETER",false);Failure(4,1,0,"INPUT_PARTIAL",true);
   effect.SetValue(null,true);try{YDesktop.InputResult(2,0,0);}catch{}Check((bool)effect.GetValue(null),"a later zero return must preserve earlier input uncertainty");
   effect.SetValue(null,false);YDesktop.InputResult(4,4,0);Check((bool)effect.GetValue(null),"successful input recorded");
+  // A hidden, untitled window is absent from discovery but still has an exact
+  // process identity. Querying that HWND must not focus or inject anything.
+  var run=typeof(YDesktop).GetMethod("Run",BindingFlags.Static|BindingFlags.NonPublic);
+  var json=new JavaScriptSerializer();string hwnd;
+  effect.SetValue(null,false);
+  using(var form=new Form()){form.Text="";hwnd=form.Handle.ToInt64().ToString();
+   var selected=run.Invoke(null,new object[]{new Dictionary<string,object>{{"action","window"},{"hwnd",hwnd}}});
+   var identity=json.Deserialize<Dictionary<string,object>>(json.Serialize(selected));
+   Check(Convert.ToString(identity["hwnd"])==hwnd,"hidden exact HWND resolves");
+   Check(!form.Visible&&!(bool)effect.GetValue(null),"query neither shows the window nor sends input");
+  }
+  bool missing=false;try{run.Invoke(null,new object[]{new Dictionary<string,object>{{"action","window"},{"hwnd",hwnd}}});}catch(TargetInvocationException e){missing=e.InnerException.Message=="NO_WINDOW";}
+  Check(missing,"closed HWND is rejected rather than retargeted");
+  Console.WriteLine("DESKTOP_WINDOW_IDENTITY_PASS");
   Console.WriteLine("DESKTOP_INPUT_REGRESSION_PASS");
  }
 }

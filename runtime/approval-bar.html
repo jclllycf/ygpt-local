@@ -43,7 +43,7 @@ main[data-state=failed] .status,main[data-state=unknown] .status{color:var(--ris
 main[data-state=succeeded],main[data-state=denied],main[data-state=expired]{padding-block:10px}
 main[data-state=succeeded] #impact,main[data-state=denied] #impact,main[data-state=expired] #impact{display:none}
 main[data-state=succeeded] .footer,main[data-state=denied] .footer,main[data-state=expired] .footer{margin-top:3px}
-main[data-state=succeeded]:not([data-delivery=unconfirmed]) #note,main[data-state=denied]:not([data-delivery=unconfirmed]) #note{display:none}
+main[data-state=succeeded]:not([data-binding-required=true]):not([data-delivery=unconfirmed]) #note,main[data-state=denied]:not([data-delivery=unconfirmed]) #note{display:none}
 @media(max-width:480px){main{padding:12px}.heading{gap:8px}.status{font-size:11px}.actions{width:100%;margin-left:0}button{flex:1;padding-inline:9px}h1{font-size:13px}dl{grid-template-columns:66px minmax(0,1fr)}}
 @media(prefers-color-scheme:dark){:root{--bg:#0f2133;--ink:#e6f1fa;--muted:#9db4c8;--line:#1e3a55;--edge:#2b4c6b;--soft:#13283d;--accent:#7dd3fc;--sky2:#0369a1;--tint:#0f3550;--tint-line:#1d5a80;--tint-ink:#bae6fd;--risk:#f5c27a;--ring:rgba(56,189,248,.3);--lift:rgba(0,0,0,.35)}}
 @media(prefers-reduced-motion:reduce){*{transition:none;animation:none!important}}

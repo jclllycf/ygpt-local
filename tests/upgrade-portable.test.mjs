@@ -117,7 +117,7 @@ test('Browser: destinations follow an owner blacklist; take-over is a separate m
 // A fake YDesktop helper: answers the JSON protocol with a fixed inventory.
 function fakeHelper(dir,windows){
   const file=path.join(dir,'fake-ydesktop.mjs');
-  fs.writeFileSync(file,'#!/usr/bin/env node\nlet s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const r=JSON.parse(s);const w='+JSON.stringify(windows)+';process.stdout.write(JSON.stringify(r.action==="windows"?{ok:true,result:{windows:w,interactive:true}}:{ok:true,result:{action:r.action,hwnd:r.hwnd,protectedPaths:r.protectedPaths.length}}));});\n');
+  fs.writeFileSync(file,'#!/usr/bin/env node\nlet s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const r=JSON.parse(s);const w='+JSON.stringify(windows)+';process.stdout.write(JSON.stringify(r.action==="window"?(w.some(x=>x.hwnd===r.hwnd)?{ok:true,result:w.find(x=>x.hwnd===r.hwnd)}:{ok:false,code:"NO_WINDOW",effectStarted:false}):r.action==="windows"?{ok:true,result:{windows:w,interactive:true}}:{ok:true,result:{action:r.action,hwnd:r.hwnd,protectedPaths:r.protectedPaths.length}}));});\n');
   fs.chmodSync(file,0o755);return file;
 }
 test('UIA targets belong to the binding chat; any window (incl. the ChatGPT app) binds after broker approval',{skip:process.platform==='win32'?'fake helper uses a POSIX shebang':false},async()=>{

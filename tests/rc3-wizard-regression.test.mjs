@@ -51,6 +51,9 @@ public static class TestWizard {
   }finally{if(child!=null){if(!child.HasExited)child.Kill();child.WaitForExit(3000);child.Dispose();}}
   // Test true first-install Task Scheduler registration with a UNIQUE disposable task.
   // Does not start it, never touches any existing YGPT production task.
+  string background=Path.Combine(install,"YGPTWatchdog.exe");
+  File.Copy(Assembly.GetExecutingAssembly().Location,background);
+  HostCore.Save(Path.Combine(install,"manifest.json"),new{product="YGPT Local",files=new[]{new{path="YGPTWatchdog.exe",sha256=HostCore.Hash(background)}}});
   try{
     HostCore.RegisterTask(install,data,true);
     dynamic svc=Activator.CreateInstance(Type.GetTypeFromProgID("Schedule.Service"));

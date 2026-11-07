@@ -4,6 +4,27 @@ import {fixture,unpack,until} from './helpers.mjs';
 import {launchFixtureBrowser} from './browser-fixture.mjs';
 import {barHtmlForTest} from '../runtime/inline-approval.mjs';
 import {setTimeout as delay} from 'node:timers/promises';
+import fs from 'node:fs';
+import path from 'node:path';
+
+test('Approved command timeout retains the decision and original owned output without a second approval',async()=>{
+ const f=fixture(),c=await f.client().start(),marker=path.join(f.project,'once.txt');
+ try{
+  const script="require('fs').appendFileSync(process.argv[1],'once\\n');console.log('Clear-Disk is a fixture string only');setTimeout(()=>{},10000);";
+  const requested=unpack(await c.call('y_process_run',{executable:process.execPath,args:['-e',script,marker],cwd:f.project,timeoutMs:1500}));
+  assert.equal(requested.code,'APPROVAL_REQUIRED');const ctx={contextToken:requested.contextToken},args={requestId:requested.requestId,resultToken:requested.resultToken,...ctx};
+  const card=await c.call('y_show_approval',args),ui={requestId:requested.requestId,uiToken:card._meta.yBar.uiToken};
+  await c.call('y_bar_decide',{...ui,decision:'once'});
+  let done;await until(async()=>{done=unpack(await c.call('y_wait_approval',{...args,waitMs:1000}));return !done.continueWaiting;},15000);
+  assert.equal(done.state,'unknown');assert.equal(done.decisionSaved,true);assert.equal(done.permissionGranted,true);assert.equal(done.executionError.code,'PROCESS_TIMEOUT');assert.match(done.stateLabel,/Approved.*timed out/);
+  const result=done.result.structuredContent;assert.equal(result.error.outcomeUnknown,true);assert.equal(result.result.timeoutMs,1500);assert.ok(result.result.outputToken);
+  const original=unpack(await c.call('y_process_poll',{sessionId:result.result.sessionId,outputToken:result.result.outputToken,...ctx}));assert.equal(original.result.state,'timed_out');
+  assert.equal((await c.call('y_process_poll',{sessionId:result.result.sessionId,outputToken:result.result.outputToken})).isError,true);
+  const repeated=unpack(await c.call('y_bar_decide',{...ui,decision:'once'}));assert.equal(repeated.reused,true);
+  const status=unpack(await c.call('y_bar_status',ui));assert.equal(status.permissionGranted,true);assert.equal(status.executionError.code,'PROCESS_TIMEOUT');
+  assert.equal(fs.readFileSync(marker,'utf8'),'once\n');
+ }finally{await c.close();}
+});
 
 test('Repeated bounded waits keep approval and executing work pending, then return the original result once',async()=>{
  const f=fixture(),c=await f.client().start();

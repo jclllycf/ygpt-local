@@ -1,13 +1,14 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
+import {executionTemp,executionHome} from './execution-temp.mjs';
 export const RUNTIME=path.dirname(fileURLToPath(import.meta.url));
 export const INSTALL=path.dirname(RUNTIME);
 const configFile=process.env.YGPT_CONFIG??path.join(INSTALL,'ygpt.config.json');
 const raw=fs.existsSync(configFile)?JSON.parse(fs.readFileSync(configFile,'utf8').replace(/^\uFEFF/,'')):{};
 const abs=v=>path.resolve(path.dirname(configFile),v);
 export const config={
-  version: '1.0.20',
+  version: '1.0.26',
   readOnlyAutoAllow:raw.rc11Patch3===true||raw.readOnlyAutoAllow===true,
   blacklistDefaultAllow:raw.blacklistDefaultAllow===true,
   chatAppConsent:raw.rc11Candidate===true&&raw.chatAppConsent===true,
@@ -65,9 +66,10 @@ export function currentPermissionMode(){
 export function cleanEnv(extra={}) {
   const allowed=['PATH','SystemRoot','WINDIR','SystemDrive','COMSPEC','PATHEXT','PROCESSOR_ARCHITECTURE','NUMBER_OF_PROCESSORS'];
   const env={};for(const k of allowed)if(process.env[k])env[k]=process.env[k];
-  return {...env,USERPROFILE:path.join(config.stateDir,'engine-home'),HOME:path.join(config.stateDir,'engine-home'),
-    APPDATA:path.join(config.stateDir,'engine-home','AppData','Roaming'),LOCALAPPDATA:path.join(config.stateDir,'engine-home','AppData','Local'),
-    TEMP:path.join(config.stateDir,'tmp'),TMP:path.join(config.stateDir,'tmp'),PYTHONIOENCODING:'utf-8',PYTHONUTF8:'1',PYTHONDONTWRITEBYTECODE:'1',
+  const temp=executionTemp(config.stateDir),home=executionHome(config.stateDir,'engine-home');
+  return {...env,USERPROFILE:home,HOME:home,
+    APPDATA:path.join(home,'AppData','Roaming'),LOCALAPPDATA:path.join(home,'AppData','Local'),
+    TEMP:temp,TMP:temp,PYTHONIOENCODING:'utf-8',PYTHONUTF8:'1',PYTHONDONTWRITEBYTECODE:'1',
     DESKTOP_COMMANDER_DISABLE_TELEMETRY:'1',DC_FLAG_URL:'http://127.0.0.1:1/disabled',
     ...(config.toolCacheDir?{BUN_INSTALL_CACHE_DIR:path.join(config.toolCacheDir,'bun')}:{}),
     YGPT_STATE_DIR:config.stateDir,YGPT_CONFIG:configFile,...extra};

@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {createHash} from 'node:crypto';
 import {fileURLToPath} from 'node:url';
+import {migrateExecutionProfiles} from './execution-profiles.mjs';
 
 const inside=(p,r)=>{const rel=path.relative(r,p);return rel!==''&&!rel.startsWith('..'+path.sep)&&rel!=='..'&&!path.isAbsolute(rel);};
 const plain=p=>{for(let q=path.resolve(p);;q=path.dirname(q)){if(fs.existsSync(q)&&fs.lstatSync(q).isSymbolicLink())throw Error('Linked migration path refused');if(q===path.dirname(q))break;}};
@@ -46,7 +47,8 @@ export function upgradeData({install,data}){
     fs.writeFileSync(path.join(dest,'.migration','config-before-upgrade-'+Date.now()+'.json'),original,{flag:'wx'});
     save(path.join(dest,'ygpt.config.json'),next);
     save(path.join(dest,'migration-receipt.json'),{product:'YGPT Local',from:data,to:dest,at:new Date().toISOString(),linksRebased:links.length,credentialsCopiedWithoutDecryption:true});
-    return {ok:true,data:dest,migrated:migrating,linksRebased:links.length};
+    const executionProfiles=migrateExecutionProfiles(next.stateDir);
+    return {ok:true,data:dest,migrated:migrating,linksRebased:links.length,executionProfiles};
   }catch(error){
     if(moved){
       for(const link of links){const p=path.join(dest,link.relative);try{fs.unlinkSync(p);fs.symlinkSync(link.target,p,'junction');}catch{}}
