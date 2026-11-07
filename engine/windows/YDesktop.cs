@@ -1,7 +1,7 @@
 // YGPT Local native adapter over Microsoft's Windows UI Automation/Win32 APIs.
 // No credentials, elevation or public sockets. Owner blacklist model (rc.13):
 // this adapter refuses nothing by application identity — every window is a
-// potential target, and the broker's human approval (bind + per-action) is
+// potential target, and the broker's temporary chat-access approval is
 // the control point. Identity (executable path, signer, process birth) is
 // still verified before every read or action so an approval cannot be
 // replayed against a different program.
@@ -209,6 +209,8 @@ class YDesktop {
   static object Run(Dictionary<string,object> d) {
     string action=S(d,"action");requestedAction=action;ReadProtected(d);
     if(action=="windows"){var list=new List<object>();EnumWindows((h,l)=>{if(IsWindowVisible(h)&&Title(h).Length>0){try{list.Add(WindowInfo(h));}catch{}}return true;},IntPtr.Zero);return new {windows=list,interactive=Interactive()};}
+    // Inventory is discovery, not proof that a selected HWND ceased to exist.
+    if(action=="window"){var selected=new IntPtr(long.Parse(S(d,"hwnd")));if(!IsWindow(selected))throw new Exception("NO_WINDOW");uint pid;GetWindowThreadProcessId(selected,out pid);Allowed(Process.GetProcessById((int)pid));return WindowInfo(selected);}
     IntPtr win=Target(d);
     if(action=="diagnose"){uint pid;GetWindowThreadProcessId(win,out pid);var held=new List<string>();foreach(var k in new[]{new {Key=0x10,Name="SHIFT"},new {Key=0x11,Name="CTRL"},new {Key=0x12,Name="ALT"},new {Key=0x5B,Name="WIN"}})if((GetAsyncKeyState(k.Key)&0x8000)!=0)held.Add(k.Name);return new {interactive=Interactive(),targetIsForeground=GetForegroundWindow()==win,inputAccess=InputAccess((int)pid),heldModifiers=held.ToArray(),inputInjected=false,focusChanged=false,note="Read-only diagnostics. Full Access does not override Windows input protections; a full-screen app, secure desktop or held modifier can affect input. No blocking source is inferred from these facts alone."};}
     var root=AutomationElement.FromHandle(win);

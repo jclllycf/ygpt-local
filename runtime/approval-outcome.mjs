@@ -10,6 +10,7 @@ export function approvalOutcome(ledger,operation){
  const access=ledger.fullAccess?.(operation.contextHash);
  const failed=['failed','unknown'].includes(operation.state);
  return {tool:operation.tool,operationKind:operation.kind,decisionSaved:!!decision,permissionGranted:granted,chatAccess:{active:!!access,scope:'this-chat',expiresAt:access?new Date(access.expires).toISOString():null},
+  ...(response?.bindingRequired?{bindingRequired:true,desktopStep:response.desktopStep}:{}),
   ...(failed&&granted?{stateLabel:error?.code==='PROCESS_TIMEOUT'?'Approved · command timed out':operation.state==='unknown'?'Approved · check result':'Approved · action failed'}:{}),
   ...(error?{executionError:{code:error.code,message:scrub(error.message??'').slice(0,700),outcomeUnknown:error.outcomeUnknown===true}}:{})};
 }

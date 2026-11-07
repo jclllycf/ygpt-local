@@ -115,8 +115,8 @@ export async function createNativeExtension({backups,ledger,protectState}){
     };
     engine.invoke=(name,args)=>readScope.run(reads.has(name)||name==='y_file_patch'&&args.dryRun===true,()=>invoke(name,args));
   }
-  // Binding reads an exact live window identity and grants no input permission.
-  // Actions are evaluated separately, with per-chat target ownership retained.
+  // Bind an exact live identity after the broker's chat-access decision.
+  // Per-chat target ownership remains separate from the temporary grant.
   const rawBind=engine.desktop.bind.bind(engine.desktop);
   engine.desktop.bind=async hwnd=>{
     const win=await engine.desktop.window(hwnd);

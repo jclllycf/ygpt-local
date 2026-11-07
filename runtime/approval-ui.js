@@ -65,7 +65,7 @@
  }
  function delivery(id,status){deliveries.set(id,status);try{window.openai?.setWidgetState?.({privateContent:{ygptDelivery:{requestId:id,status}}});}catch{}}
  function note(text){$('note').textContent=text;}
- const outcomeFields=['executionError','desktopAccess','chatAccess','stateLabel','decisionSaved','permissionGranted','tool','operationKind'];
+ const outcomeFields=['executionError','desktopAccess','chatAccess','stateLabel','decisionSaved','permissionGranted','tool','operationKind','bindingRequired','desktopStep'];
  function applyStatus(id,value){
   if(card?.requestId!==id)return;
   const next={...card,state:stableState(id,value.state),expiresAt:value.expiresAt??card.expiresAt};
@@ -83,6 +83,7 @@
  function render(){
   if(!card)return;const p=card.presentation??{},expired=card.expiresAt&&Date.parse(card.expiresAt)<=Date.now();
   document.querySelector('main').dataset.state=card.state;document.querySelector('main').dataset.delivery=deliveries.get(card.requestId)??'';
+  document.querySelector('main').dataset.bindingRequired=String(!!card.bindingRequired&&card.desktopAccess?.active===true);
   for(const [id,key] of Object.entries({title:'title',target:'target',fulltarget:'target',impact:'impact',purpose:'purpose',denied:'denied',technical:'technical',privilege:'administrator'}))$(id).textContent=p[key]??'';
   $('target').title=p.target??'';$('risk').textContent=[p.risk,p.reversible].filter(Boolean).join(' · ');
   $('scope').textContent=card.chatScope?.explanation??'Allow once is required for this action.';
@@ -96,6 +97,7 @@
   $('notify').hidden=!card.uiToken||status!=='unconfirmed'||['awaiting_user','expired','not_found'].includes(card.state);$('notify').disabled=notifying;
   if(card.demo)note('Preview only. No operation can execute.');
   else if(card.state==='failed'||card.state==='unknown')note(failureNote());
+  else if(card.bindingRequired&&card.desktopAccess?.active)note('Full Access is enabled for this chat. The earlier window closed while waiting; no desktop input was sent. ChatGPT can bind the intended current window and continue without another approval.'+(status==='unconfirmed'?' Choose Resume chat to retry the chat notification only.':''));
   else if(status==='unconfirmed')note('Decision saved. Chat notification was not confirmed. Choose Resume chat to retry the message only.');
   else if(expired&&card.state==='awaiting_user')note('This card has expired. Check its saved status; do not repeat the operation.');
   else if(card.note)note(card.note);
@@ -189,7 +191,7 @@
   if(card){render();schedule(0);}
  }
  window.addEventListener('openai:set_globals',globals);globals();
- if(window.parent!==window)request('ui/initialize',{appInfo:{name:'YGPT approval',version:'1.0.25'},appCapabilities:{availableDisplayModes:['inline']},protocolVersion:'2026-01-26'}).then(result=>{
+ if(window.parent!==window)request('ui/initialize',{appInfo:{name:'YGPT approval',version:'1.0.26'},appCapabilities:{availableDisplayModes:['inline']},protocolVersion:'2026-01-26'}).then(result=>{
   // Some ChatGPT compatibility methods silently ignore calls without a
   // synchronous user event. Always negotiate again over the real standard
   // bridge, even when its initial mode matches the compatibility globals.

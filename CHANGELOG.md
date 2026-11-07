@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.0.26
+
+- Resolve a selected HWND directly instead of treating the visible, titled
+  discovery list as window identity. Temporary hiding or title changes no
+  longer falsely invalidate an existing window; closed handles still fail.
+- Complete a verified desktop Full Access grant independently of an obsolete
+  initial window binding. A closed window returns bindingRequired, the exact
+  skipped-step diagnostic, a current read-only window inventory and a fresh-bind
+  continuation without requesting another approval or replaying desktop input.
+- Keep stale input actions and uncertain effects as failures. Retain per-chat
+  ownership, executable/process identity checks, expiry and revocation.
+- Explain the unbound state on phone/desktop cards; update tool descriptions
+  and remove obsolete per-action consent wording. Historical results stay intact.
+
 ## 1.0.25
 
 - Keep the saved approval decision separate from command/file/desktop execution

@@ -4,6 +4,22 @@ import {launchFixtureBrowser} from './browser-fixture.mjs';
 import {barHtmlForTest} from '../runtime/inline-approval.mjs';
 import {until} from './helpers.mjs';
 
+test('A successful desktop grant with a closed initial window remains actionable inline on phone and desktop',async()=>{
+ let browser;
+ try{
+  browser=await launchFixtureBrowser({channel:'msedge',headless:true});
+  for(const width of [390,1100]){
+   const page=await browser.newPage({viewport:{width,height:760}});
+   const card={requestId:'STALE_BIND_FIXTURE',instanceId:'fixture',uiToken:'fixture-only',state:'succeeded',tool:'y_desktop_bind',desktopAccess:{active:true},permissionGranted:true,decisionSaved:true,stateLabel:'Access granted',bindingRequired:true,desktopStep:{state:'not_executed',code:'DESKTOP_TARGET_STALE'},presentation:{title:'Allow desktop control for 100 minutes',target:'This chat only'},enabled:false,chatScope:{eligible:false}};
+   await page.addInitScript(card=>{window.openai={toolResponseMetadata:{yBar:card},callTool:async()=>({structuredContent:{...card,continuation:'result-returned'}})};},card);
+   await page.route('https://ygpt-stale-bind.invalid/',r=>r.fulfill({body:barHtmlForTest(),contentType:'text/html'}));await page.goto('https://ygpt-stale-bind.invalid/');
+   await page.locator('#note').filter({hasText:'without another approval'}).waitFor();
+   assert.equal(await page.locator('#state').textContent(),'Access granted');assert.equal(await page.locator('#actions').isVisible(),false);assert.match(await page.locator('#note').textContent(),/no desktop input was sent/);assert.doesNotMatch(await page.locator('#note').textContent(),/step failed|Completed/);assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));assert.equal(await page.locator('#details').getAttribute('open'),null);
+   await page.close();
+  }
+ }finally{await browser?.close();}
+});
+
 test('Notification reconciliation and restored terminal cards retain the real command error on phone and desktop',async()=>{
  let browser;
  try{

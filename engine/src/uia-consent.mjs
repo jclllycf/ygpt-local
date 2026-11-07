@@ -29,8 +29,8 @@ export function uiaPresentation(tool,args={},win=null){
  const app=win?`${win.process??'unknown app'} (PID ${win.pid})`:'Window '+clip(args.hwnd??args.targetId,40);
  const windowText=win?clip(win.title||'[untitled window]',120):'';
  const exe=win?.executablePath?`\nExecutable: ${win.executablePath}`+(win.executableSha256?`\nSHA-256: ${win.executableSha256}`:''):'';
- if(tool==='y_desktop_bind')return {title:'Allow desktop control of this window',purpose:'Let this chat read and, with separate approval per action, operate this window through Windows UI Automation.',
-  target:`${app} — "${windowText}"`,impact:'After binding, this chat may read the window tree, control values and take screenshots of this window only. Clicks, typing, focus and value changes each ask again.',
+ if(tool==='y_desktop_bind')return {title:'Allow desktop control for this chat',purpose:'Enable temporary Full Access for this chat, then bind the selected current window through Windows UI Automation.',
+  target:`${app} — "${windowText}"`,impact:'One confirmation enables 100 minutes of Full Access for this chat. Further window bindings and input need no new YGPT approval while access is active; every bound target still belongs to this chat and is verified before use.',
   denied:'The window is not bound. Nothing is read or changed.',risk:'Window content may include private information.',reversible:'Reading changes nothing. The binding ends when this chat context or the window closes.',administrator:'Current user; no elevation.',
   technical:`Tool: y_desktop_bind\nhwnd: ${clip(args.hwnd,40)}${exe}`};
  const action=args.action??'action',value=typeof args.value==='string'?args.value:null;

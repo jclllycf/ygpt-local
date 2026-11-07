@@ -12,7 +12,7 @@ test('Native input distinguishes zero, partial and Win32 errors and batches ever
  const f=fixture(),framework=path.join(process.env.SystemRoot,'Microsoft.NET/Framework64/v4.0.30319'),exe=path.join(f.dir,'InputRegression.exe');
  const refs=['System.Drawing.dll','System.Windows.Forms.dll','System.Web.Extensions.dll',...['UIAutomationClient.dll','UIAutomationTypes.dll','WindowsBase.dll'].map(n=>path.join(framework,'WPF',n))];
  execFileSync(path.join(framework,'csc.exe'),['/nologo','/platform:x64','/main:DesktopInputRegression','/out:'+exe,...refs.map(p=>'/reference:'+p),path.resolve('engine/windows/YDesktop.cs'),path.resolve('tests/DesktopInputRegression.cs')],{windowsHide:true,stdio:'pipe'});
- try{assert.match(execFileSync(exe,[],{encoding:'utf8',windowsHide:true,timeout:10000}),/DESKTOP_INPUT_REGRESSION_PASS/);}finally{fs.unlinkSync(exe);}
+ try{const output=execFileSync(exe,[],{encoding:'utf8',windowsHide:true,timeout:10000});assert.match(output,/DESKTOP_INPUT_REGRESSION_PASS/);assert.match(output,/DESKTOP_WINDOW_IDENTITY_PASS/);}finally{fs.unlinkSync(exe);}
 });
 
 test('Input delivery diagnostics and unknown outcomes survive the typed tool response',async()=>{

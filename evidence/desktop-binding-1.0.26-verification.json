@@ -1,0 +1,18 @@
+{
+  "version": "1.0.26",
+  "scope": "Source fixes and isolated Windows fixtures; not a production approval decision",
+  "targetedNativeTests": {"total": 35, "passed": 31, "skipped": 4, "failed": 0},
+  "targetedMobileAndApprovalTests": {"total": 30, "passed": 30, "skipped": 0, "failed": 0},
+  "coverage": [
+    "Exact native identity lookup for a hidden untitled fixture window without showing it or injecting input",
+    "Destroyed HWND rejected without choosing a replacement",
+    "Window closed during approval: grant retained, fresh inventory returned, original binding skipped",
+    "Explicit fresh binding and input succeed with the original context without a second approval",
+    "Input failures, uncertain outcomes, foreign contexts and inactive grants never become successful bindings",
+    "Inventory failure preserves the grant and supplies a read-only continuation",
+    "Phone and desktop cards explain bindingRequired with details collapsed",
+    "Revocation and historical denied/expired results retain their original meaning"
+  ],
+  "unverified": ["New owner-confirmed live ChatGPT approval click", "Physical Android client", "Windows reboot"],
+  "publication": "Candidate on existing PR; no public release created"
+}
